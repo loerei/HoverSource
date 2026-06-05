@@ -185,11 +185,26 @@ function getPidUsingPort(port: number): Promise<number | undefined> {
   });
 }
 
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => {
+      server.close();
+      resolve(true);
+    });
+    server.listen(port, "127.0.0.1");
+  });
+}
+
 function getProcessName(pid: number): Promise<string | undefined> {
   return new Promise((resolve) => {
     if (process.platform === "win32") {
       exec(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, (err, stdout) => {
         if (err || !stdout) return resolve(undefined);
+        if (stdout.includes("No tasks are running")) {
+          return resolve(undefined);
+        }
         const parts = stdout.trim().split(",");
         if (parts[0]) {
           const name = parts[0].replace(/"/g, "");
@@ -206,12 +221,25 @@ function getProcessName(pid: number): Promise<string | undefined> {
   });
 }
 
-function killProcess(pid: number): Promise<boolean> {
+function killProcess(pid: number, port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const cmd = process.platform === "win32" ? `taskkill /F /PID ${pid}` : `kill -9 ${pid}`;
     exec(cmd, (err) => {
       if (!err) {
-        return resolve(true);
+        // Normal kill reported success, but let's double check the port is free
+        let checks = 0;
+        const checkInterval = setInterval(async () => {
+          const free = await isPortFree(port);
+          checks++;
+          if (free) {
+            clearInterval(checkInterval);
+            resolve(true);
+          } else if (checks > 10) {
+            clearInterval(checkInterval);
+            resolve(false);
+          }
+        }, 200);
+        return;
       }
 
       // If failed on Windows, try elevating with UAC
@@ -222,21 +250,19 @@ function killProcess(pid: number): Promise<boolean> {
           if (elevatorErr) {
             resolve(false);
           } else {
-            // Start-Process is async, let's poll to check if the process died
+            // Poll the port to see if it frees up
             let checks = 0;
-            const checkInterval = setInterval(() => {
-              exec(`tasklist /FI "PID eq ${pid}" /NH`, (checkErr, stdout) => {
-                const isDead = checkErr || !stdout || !stdout.includes(String(pid));
-                checks++;
-                if (isDead) {
-                  clearInterval(checkInterval);
-                  resolve(true);
-                } else if (checks > 10) {
-                  clearInterval(checkInterval);
-                  resolve(false);
-                }
-              });
-            }, 300);
+            const checkInterval = setInterval(async () => {
+              const free = await isPortFree(port);
+              checks++;
+              if (free) {
+                clearInterval(checkInterval);
+                resolve(true);
+              } else if (checks > 15) { // 3 seconds total
+                clearInterval(checkInterval);
+                resolve(false);
+              }
+            }, 200);
           }
         });
       } else {
@@ -307,7 +333,7 @@ async function main() {
         const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${debugPort}? (y/N): \x1b[0m`);
         if (answer.trim().toLowerCase() === "y") {
           console.log(`[HoverSource] Terminating process ${pid}...`);
-          const success = await killProcess(pid);
+          const success = await killProcess(pid, debugPort);
           if (success) {
             console.log(`[HoverSource] Process terminated successfully. Port ${debugPort} is now free.`);
             // Wait a brief moment for OS to release the socket

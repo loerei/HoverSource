@@ -210,7 +210,38 @@ function killProcess(pid: number): Promise<boolean> {
   return new Promise((resolve) => {
     const cmd = process.platform === "win32" ? `taskkill /F /PID ${pid}` : `kill -9 ${pid}`;
     exec(cmd, (err) => {
-      resolve(!err);
+      if (!err) {
+        return resolve(true);
+      }
+
+      // If failed on Windows, try elevating with UAC
+      if (process.platform === "win32") {
+        console.log(`[HoverSource] Normal termination failed. Requesting Administrator elevation (UAC)...`);
+        const elevatorCmd = `powershell -Command "Start-Process taskkill -ArgumentList '/F', '/PID', '${pid}' -Verb RunAs -WindowStyle Hidden"`;
+        exec(elevatorCmd, (elevatorErr) => {
+          if (elevatorErr) {
+            resolve(false);
+          } else {
+            // Start-Process is async, let's poll to check if the process died
+            let checks = 0;
+            const checkInterval = setInterval(() => {
+              exec(`tasklist /FI "PID eq ${pid}" /NH`, (checkErr, stdout) => {
+                const isDead = checkErr || !stdout || !stdout.includes(String(pid));
+                checks++;
+                if (isDead) {
+                  clearInterval(checkInterval);
+                  resolve(true);
+                } else if (checks > 10) {
+                  clearInterval(checkInterval);
+                  resolve(false);
+                }
+              });
+            }, 300);
+          }
+        });
+      } else {
+        resolve(false);
+      }
     });
   });
 }

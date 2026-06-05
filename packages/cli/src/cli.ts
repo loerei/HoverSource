@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { startCompanionServer } from "@hoversource/companion-server";
+import { startCompanionServer, loadMergedConfig } from "@hoversource/companion-server";
 import { injectOverlayScript } from "@hoversource/client-injector";
 import { startProxy } from "./proxy.js";
 import { exec, spawn } from "node:child_process";
@@ -411,6 +411,9 @@ async function main() {
   restoreLeftoverPatches();
 
   const { args, subcommand } = getArgs();
+  const projectRoot = path.resolve((args.root as string) || process.cwd());
+  const config = loadMergedConfig(projectRoot);
+  const autoResolve = config.autoResolvePortConflicts === true;
   
   const requestedPort = parseInt((args.port as string) || process.env.HOVERSOURCE_PORT || "3000", 10);
   const serverPort = await resolveCompanionPort(requestedPort);
@@ -418,7 +421,6 @@ async function main() {
     // Took over or was free — no message needed
   }
   let debugPort = parseInt((args["debug-port"] as string) || process.env.HOVERSOURCE_DEBUG_PORT || "9222", 10);
-  const projectRoot = path.resolve((args.root as string) || process.cwd());
   const shouldOpenDashboard = !!args.dashboard;
   const targetUrl = args.target as string | undefined;
   let execCommand = args.exec as string | undefined;
@@ -471,10 +473,17 @@ async function main() {
       }
       console.warn(`\x1b[33m[HoverSource] Electron will fail to bind to it, and the HoverSource overlay will not appear.\x1b[0m`);
 
-      const isInteractive = process.stdout.isTTY && process.stdin.isTTY;
+      const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
       if (isInteractive && pid) {
-        const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${debugPort}? (y/N): \x1b[0m`);
-        if (answer.trim().toLowerCase() === "y") {
+        let shouldKill = autoResolve;
+        if (!shouldKill) {
+          const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${debugPort}? (y/N): \x1b[0m`);
+          shouldKill = answer.trim().toLowerCase() === "y";
+        } else {
+          console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically terminating process ${pid}...`);
+        }
+
+        if (shouldKill) {
           console.log(`[HoverSource] Terminating process ${pid}...`);
           const success = await killProcess(pid, debugPort);
           if (success) {
@@ -489,8 +498,15 @@ async function main() {
       }
 
       if (isDebugPortInUse && isInteractive) {
-        const portAnswer = await askQuestion(`\x1b[36m[HoverSource] Port ${debugPort} is blocked. Try changing your app's debug port to ${debugPort + 1} temporarily? (y/N): \x1b[0m`);
-        if (portAnswer.trim().toLowerCase() === "y") {
+        let shouldPatch = autoResolve;
+        if (!shouldPatch) {
+          const portAnswer = await askQuestion(`\x1b[36m[HoverSource] Port ${debugPort} is blocked. Try changing your app's debug port to ${debugPort + 1} temporarily? (y/N): \x1b[0m`);
+          shouldPatch = portAnswer.trim().toLowerCase() === "y";
+        } else {
+          console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically patching debug port to ${debugPort + 1}...`);
+        }
+
+        if (shouldPatch) {
           const newDebugPort = debugPort + 1;
           const patchResult = findAndPatchDebugPort(projectRoot, debugPort, newDebugPort);
           if (patchResult) {

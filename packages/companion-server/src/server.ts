@@ -20,6 +20,7 @@ export interface HoverSourceConfig {
   theme: "dark" | "light" | "system";
   minimalModeByDefault: boolean;
   editor: string;
+  autoResolvePortConflicts?: boolean;
   shortcuts: {
     toggleUI: ShortcutKey;
     toggleMinimal: ShortcutKey;
@@ -40,6 +41,7 @@ const DEFAULT_CONFIG: HoverSourceConfig = {
   theme: "dark",
   minimalModeByDefault: false,
   editor: "vscode",
+  autoResolvePortConflicts: false,
   shortcuts: {
     toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
     toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
@@ -99,7 +101,7 @@ function getRecentProjects(): string[] {
 }
 
 // Load and merge config hierarchies
-function loadMergedConfig(projectRoot: string): HoverSourceConfig {
+export function loadMergedConfig(projectRoot: string): HoverSourceConfig {
   let config = { ...DEFAULT_CONFIG };
 
   // 1. Read Global Config

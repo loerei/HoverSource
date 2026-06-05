@@ -83,6 +83,18 @@
               </div>
             </div>
 
+            <!-- Auto-Resolve Port Conflicts -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Port Conflicts</label>
+              <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                <input type="checkbox" id="autoResolvePortConflicts" class="rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 h-4 w-4">
+                <div>
+                  <label for="autoResolvePortConflicts" class="text-sm font-medium text-slate-200 cursor-pointer">Auto-Resolve Conflicts</label>
+                  <p class="text-slate-500 text-[10px]">Automatically terminates processes or patches ports on conflict</p>
+                </div>
+              </div>
+            </div>
+
             <!-- Target IDE -->
             <div>
               <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Preferred Editor</label>
@@ -215,6 +227,7 @@
       theme: 'dark',
       minimalModeByDefault: false,
       editor: 'vscode',
+      autoResolvePortConflicts: false,
       shortcuts: {
         toggleUI: { key: 'h', altKey: true, ctrlKey: false, shiftKey: false },
         toggleMinimal: { key: 'm', altKey: true, ctrlKey: false, shiftKey: false },
@@ -292,6 +305,7 @@
         // Listen for changes
         document.getElementById('theme').addEventListener('change', checkChanges);
         document.getElementById('minimalModeByDefault').addEventListener('change', checkChanges);
+        document.getElementById('autoResolvePortConflicts').addEventListener('change', checkChanges);
         document.getElementById('editor').addEventListener('change', checkChanges);
 
       } catch (e) {
@@ -323,6 +337,7 @@
         // Apply config to UI
         document.getElementById('theme').value = loadedConfig.theme || 'dark';
         document.getElementById('minimalModeByDefault').checked = !!loadedConfig.minimalModeByDefault;
+        document.getElementById('autoResolvePortConflicts').checked = !!loadedConfig.autoResolvePortConflicts;
         document.getElementById('editor').value = loadedConfig.editor || 'vscode';
         
         setupShortcutUI('toggleUI', loadedConfig.shortcuts.toggleUI);
@@ -400,6 +415,7 @@
         theme: document.getElementById('theme').value,
         minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
         editor: document.getElementById('editor').value,
+        autoResolvePortConflicts: document.getElementById('autoResolvePortConflicts').checked,
         shortcuts: {
           toggleUI: getShortcutFromUI('toggleUI'),
           toggleMinimal: getShortcutFromUI('toggleMinimal'),
@@ -427,6 +443,7 @@
     document.getElementById('reset-btn').onclick = () => {
       document.getElementById('theme').value = DEFAULT_CONFIG.theme;
       document.getElementById('minimalModeByDefault').checked = DEFAULT_CONFIG.minimalModeByDefault;
+      document.getElementById('autoResolvePortConflicts').checked = DEFAULT_CONFIG.autoResolvePortConflicts;
       document.getElementById('editor').value = DEFAULT_CONFIG.editor;
       
       setupShortcutUI('toggleUI', DEFAULT_CONFIG.shortcuts.toggleUI);
@@ -444,6 +461,7 @@
         theme: document.getElementById('theme').value,
         minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
         editor: document.getElementById('editor').value,
+        autoResolvePortConflicts: document.getElementById('autoResolvePortConflicts').checked,
         shortcuts: {
           toggleUI: getShortcutFromUI('toggleUI'),
           toggleMinimal: getShortcutFromUI('toggleMinimal'),

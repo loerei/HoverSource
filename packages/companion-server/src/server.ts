@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { broadcastToTargets } from "@hoversource/client-injector";
+import { StaticContextResolver } from "./staticResolver.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -232,6 +233,7 @@ function verifyAndCorrectSourceLocation(
 }
 
 export function startCompanionServer(config: ServerConfig): http.Server {
+  const staticResolver = new StaticContextResolver();
   const server = http.createServer((req, res) => {
     // Set CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -450,6 +452,43 @@ export function startCompanionServer(config: ServerConfig): http.Server {
         original: { line: lineVal, column: colVal },
         corrected: { line: corrected.line, column: corrected.column }
       }));
+      return;
+    }
+
+    // GET static-context
+    if (url.pathname === "/static-context" && req.method === "GET") {
+      const fileParam = url.searchParams.get("file");
+      const lineParam = url.searchParams.get("line") || "1";
+      const columnParam = url.searchParams.get("column") || "1";
+      const tagNameParam = url.searchParams.get("tagName") || undefined;
+
+      if (!fileParam) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Missing 'file' parameter" }));
+        return;
+      }
+
+      let absolutePath = fileParam;
+      if (!path.isAbsolute(fileParam)) {
+        let cleanFile = fileParam;
+        if (cleanFile.startsWith("/")) {
+          cleanFile = cleanFile.substring(1);
+        }
+        absolutePath = path.resolve(config.projectRoot, cleanFile);
+      }
+
+      const lineVal = parseInt(lineParam, 10);
+      const colVal = parseInt(columnParam, 10);
+
+      staticResolver.resolveStaticContext(absolutePath, lineVal, colVal, tagNameParam)
+        .then(metadata => {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(metadata));
+        })
+        .catch(err => {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: `Static context resolution failed: ${err.message}` }));
+        });
       return;
     }
 

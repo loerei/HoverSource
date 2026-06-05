@@ -45,7 +45,7 @@ const DEFAULT_CONFIG: HoverSourceConfig = {
   shortcuts: {
     toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
     toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-    toggleFreeze: { key: "q", altKey: true, ctrlKey: false, shiftKey: false },
+    toggleFreeze: { key: "z", altKey: true, ctrlKey: false, shiftKey: false },
     copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
     openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false }
   }

@@ -9,6 +9,7 @@ import fs from "node:fs";
 import net from "node:net";
 import http from "node:http";
 import readline from "node:readline";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -224,7 +225,7 @@ function getProcessName(pid: number): Promise<string | undefined> {
 function killProcess(pid: number, port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const cmd = process.platform === "win32" ? `taskkill /F /PID ${pid}` : `kill -9 ${pid}`;
-    exec(cmd, (err) => {
+    exec(cmd, (err, stdout, stderr) => {
       if (!err) {
         // Normal kill reported success, but let's double check the port is free
         let checks = 0;
@@ -236,6 +237,8 @@ function killProcess(pid: number, port: number): Promise<boolean> {
             resolve(true);
           } else if (checks > 10) {
             clearInterval(checkInterval);
+            console.error(`[HoverSource] Normal kill reported success but port is still occupied.`);
+            if (stderr) console.error(`[HoverSource] Details: ${stderr.trim()}`);
             resolve(false);
           }
         }, 200);
@@ -245,9 +248,15 @@ function killProcess(pid: number, port: number): Promise<boolean> {
       // If failed on Windows, try elevating with UAC
       if (process.platform === "win32") {
         console.log(`[HoverSource] Normal termination failed. Requesting Administrator elevation (UAC)...`);
-        const elevatorCmd = `powershell -Command "Start-Process taskkill -ArgumentList '/F', '/PID', '${pid}' -Verb RunAs -WindowStyle Hidden"`;
+        const tempFile = path.join(os.tmpdir(), `hs_taskkill_${pid}.log`);
+        if (fs.existsSync(tempFile)) {
+          try { fs.unlinkSync(tempFile); } catch {}
+        }
+
+        const elevatorCmd = `powershell -Command "Start-Process cmd.exe -ArgumentList '/c taskkill /F /PID ${pid} > \\"${tempFile}\\" 2>&1' -Verb RunAs -WindowStyle Hidden"`;
         exec(elevatorCmd, (elevatorErr) => {
           if (elevatorErr) {
+            console.error(`[HoverSource] UAC request canceled or failed: ${elevatorErr.message}`);
             resolve(false);
           } else {
             // Poll the port to see if it frees up
@@ -257,15 +266,32 @@ function killProcess(pid: number, port: number): Promise<boolean> {
               checks++;
               if (free) {
                 clearInterval(checkInterval);
+                try { fs.unlinkSync(tempFile); } catch {}
                 resolve(true);
-              } else if (checks > 15) { // 3 seconds total
+              } else if (checks > 20) { // 4 seconds total
                 clearInterval(checkInterval);
+                
+                // Read temp file for failure reasons
+                let errorDetails = "";
+                if (fs.existsSync(tempFile)) {
+                  try {
+                    errorDetails = fs.readFileSync(tempFile, "utf-8").trim();
+                    fs.unlinkSync(tempFile);
+                  } catch {}
+                }
+
+                if (errorDetails) {
+                  console.error(`\x1b[31m[HoverSource] UAC Taskkill failed: ${errorDetails}\x1b[0m`);
+                } else {
+                  console.error(`\x1b[31m[HoverSource] UAC Taskkill failed or was canceled by the user.\x1b[0m`);
+                }
                 resolve(false);
               }
             }, 200);
           }
         });
       } else {
+        if (stderr) console.error(`[HoverSource] Details: ${stderr.trim()}`);
         resolve(false);
       }
     });

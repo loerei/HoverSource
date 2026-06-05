@@ -1,0 +1,17 @@
+{
+  "name": "@hoversource/overlay-core",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/overlay.bundle.js",
+  "types": "./dist/overlay.d.ts",
+  "scripts": {
+    "build": "tsc -b && node build.js",
+    "clean": "tsc -b --clean"
+  },
+  "dependencies": {
+    "@hoversource/source-resolver": "*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0"
+  }
+}

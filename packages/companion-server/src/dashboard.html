@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HoverSource Dashboard</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'sans-serif'],
+            mono: ['Space Grotesk', 'monospace'],
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    body {
+      background: radial-gradient(circle at top right, rgba(37, 99, 235, 0.1) 0%, rgba(15, 23, 42, 1) 100%);
+      min-height: 100vh;
+      color: #f8fafc;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.4);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+<body class="font-sans antialiased">
+  <div class="max-w-4xl mx-auto px-6 py-12">
+    <!-- Header -->
+    <header class="flex justify-between items-center mb-12 pb-6 border-b border-slate-800">
+      <div>
+        <h1 class="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">HoverSource Dashboard</h1>
+        <p class="text-slate-400 mt-1 text-sm">Configure your zero-invasive UI-to-Code overlay mappings</p>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+        Companion Server Connected
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+      
+      <!-- Left Panel: General Settings -->
+      <div class="md:col-span-1 space-y-6">
+        <div class="glass-card rounded-2xl p-6 shadow-xl">
+          <h2 class="text-lg font-semibold mb-4 text-blue-400 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+            Preferences
+          </h2>
+          
+          <div class="space-y-4">
+            <!-- Theme Selection -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Overlay Theme</label>
+              <select id="theme" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="dark">Dark Theme</option>
+                <option value="light">Light Theme</option>
+                <option value="system">Follow System</option>
+              </select>
+            </div>
+
+            <!-- Default Mode -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Default Mode</label>
+              <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
+                <input type="checkbox" id="minimalModeByDefault" class="rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 h-4 w-4">
+                <div>
+                  <label for="minimalModeByDefault" class="text-sm font-medium text-slate-200 cursor-pointer">Minimalist by Default</label>
+                  <p class="text-slate-500 text-[10px]">Hides CSS metrics to avoid UI clutter</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Target IDE -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Preferred Editor</label>
+              <select id="editor" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="vscode">VS Code (code -g)</option>
+                <option value="cursor">Cursor (cursor -g)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel: Shortcut Configurator -->
+      <div class="md:col-span-2 space-y-6">
+        <div class="glass-card rounded-2xl p-6 shadow-xl">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-lg font-semibold text-blue-400 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+              Keyboard Shortcuts
+            </h2>
+            <button id="save-btn" class="text-white font-medium px-5 py-2 rounded-xl transition-all text-xs flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap opacity-50 pointer-events-none cursor-not-allowed bg-slate-800 text-slate-500 border border-slate-700">
+              Save Configuration
+            </button>
+          </div>
+
+          <div class="space-y-6">
+            <!-- Shortcut row: Toggle UI -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+              <div>
+                <h3 class="text-sm font-medium text-slate-200">Toggle Tooltip UI</h3>
+                <p class="text-slate-500 text-xs mt-0.5">Show or hide the overlay tooltip visual card</p>
+              </div>
+              <div class="flex items-center gap-2" id="shortcut-toggleUI">
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
+                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
+              </div>
+            </div>
+
+            <!-- Shortcut row: Toggle Mode -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+              <div>
+                <h3 class="text-sm font-medium text-slate-200">Toggle Minimal Mode</h3>
+                <p class="text-slate-500 text-xs mt-0.5">Switch between Minimalist and Detailed metrics views</p>
+              </div>
+              <div class="flex items-center gap-2" id="shortcut-toggleMinimal">
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
+                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
+              </div>
+            </div>
+
+            <!-- Shortcut row: Toggle Freeze -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+              <div>
+                <h3 class="text-sm font-medium text-slate-200">Toggle Freeze State</h3>
+                <p class="text-slate-500 text-xs mt-0.5">Freeze or unfreeze the tooltip coordinates and visual outline</p>
+              </div>
+              <div class="flex items-center gap-2" id="shortcut-toggleFreeze">
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
+                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
+              </div>
+            </div>
+
+            <!-- Shortcut row: Copy Metadata -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+              <div>
+                <h3 class="text-sm font-medium text-slate-200">Copy AI-Ready Metadata</h3>
+                <p class="text-slate-500 text-xs mt-0.5">Copy layout specs, styles, and file coordinates</p>
+              </div>
+              <div class="flex items-center gap-2" id="shortcut-copyMetadata">
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
+                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
+              </div>
+            </div>
+
+            <!-- Shortcut row: Open Dashboard -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+              <div>
+                <h3 class="text-sm font-medium text-slate-200">Open Dashboard in Browser</h3>
+                <p class="text-slate-500 text-xs mt-0.5">Quickly launch this configuration dashboard</p>
+              </div>
+              <div class="flex items-center gap-2" id="shortcut-openDashboard">
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
+                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Actions / Save Target -->
+          <div class="mt-8 pt-6 border-t border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Save Target:</span>
+                <select id="save-target" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px] sm:max-w-[280px] truncate">
+                  <option value="global">Global Preferences (~/.hoversourcerc)</option>
+                </select>
+              </div>
+              <input type="text" id="custom-path-input" class="hidden bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-300 w-full sm:w-80 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Paste repository folder path (e.g. D:/Projects/MyProject)...">
+            </div>
+            
+            <button id="reset-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium px-4 py-2 rounded-xl transition-all text-xs flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap">
+              Reset to Default
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="fixed bottom-6 right-6 glass-card px-4 py-3 rounded-xl border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
+    <span>Configuration saved successfully!</span>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    let loadedConfig = null;
+
+    const DEFAULT_CONFIG = {
+      theme: 'dark',
+      minimalModeByDefault: false,
+      editor: 'vscode',
+      shortcuts: {
+        toggleUI: { key: 'h', altKey: true, ctrlKey: false, shiftKey: false },
+        toggleMinimal: { key: 'm', altKey: true, ctrlKey: false, shiftKey: false },
+        toggleFreeze: { key: 'q', altKey: true, ctrlKey: false, shiftKey: false },
+        copyMetadata: { key: 'c', altKey: true, ctrlKey: false, shiftKey: false },
+        openDashboard: { key: 's', altKey: true, ctrlKey: false, shiftKey: false }
+      }
+    };
+    
+    // Initial fetch to load target options
+    async function initDashboard() {
+      try {
+        const res = await fetch(`${API_BASE}/config`);
+        const data = await res.json();
+        
+        // Populate save target options dynamically
+        const select = document.getElementById('save-target');
+        select.innerHTML = '';
+        
+        // 1. Global Option
+        const optGlobal = document.createElement('option');
+        optGlobal.value = 'global';
+        optGlobal.textContent = 'Global Preferences (~/.hoversourcerc)';
+        select.appendChild(optGlobal);
+
+        // 2. Current Project Option
+        if (data.currentProject) {
+          const optLocal = document.createElement('option');
+          optLocal.value = 'local';
+          const folderName = data.currentProject.split('/').pop();
+          optLocal.textContent = `Current Project: ${folderName} (${data.currentProject})`;
+          select.appendChild(optLocal);
+        }
+
+        // 3. Recent Projects Options
+        if (data.recentProjects && data.recentProjects.length > 0) {
+          data.recentProjects.forEach(p => {
+            if (p === data.currentProject) return;
+            const opt = document.createElement('option');
+            opt.value = 'custom';
+            opt.setAttribute('data-path', p);
+            const name = p.split('/').pop();
+            opt.textContent = `Recent Project: ${name} (${p})`;
+            select.appendChild(opt);
+          });
+        }
+
+        // 4. Custom Folder Option
+        const optCustom = document.createElement('option');
+        optCustom.value = 'custom-input';
+        optCustom.textContent = 'Choose another folder...';
+        select.appendChild(optCustom);
+
+        // Select default to global as requested
+        select.value = 'global';
+
+        // Add change listener to toggle custom path textbox and reload config
+        const pathInput = document.getElementById('custom-path-input');
+        select.onchange = async () => {
+          if (select.value === 'custom-input') {
+            pathInput.classList.remove('hidden');
+          } else {
+            pathInput.classList.add('hidden');
+          }
+          await loadConfigForSelectedTarget();
+        };
+
+        pathInput.oninput = () => {
+          loadConfigForSelectedTarget();
+        };
+
+        // Load config for the default target (global)
+        await loadConfigForSelectedTarget();
+
+        // Listen for changes
+        document.getElementById('theme').addEventListener('change', checkChanges);
+        document.getElementById('minimalModeByDefault').addEventListener('change', checkChanges);
+        document.getElementById('editor').addEventListener('change', checkChanges);
+
+      } catch (e) {
+        console.error('Failed to init dashboard', e);
+      }
+    }
+
+    async function loadConfigForSelectedTarget() {
+      try {
+        const select = document.getElementById('save-target');
+        const target = select.value;
+        let url = `${API_BASE}/config?target=${target}`;
+        
+        if (target === 'custom') {
+          const selectedOpt = select.options[select.selectedIndex];
+          const path = selectedOpt.getAttribute('data-path') || '';
+          url += `&customPath=${encodeURIComponent(path)}`;
+        } else if (target === 'custom-input') {
+          const path = document.getElementById('custom-path-input').value.trim();
+          if (path) {
+            url += `&customPath=${encodeURIComponent(path)}`;
+          }
+        }
+
+        const res = await fetch(url);
+        const data = await res.json();
+        loadedConfig = data.config;
+
+        // Apply config to UI
+        document.getElementById('theme').value = loadedConfig.theme || 'dark';
+        document.getElementById('minimalModeByDefault').checked = !!loadedConfig.minimalModeByDefault;
+        document.getElementById('editor').value = loadedConfig.editor || 'vscode';
+        
+        setupShortcutUI('toggleUI', loadedConfig.shortcuts.toggleUI);
+        setupShortcutUI('toggleMinimal', loadedConfig.shortcuts.toggleMinimal);
+        setupShortcutUI('toggleFreeze', loadedConfig.shortcuts.toggleFreeze);
+        setupShortcutUI('copyMetadata', loadedConfig.shortcuts.copyMetadata);
+        setupShortcutUI('openDashboard', loadedConfig.shortcuts.openDashboard);
+
+        checkChanges();
+
+      } catch (e) {
+        console.error('Failed to load config for selected target', e);
+      }
+    }
+
+    function setupShortcutUI(name, shortcutObj) {
+      const container = document.getElementById(`shortcut-${name}`);
+      if (!container) return;
+      
+      const modBtns = container.querySelectorAll('.modifier-btn');
+      modBtns.forEach(btn => {
+        const mod = btn.getAttribute('data-modifier');
+        const active = !!shortcutObj[`${mod}Key`];
+        setBtnActive(btn, active);
+        
+        // click listener
+        btn.onclick = () => {
+          const currentlyActive = btn.classList.contains('bg-blue-600');
+          setBtnActive(btn, !currentlyActive);
+          checkChanges();
+        };
+      });
+      
+      const input = container.querySelector('.key-input');
+      input.value = shortcutObj.key || '';
+      
+      // keypress listener to capture key name directly
+      input.onkeydown = (e) => {
+        // block modifier keys from direct text input
+        if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+          e.preventDefault();
+          return;
+        }
+        e.preventDefault();
+        input.value = e.key;
+        checkChanges();
+      };
+    }
+
+    function setBtnActive(btn, active) {
+      if (active) {
+        btn.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-300');
+        btn.classList.add('bg-blue-600', 'border-blue-500', 'text-white');
+      } else {
+        btn.classList.remove('bg-blue-600', 'border-blue-500', 'text-white');
+        btn.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
+      }
+    }
+
+    function getShortcutFromUI(name) {
+      const container = document.getElementById(`shortcut-${name}`);
+      const btnState = (mod) => container.querySelector(`.modifier-btn[data-modifier="${mod}"]`).classList.contains('bg-blue-600');
+      return {
+        key: container.querySelector('.key-input').value || '',
+        altKey: btnState('alt'),
+        ctrlKey: btnState('ctrl'),
+        shiftKey: btnState('shift')
+      };
+    }
+
+    function checkChanges() {
+      if (!loadedConfig) return;
+      
+      const current = {
+        theme: document.getElementById('theme').value,
+        minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
+        editor: document.getElementById('editor').value,
+        shortcuts: {
+          toggleUI: getShortcutFromUI('toggleUI'),
+          toggleMinimal: getShortcutFromUI('toggleMinimal'),
+          toggleFreeze: getShortcutFromUI('toggleFreeze'),
+          copyMetadata: getShortcutFromUI('copyMetadata'),
+          openDashboard: getShortcutFromUI('openDashboard')
+        }
+      };
+
+      const hasChanged = JSON.stringify(current) !== JSON.stringify(loadedConfig);
+      const saveBtn = document.getElementById('save-btn');
+      
+      if (hasChanged) {
+        saveBtn.disabled = false;
+        saveBtn.classList.remove('opacity-50', 'pointer-events-none', 'cursor-not-allowed', 'bg-slate-800', 'text-slate-500', 'border-slate-700');
+        saveBtn.classList.add('bg-gradient-to-r', 'from-blue-500', 'to-emerald-500', 'hover:from-blue-600', 'hover:to-emerald-600', 'text-white', 'shadow-lg', 'shadow-blue-500/25');
+      } else {
+        saveBtn.disabled = true;
+        saveBtn.classList.add('opacity-50', 'pointer-events-none', 'cursor-not-allowed', 'bg-slate-800', 'text-slate-500', 'border-slate-700');
+        saveBtn.classList.remove('bg-gradient-to-r', 'from-blue-500', 'to-emerald-500', 'hover:from-blue-600', 'hover:to-emerald-600', 'text-white', 'shadow-lg', 'shadow-blue-500/25');
+      }
+    }
+
+    // Reset UI to defaults
+    document.getElementById('reset-btn').onclick = () => {
+      document.getElementById('theme').value = DEFAULT_CONFIG.theme;
+      document.getElementById('minimalModeByDefault').checked = DEFAULT_CONFIG.minimalModeByDefault;
+      document.getElementById('editor').value = DEFAULT_CONFIG.editor;
+      
+      setupShortcutUI('toggleUI', DEFAULT_CONFIG.shortcuts.toggleUI);
+      setupShortcutUI('toggleMinimal', DEFAULT_CONFIG.shortcuts.toggleMinimal);
+      setupShortcutUI('toggleFreeze', DEFAULT_CONFIG.shortcuts.toggleFreeze);
+      setupShortcutUI('copyMetadata', DEFAULT_CONFIG.shortcuts.copyMetadata);
+      setupShortcutUI('openDashboard', DEFAULT_CONFIG.shortcuts.openDashboard);
+      
+      checkChanges();
+    };
+
+    // Save configuration
+    document.getElementById('save-btn').onclick = async () => {
+      const config = {
+        theme: document.getElementById('theme').value,
+        minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
+        editor: document.getElementById('editor').value,
+        shortcuts: {
+          toggleUI: getShortcutFromUI('toggleUI'),
+          toggleMinimal: getShortcutFromUI('toggleMinimal'),
+          toggleFreeze: getShortcutFromUI('toggleFreeze'),
+          copyMetadata: getShortcutFromUI('copyMetadata'),
+          openDashboard: getShortcutFromUI('openDashboard')
+        }
+      };
+
+      const select = document.getElementById('save-target');
+      let target = select.value;
+      let customPath = '';
+
+      if (target === 'custom') {
+        const selectedOpt = select.options[select.selectedIndex];
+        customPath = selectedOpt.getAttribute('data-path') || '';
+      } else if (target === 'custom-input') {
+        target = 'custom';
+        customPath = document.getElementById('custom-path-input').value.trim();
+        if (!customPath) {
+          alert('Please enter a valid directory path.');
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ config, target, customPath })
+        });
+        
+        if (res.ok) {
+          showToast();
+          // Reload the specific target config after save
+          await loadConfigForSelectedTarget();
+        } else {
+          alert('Failed to save configuration');
+        }
+      } catch (e) {
+        console.error('Error saving config', e);
+      }
+    };
+
+    function showToast() {
+      const toast = document.getElementById('toast');
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 2500);
+    }
+
+    // Init
+    initDashboard();
+  </script>
+</body>
+</html>

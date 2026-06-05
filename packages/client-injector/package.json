@@ -1,0 +1,17 @@
+{
+  "name": "@hoversource/client-injector",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/injector.js",
+  "types": "./dist/injector.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.10"
+  }
+}

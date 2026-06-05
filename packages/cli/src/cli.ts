@@ -298,6 +298,49 @@ function killProcess(pid: number, port: number): Promise<boolean> {
   });
 }
 
+function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: number): { restore: () => void } | undefined {
+  const dirsToSearch = [
+    path.join(projectRoot, "scripts"),
+    projectRoot
+  ];
+
+  const patchedFiles: { path: string; originalContent: string }[] = [];
+
+  for (const dir of dirsToSearch) {
+    if (!fs.existsSync(dir)) continue;
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const fullPath = path.join(dir, file);
+      const stat = fs.statSync(fullPath);
+      if (stat.isFile() && (file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".ts") || file.endsWith(".json"))) {
+        try {
+          const content = fs.readFileSync(fullPath, "utf-8");
+          const searchStr = `--remote-debugging-port=${oldPort}`;
+          if (content.includes(searchStr)) {
+            const newContent = content.replace(new RegExp(searchStr, "g"), `--remote-debugging-port=${newPort}`);
+            fs.writeFileSync(fullPath, newContent, "utf-8");
+            patchedFiles.push({ path: fullPath, originalContent: content });
+            console.log(`[HoverSource] Temporarily patched debug port ${oldPort} -> ${newPort} in ${path.relative(projectRoot, fullPath)}`);
+          }
+        } catch {}
+      }
+    }
+  }
+
+  if (patchedFiles.length === 0) return undefined;
+
+  return {
+    restore: () => {
+      for (const pf of patchedFiles) {
+        try {
+          fs.writeFileSync(pf.path, pf.originalContent, "utf-8");
+          console.log(`[HoverSource] Restored original port configuration in ${path.relative(projectRoot, pf.path)}`);
+        } catch {}
+      }
+    }
+  };
+}
+
 async function main() {
   const { args, subcommand } = getArgs();
   
@@ -306,11 +349,24 @@ async function main() {
   if (serverPort === requestedPort) {
     // Took over or was free — no message needed
   }
-  const debugPort = parseInt((args["debug-port"] as string) || process.env.HOVERSOURCE_DEBUG_PORT || "9222", 10);
+  let debugPort = parseInt((args["debug-port"] as string) || process.env.HOVERSOURCE_DEBUG_PORT || "9222", 10);
   const projectRoot = path.resolve((args.root as string) || process.cwd());
   const shouldOpenDashboard = !!args.dashboard;
   const targetUrl = args.target as string | undefined;
   let execCommand = args.exec as string | undefined;
+
+  let patchRestorer: (() => void) | undefined;
+  const cleanup = () => {
+    if (patchRestorer) {
+      try {
+        patchRestorer();
+        patchRestorer = undefined;
+      } catch {}
+    }
+  };
+  process.on("exit", cleanup);
+  process.on("SIGINT", () => { cleanup(); process.exit(0); });
+  process.on("SIGTERM", () => { cleanup(); process.exit(0); });
 
   // Resolve subcommand (e.g. "hs start" → "npm run start")
   if (subcommand && !execCommand && !targetUrl) {
@@ -324,16 +380,9 @@ async function main() {
 
   console.log(`[HoverSource] Initializing...`);
 
-  // 1. Start Companion Server
-  startCompanionServer({
-    port: serverPort,
-    projectRoot,
-    debugPort
-  });
-
   // If in exec mode, check if the debugPort is already occupied and warn/prompt the user
   if (execCommand) {
-    const isDebugPortInUse = await new Promise<boolean>((resolve) => {
+    let isDebugPortInUse = await new Promise<boolean>((resolve) => {
       const server = net.createServer();
       server.once("error", () => resolve(true));
       server.once("listening", () => {
@@ -362,19 +411,42 @@ async function main() {
           const success = await killProcess(pid, debugPort);
           if (success) {
             console.log(`[HoverSource] Process terminated successfully. Port ${debugPort} is now free.`);
+            isDebugPortInUse = false;
             // Wait a brief moment for OS to release the socket
             await new Promise((r) => setTimeout(r, 700));
           } else {
             console.error(`[HoverSource] Failed to terminate process. You may need to run as administrator or close it manually.`);
           }
-        } else {
-          console.log(`[HoverSource] Proceeding without terminating. Electron might fail to bind.`);
         }
-      } else {
-        console.warn(`\x1b[33m[HoverSource] Please close lingering Electron/Chrome instances occupying port ${debugPort}.\x1b[0m\n`);
+      }
+
+      if (isDebugPortInUse && isInteractive) {
+        const portAnswer = await askQuestion(`\x1b[36m[HoverSource] Port ${debugPort} is blocked. Try changing your app's debug port to ${debugPort + 1} temporarily? (y/N): \x1b[0m`);
+        if (portAnswer.trim().toLowerCase() === "y") {
+          const newDebugPort = debugPort + 1;
+          const patchResult = findAndPatchDebugPort(projectRoot, debugPort, newDebugPort);
+          if (patchResult) {
+            patchRestorer = patchResult.restore;
+            debugPort = newDebugPort;
+            isDebugPortInUse = false;
+          } else {
+            console.warn(`\x1b[33m[HoverSource] ⚠️ Could not locate any hardcoded references to port ${debugPort} in your scripts/ folder or root.\x1b[0m`);
+          }
+        }
+      }
+
+      if (isDebugPortInUse) {
+        console.warn(`\x1b[33m[HoverSource] Proceeding with port ${debugPort} anyway. Overlay connection might fail.\x1b[0m\n`);
       }
     }
   }
+
+  // 1. Start Companion Server
+  startCompanionServer({
+    port: serverPort,
+    projectRoot,
+    debugPort
+  });
 
   // 2. Open dashboard if requested
   if (shouldOpenDashboard) {

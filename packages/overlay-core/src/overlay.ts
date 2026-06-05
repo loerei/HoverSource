@@ -238,11 +238,28 @@ class HoverSourceOverlay {
 
   private matchShortcut(e: KeyboardEvent, shortcut: any): boolean {
     if (!shortcut || !shortcut.key) return false;
-    const keyMatch = e.key.toLowerCase() === shortcut.key.toLowerCase();
+    
+    // Check modifiers first
     const altMatch = !!e.altKey === !!shortcut.altKey;
     const ctrlMatch = !!e.ctrlKey === !!shortcut.ctrlKey;
     const shiftMatch = !!e.shiftKey === !!shortcut.shiftKey;
-    return keyMatch && altMatch && ctrlMatch && shiftMatch;
+    if (!altMatch || !ctrlMatch || !shiftMatch) return false;
+
+    const targetKey = shortcut.key.toLowerCase();
+    
+    // Match by e.key (standard representation)
+    const keyMatch = e.key.toLowerCase() === targetKey;
+    
+    // Match by e.code (fallback for layout/modifier distortions, e.g. "KeyS", "KeyQ")
+    let codeMatch = false;
+    if (e.code) {
+      const codeLower = e.code.toLowerCase();
+      codeMatch = codeLower === targetKey ||
+                  codeLower === `key${targetKey}` ||
+                  codeLower === `digit${targetKey}`;
+    }
+
+    return keyMatch || codeMatch;
   }
 
   private isTyping(e: KeyboardEvent): boolean {

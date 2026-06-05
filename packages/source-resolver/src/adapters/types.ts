@@ -13,10 +13,7 @@ export interface VisualContext {
 export interface StaticMetadata {
   rawAttributes?: Record<string, string>;
   comments?: string[];
-  stylesheetOrigin?: {
-    file: string;
-    line: number;
-  };
+  classOrigins?: Record<string, { file: string; line: number; column: number }>;
 }
 
 export interface SourceInfo {

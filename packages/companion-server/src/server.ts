@@ -461,6 +461,7 @@ export function startCompanionServer(config: ServerConfig): http.Server {
       const lineParam = url.searchParams.get("line") || "1";
       const columnParam = url.searchParams.get("column") || "1";
       const tagNameParam = url.searchParams.get("tagName") || undefined;
+      const classListParam = url.searchParams.get("classList") || undefined;
 
       if (!fileParam) {
         res.writeHead(400, { "Content-Type": "application/json" });
@@ -479,8 +480,9 @@ export function startCompanionServer(config: ServerConfig): http.Server {
 
       const lineVal = parseInt(lineParam, 10);
       const colVal = parseInt(columnParam, 10);
+      const classList = classListParam ? classListParam.split(",") : [];
 
-      staticResolver.resolveStaticContext(absolutePath, lineVal, colVal, tagNameParam)
+      staticResolver.resolveStaticContext(config.projectRoot, absolutePath, lineVal, colVal, tagNameParam, classList)
         .then(metadata => {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(metadata));

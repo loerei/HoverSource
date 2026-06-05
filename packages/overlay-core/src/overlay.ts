@@ -419,8 +419,17 @@ class HoverSourceOverlay {
               this.updateTooltip(target, info, e);
             }
 
-            // Fetch static context (comments and raw attributes)
-            const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}`;
+            // Collect all class names to resolve their CSS origins
+            const classesToResolve = new Set<string>(info.classList || []);
+            if (info.visualContext) {
+              info.visualContext.parentEffects.forEach(fx => {
+                fx.classList.forEach(cls => classesToResolve.add(cls));
+              });
+            }
+            const classListParam = Array.from(classesToResolve).join(",");
+
+            // Fetch static context (comments, raw attributes, and CSS class origins)
+            const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
             
             fetch(staticContextUrl)
               .then(res => res.json())
@@ -592,7 +601,21 @@ class HoverSourceOverlay {
         const effectsHtml = info.visualContext.parentEffects
           .map((fx: ParentVisualEffect) => {
             const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-            return `<div class="hoversource-stack-item">${fx.tagName}${classStr} ➔ ${fx.property}: ${fx.value}</div>`;
+            
+            // Find stylesheet origin for the first matching class name in the parent
+            let originLabel = "";
+            if (info.staticMetadata?.classOrigins) {
+              for (const cls of fx.classList) {
+                const origin = info.staticMetadata.classOrigins[cls];
+                if (origin) {
+                  const fileBase = origin.file.split("/").pop();
+                  originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
+                  break;
+                }
+              }
+            }
+
+            return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
           })
           .join("");
         html += `
@@ -721,7 +744,19 @@ class HoverSourceOverlay {
       const parentList = info.visualContext.parentEffects
         .map((fx: ParentVisualEffect) => {
           const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-          return `  - \`${fx.tagName}${classStr}\` ➔ \`${fx.property}: ${fx.value}\``;
+          
+          let originLabel = "";
+          if (info.staticMetadata?.classOrigins) {
+            for (const cls of fx.classList) {
+              const origin = info.staticMetadata.classOrigins[cls];
+              if (origin) {
+                originLabel = ` ➔ [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
+                break;
+              }
+            }
+          }
+
+          return `  - \`${fx.tagName}${classStr}\` ➔ \`${fx.property}: ${fx.value}\`${originLabel}`;
         })
         .join("\n");
       text += `\n* **Parent Styles**:\n${parentList}`;

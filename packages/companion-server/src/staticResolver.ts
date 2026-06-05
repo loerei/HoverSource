@@ -1,20 +1,83 @@
 import fs from "node:fs";
+import path from "node:path";
 
 export interface StaticMetadata {
   rawAttributes: Record<string, string>;
   comments: string[];
+  classOrigins: Record<string, { file: string; line: number; column: number }>;
+}
+
+function getAllCssFiles(dir: string, fileList: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return fileList;
+  try {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        const base = path.basename(filePath);
+        if (
+          base !== "node_modules" &&
+          base !== ".git" &&
+          base !== "dist" &&
+          base !== "build" &&
+          base !== "out" &&
+          base !== ".gemini" &&
+          base !== ".agents"
+        ) {
+          getAllCssFiles(filePath, fileList);
+        }
+      } else if (file.endsWith(".css")) {
+        fileList.push(filePath);
+      }
+    }
+  } catch {}
+  return fileList;
+}
+
+function findClassOrigins(projectRoot: string, classNames: string[]): Record<string, { file: string; line: number; column: number }> {
+  const origins: Record<string, { file: string; line: number; column: number }> = {};
+  const cssFiles = getAllCssFiles(projectRoot);
+
+  for (const file of cssFiles) {
+    try {
+      const content = fs.readFileSync(file, "utf-8");
+      const lines = content.split(/\r?\n/);
+      
+      for (const className of classNames) {
+        if (origins[className]) continue;
+
+        const pattern = new RegExp(`\\.${className}\\b`);
+        for (let i = 0; i < lines.length; i++) {
+          const match = lines[i].match(pattern);
+          if (match && match.index !== undefined) {
+            origins[className] = {
+              file: file.replace(/\\/g, "/"),
+              line: i + 1,
+              column: match.index + 1
+            };
+            break;
+          }
+        }
+      }
+    } catch {}
+  }
+  return origins;
 }
 
 export class StaticContextResolver {
   public async resolveStaticContext(
+    projectRoot: string,
     filePath: string,
     line: number,
     column: number,
-    tagName?: string
+    tagName?: string,
+    classList?: string[]
   ): Promise<StaticMetadata> {
     const result: StaticMetadata = {
       rawAttributes: {},
-      comments: []
+      comments: [],
+      classOrigins: {}
     };
 
     if (!fs.existsSync(filePath)) {
@@ -144,6 +207,10 @@ export class StaticContextResolver {
             .replace(/^\/\/\s*/, "")
             .trim();
         }).filter(c => c !== "");
+      }
+
+      if (classList && classList.length > 0) {
+        result.classOrigins = findClassOrigins(projectRoot, classList);
       }
 
     } catch (e) {

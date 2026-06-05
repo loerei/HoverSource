@@ -538,7 +538,14 @@
             if (this.uiVisible) {
               this.updateTooltip(target, info, e);
             }
-            const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}`;
+            const classesToResolve = new Set(info.classList || []);
+            if (info.visualContext) {
+              info.visualContext.parentEffects.forEach((fx) => {
+                fx.classList.forEach((cls) => classesToResolve.add(cls));
+              });
+            }
+            const classListParam = Array.from(classesToResolve).join(",");
+            const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
             fetch(staticContextUrl).then((res) => res.json()).then((staticData) => {
               if (staticData && this.currentElement === target) {
                 info.staticMetadata = staticData;
@@ -691,7 +698,18 @@
         if (info.visualContext && info.visualContext.parentEffects.length > 0) {
           const effectsHtml = info.visualContext.parentEffects.map((fx) => {
             const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-            return `<div class="hoversource-stack-item">${fx.tagName}${classStr} \u2794 ${fx.property}: ${fx.value}</div>`;
+            let originLabel = "";
+            if (info.staticMetadata?.classOrigins) {
+              for (const cls of fx.classList) {
+                const origin = info.staticMetadata.classOrigins[cls];
+                if (origin) {
+                  const fileBase = origin.file.split("/").pop();
+                  originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
+                  break;
+                }
+              }
+            }
+            return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
           }).join("");
           html += `
           <div class="hoversource-section">
@@ -805,7 +823,17 @@
       if (info.visualContext && info.visualContext.parentEffects.length > 0) {
         const parentList = info.visualContext.parentEffects.map((fx) => {
           const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-          return `  - \`${fx.tagName}${classStr}\` \u2794 \`${fx.property}: ${fx.value}\``;
+          let originLabel = "";
+          if (info.staticMetadata?.classOrigins) {
+            for (const cls of fx.classList) {
+              const origin = info.staticMetadata.classOrigins[cls];
+              if (origin) {
+                originLabel = ` \u2794 [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
+                break;
+              }
+            }
+          }
+          return `  - \`${fx.tagName}${classStr}\` \u2794 \`${fx.property}: ${fx.value}\`${originLabel}`;
         }).join("\n");
         text += `
 * **Parent Styles**:

@@ -8,6 +8,7 @@ import path from "node:path";
 import fs from "node:fs";
 import net from "node:net";
 import http from "node:http";
+import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -141,6 +142,79 @@ function openBrowser(url: string) {
   });
 }
 
+function askQuestion(query: string): Promise<string> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) => rl.question(query, (ans) => {
+    rl.close();
+    resolve(ans);
+  }));
+}
+
+function getPidUsingPort(port: number): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    if (process.platform === "win32") {
+      exec(`netstat -ano | findstr :${port}`, (err, stdout) => {
+        if (err || !stdout) return resolve(undefined);
+        const lines = stdout.split("\n");
+        for (const line of lines) {
+          if (line.includes("LISTENING")) {
+            const parts = line.trim().split(/\s+/);
+            const pidStr = parts[parts.length - 1];
+            const pid = parseInt(pidStr, 10);
+            if (!isNaN(pid) && pid > 0) {
+              return resolve(pid);
+            }
+          }
+        }
+        resolve(undefined);
+      });
+    } else {
+      exec(`lsof -t -i:${port}`, (err, stdout) => {
+        if (err || !stdout) return resolve(undefined);
+        const pid = parseInt(stdout.trim(), 10);
+        if (!isNaN(pid) && pid > 0) {
+          resolve(pid);
+        } else {
+          resolve(undefined);
+        }
+      });
+    }
+  });
+}
+
+function getProcessName(pid: number): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    if (process.platform === "win32") {
+      exec(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, (err, stdout) => {
+        if (err || !stdout) return resolve(undefined);
+        const parts = stdout.trim().split(",");
+        if (parts[0]) {
+          const name = parts[0].replace(/"/g, "");
+          return resolve(name);
+        }
+        resolve(undefined);
+      });
+    } else {
+      exec(`ps -p ${pid} -o comm=`, (err, stdout) => {
+        if (err || !stdout) return resolve(undefined);
+        resolve(stdout.trim());
+      });
+    }
+  });
+}
+
+function killProcess(pid: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const cmd = process.platform === "win32" ? `taskkill /F /PID ${pid}` : `kill -9 ${pid}`;
+    exec(cmd, (err) => {
+      resolve(!err);
+    });
+  });
+}
+
 async function main() {
   const { args, subcommand } = getArgs();
   
@@ -173,6 +247,51 @@ async function main() {
     projectRoot,
     debugPort
   });
+
+  // If in exec mode, check if the debugPort is already occupied and warn/prompt the user
+  if (execCommand) {
+    const isDebugPortInUse = await new Promise<boolean>((resolve) => {
+      const server = net.createServer();
+      server.once("error", () => resolve(true));
+      server.once("listening", () => {
+        server.close();
+        resolve(false);
+      });
+      server.listen(debugPort, "127.0.0.1");
+    });
+    if (isDebugPortInUse) {
+      const pid = await getPidUsingPort(debugPort);
+      const procName = pid ? await getProcessName(pid) : undefined;
+
+      console.warn(`\n\x1b[33m[HoverSource] ⚠️  WARNING: Debug port ${debugPort} is already in use by another process!\x1b[0m`);
+      if (pid) {
+        console.warn(`\x1b[33m[HoverSource] Process: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
+      } else {
+        console.warn(`\x1b[33m[HoverSource] Could not identify the process holding the port.\x1b[0m`);
+      }
+      console.warn(`\x1b[33m[HoverSource] Electron will fail to bind to it, and the HoverSource overlay will not appear.\x1b[0m`);
+
+      const isInteractive = process.stdout.isTTY && process.stdin.isTTY;
+      if (isInteractive && pid) {
+        const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${debugPort}? (y/N): \x1b[0m`);
+        if (answer.trim().toLowerCase() === "y") {
+          console.log(`[HoverSource] Terminating process ${pid}...`);
+          const success = await killProcess(pid);
+          if (success) {
+            console.log(`[HoverSource] Process terminated successfully. Port ${debugPort} is now free.`);
+            // Wait a brief moment for OS to release the socket
+            await new Promise((r) => setTimeout(r, 700));
+          } else {
+            console.error(`[HoverSource] Failed to terminate process. You may need to run as administrator or close it manually.`);
+          }
+        } else {
+          console.log(`[HoverSource] Proceeding without terminating. Electron might fail to bind.`);
+        }
+      } else {
+        console.warn(`\x1b[33m[HoverSource] Please close lingering Electron/Chrome instances occupying port ${debugPort}.\x1b[0m\n`);
+      }
+    }
+  }
 
   // 2. Open dashboard if requested
   if (shouldOpenDashboard) {

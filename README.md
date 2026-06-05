@@ -8,28 +8,101 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 
 ## Features
 
-- **Copy AI-Ready Metadata (`Alt + C`)**: Copies exact file paths, line/column numbers, DOM class lists, tag names, and key computed styles to your clipboard so your AI agent knows exactly what to edit.
-- **Freeze State (`Alt + Q`)**: Locks dynamic elements (like tooltips, popovers, or dropdowns) in place so you can hover and capture them without them disappearing.
+- **Copy AI-Ready Metadata (`Alt + C`)**: Copies a structured Markdown block to your clipboard — component name, exact file path with line/column, computed styles, parent visual effects with CSS source locations, layout constraints, JSDoc comments, and raw JSX attributes.
+- **Freeze State (`Alt + P`)**: Locks dynamic elements (like tooltips, popovers, or dropdowns) in place so you can hover and capture them without them disappearing.
 - **Toggle Overlay (`Alt + H`)**: Show or hide the developer overlay bounding box and floating spec card.
 - **Deep-linking (Click filename)**: Instantly opens the file in your preferred editor (VS Code or Cursor) at the exact line number.
 - **Source Line Correction**: Silently checks and corrects compiler-shifted line numbers in the background.
 
-## Sample Clipboard Output
+## Clipboard Output
 
-When you press `Alt + C` on any hovered element, HoverSource copies this exact Markdown block to your clipboard:
+When you press `Alt + C` on any hovered element, HoverSource copies a Markdown block to your clipboard. All sections below the first five fields are conditional — they appear only when the relevant data exists.
+
+### Always present
 
 ```markdown
 ### HoverSource Component Metadata
-* **Component**: `PrimaryButton`
-* **File Path**: `D:/Projects/MySaaSApp/src/components/ui/Button.tsx` (Line: 42, Column: 12)
+* **Component**: `ChatThreadView`
+* **File Path**: `D:/Projects/MyApp/src/features/chat/ChatThreadView.tsx` (Line: 659, Column: 5)
 * **Framework**: React
-* **Dimensions**: 120x40
+* **Dimensions**: 1485x1044
 * **Key Styles**:
   - Color: `rgb(255, 255, 255)`
-  - Background: `rgb(59, 130, 246)`
-  - Box Shadow: `0 4px 6px -1px rgba(0, 0, 0, 0.1)`
-  - Margin: `8px` | Padding: `12px 24px`
-  - Display: `flex` (direction: row)
+  - Background: `rgba(0, 0, 0, 0)`
+  - Box Shadow: `none`
+  - Margin: `0px` | Padding: `20px 44px 26px`
+  - Display: `flex` (direction: column)
+```
+
+### Parent Styles *(when ancestors carry visual effects)*
+
+HoverSource walks the ancestor chain of the hovered element and collects any of these properties from each ancestor:
+
+`mask-image` · `-webkit-mask-image` · `opacity` · `filter` · `backdrop-filter` · `overflow-x` · `overflow-y` · `position: sticky` · `position: fixed`
+
+When a class from an ancestor is found in the project's CSS/SCSS files, the output includes a direct link to the source file and line:
+
+```markdown
+* **Parent Styles**:
+  - `div.chat-thread__body` ➔ `mask-image: linear-gradient(rgba(0,0,0,0) 0%, rgb(0,0,0) 10px)` ➔ [Source: `workspace.css` (Line: 793, Column: 3)]
+  - `div.chat-thread__body` ➔ `overflow-y: hidden`
+  - `section.chat-thread` ➔ `overflow-y: hidden`
+  - `main.home-stage` ➔ `overflow-y: hidden`
+```
+
+This lets an AI agent patch the exact CSS rule in one step, without grepping the codebase.
+
+### Layout Constraints *(when the element or its context has layout-affecting properties)*
+
+```markdown
+* **Layout Constraints**:
+  - `flex: 1 1 0%`
+  - `min-height: 0`
+  - `overflow: hidden`
+```
+
+### Source Comments *(when JSDoc or inline comments precede the element in source)*
+
+```markdown
+* **Source Comments**:
+  - `Renders the scrollable message list for the active chat thread.`
+  - `@param messages - ordered list of ChatMessage objects`
+```
+
+### Source Attributes *(when the element carries non-style JSX attributes)*
+
+```markdown
+* **Source Attributes**:
+  - `data-testid="chat-thread-body"`
+  - `aria-label="Message list"`
+  - `role="log"`
+```
+
+### Full example
+
+```markdown
+### HoverSource Component Metadata
+* **Component**: `ChatThreadView`
+* **File Path**: `D:/Projects/MyApp/src/features/chat/ChatThreadView.tsx` (Line: 659, Column: 5)
+* **Framework**: React
+* **Dimensions**: 1485x1044
+* **Key Styles**:
+  - Color: `rgb(255, 255, 255)`
+  - Background: `rgba(0, 0, 0, 0)`
+  - Box Shadow: `none`
+  - Margin: `0px` | Padding: `20px 44px 26px`
+  - Display: `flex` (direction: column)
+* **Parent Styles**:
+  - `div.chat-thread__body` ➔ `mask-image: linear-gradient(rgba(0,0,0,0) 0%, rgb(0,0,0) 10px)` ➔ [Source: `workspace.css` (Line: 793, Column: 3)]
+  - `div.chat-thread__body` ➔ `overflow-y: hidden`
+  - `section.chat-thread` ➔ `overflow-y: hidden`
+* **Layout Constraints**:
+  - `flex: 1 1 0%`
+  - `min-height: 0`
+* **Source Comments**:
+  - `Renders the scrollable message list for the active chat thread.`
+* **Source Attributes**:
+  - `data-testid="chat-thread-body"`
 ```
 
 ## HoverSource in the wild

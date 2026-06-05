@@ -74,6 +74,113 @@
     }
   };
 
+  // src/inspector.ts
+  function inspectVisualContext(element) {
+    const parentEffects = [];
+    const layoutConstraints = {};
+    try {
+      const computed = window.getComputedStyle(element);
+      if (computed.position && computed.position !== "static") {
+        layoutConstraints["position"] = computed.position;
+      }
+      if (computed.flexGrow && computed.flexGrow !== "0") {
+        layoutConstraints["flex-grow"] = computed.flexGrow;
+      }
+      if (computed.alignSelf && computed.alignSelf !== "auto" && computed.alignSelf !== "normal") {
+        layoutConstraints["align-self"] = computed.alignSelf;
+      }
+      if (computed.gridColumn && computed.gridColumn !== "auto") {
+        layoutConstraints["grid-column"] = computed.gridColumn;
+      }
+      if (computed.display && computed.display !== "inline" && computed.display !== "block") {
+        layoutConstraints["display"] = computed.display;
+      }
+    } catch (e) {
+      console.warn("[HoverSource] Failed to compute element layout constraints", e);
+    }
+    let current = element.parentElement;
+    let depth = 0;
+    while (current && depth < 5) {
+      const tagName = current.tagName.toLowerCase();
+      if (tagName === "body" || tagName === "html") {
+        break;
+      }
+      try {
+        const comp = window.getComputedStyle(current);
+        const classList = Array.from(current.classList);
+        const mask = comp.maskImage || comp.webkitMaskImage;
+        if (mask && mask !== "none") {
+          parentEffects.push({
+            tagName,
+            classList,
+            property: "mask-image",
+            value: mask
+          });
+        }
+        const backdropFilter = comp.backdropFilter || comp.webkitBackdropFilter;
+        if (backdropFilter && backdropFilter !== "none") {
+          parentEffects.push({
+            tagName,
+            classList,
+            property: "backdrop-filter",
+            value: backdropFilter
+          });
+        }
+        if (comp.filter && comp.filter !== "none") {
+          parentEffects.push({
+            tagName,
+            classList,
+            property: "filter",
+            value: comp.filter
+          });
+        }
+        if (comp.opacity && comp.opacity !== "1" && comp.opacity !== "") {
+          const opacityVal = parseFloat(comp.opacity);
+          if (opacityVal < 1) {
+            parentEffects.push({
+              tagName,
+              classList,
+              property: "opacity",
+              value: comp.opacity
+            });
+          }
+        }
+        if (comp.overflowY && (comp.overflowY === "auto" || comp.overflowY === "scroll" || comp.overflowY === "hidden")) {
+          parentEffects.push({
+            tagName,
+            classList,
+            property: "overflow-y",
+            value: comp.overflowY
+          });
+        }
+        if (comp.overflowX && (comp.overflowX === "auto" || comp.overflowX === "scroll" || comp.overflowX === "hidden")) {
+          parentEffects.push({
+            tagName,
+            classList,
+            property: "overflow-x",
+            value: comp.overflowX
+          });
+        }
+        if (comp.position && (comp.position === "sticky" || comp.position === "fixed")) {
+          parentEffects.push({
+            tagName,
+            classList,
+            property: "position",
+            value: comp.position
+          });
+        }
+      } catch (e) {
+        console.warn(`[HoverSource] Failed to compute styles for parent element <${tagName}>`, e);
+      }
+      current = current.parentElement;
+      depth++;
+    }
+    return {
+      parentEffects,
+      layoutConstraints
+    };
+  }
+
   // src/overlay.ts
   function getCompanionPort() {
     return window.__HOVERSOURCE_PORT__ ?? 3e3;
@@ -284,11 +391,19 @@
     matchShortcut(e, shortcut) {
       if (!shortcut || !shortcut.key)
         return false;
-      const keyMatch = e.key.toLowerCase() === shortcut.key.toLowerCase();
       const altMatch = !!e.altKey === !!shortcut.altKey;
       const ctrlMatch = !!e.ctrlKey === !!shortcut.ctrlKey;
       const shiftMatch = !!e.shiftKey === !!shortcut.shiftKey;
-      return keyMatch && altMatch && ctrlMatch && shiftMatch;
+      if (!altMatch || !ctrlMatch || !shiftMatch)
+        return false;
+      const targetKey = shortcut.key.toLowerCase();
+      const keyMatch = e.key.toLowerCase() === targetKey;
+      let codeMatch = false;
+      if (e.code) {
+        const codeLower = e.code.toLowerCase();
+        codeMatch = codeLower === targetKey || codeLower === `key${targetKey}` || codeLower === `digit${targetKey}`;
+      }
+      return keyMatch || codeMatch;
     }
     isTyping(e) {
       const activeEl = document.activeElement;
@@ -401,6 +516,7 @@
       }
       const info = this.resolver.resolve(target);
       if (info) {
+        info.visualContext = inspectVisualContext(target);
         this.currentElement = target;
         this.currentSourceInfo = info;
         if (this.uiVisible) {
@@ -409,15 +525,36 @@
         }
         const validateUrl = `http://127.0.0.1:${getCompanionPort()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
         fetch(validateUrl).then((r) => r.json()).then((data) => {
-          if (data && data.corrected && (data.corrected.line !== info.lineNumber || data.corrected.column !== info.columnNumber)) {
-            if (this.currentElement === target) {
-              info.lineNumber = data.corrected.line;
-              info.columnNumber = data.corrected.column;
-              this.currentSourceInfo = info;
-              if (this.uiVisible) {
-                this.updateTooltip(target, info, e);
-              }
+          let line = info.lineNumber || 1;
+          let col = info.columnNumber || 1;
+          if (data && data.corrected) {
+            line = data.corrected.line;
+            col = data.corrected.column;
+          }
+          if (this.currentElement === target) {
+            info.lineNumber = line;
+            info.columnNumber = col;
+            this.currentSourceInfo = info;
+            if (this.uiVisible) {
+              this.updateTooltip(target, info, e);
             }
+            const classesToResolve = new Set(info.classList || []);
+            if (info.visualContext) {
+              info.visualContext.parentEffects.forEach((fx) => {
+                fx.classList.forEach((cls) => classesToResolve.add(cls));
+              });
+            }
+            const classListParam = Array.from(classesToResolve).join(",");
+            const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+            fetch(staticContextUrl).then((res) => res.json()).then((staticData) => {
+              if (staticData && this.currentElement === target) {
+                info.staticMetadata = staticData;
+                this.currentSourceInfo = info;
+                if (this.uiVisible) {
+                  this.updateTooltip(target, info, e);
+                }
+              }
+            }).catch((err) => console.warn("[HoverSource] Static context fetch failed:", err));
           }
         }).catch((err) => console.warn("[HoverSource] Background line validation failed:", err));
       } else {
@@ -549,6 +686,62 @@
           </div>
         `;
         }
+        if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
+          const constraints = Object.entries(info.visualContext.layoutConstraints).map(([prop, val]) => `${prop}: ${val}`).join(", ");
+          html += `
+          <div class="hoversource-section">
+            <span class="hoversource-label">Layout: </span>
+            <span class="hoversource-value">${constraints}</span>
+          </div>
+        `;
+        }
+        if (info.visualContext && info.visualContext.parentEffects.length > 0) {
+          const effectsHtml = info.visualContext.parentEffects.map((fx) => {
+            const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+            let originLabel = "";
+            if (info.staticMetadata?.classOrigins) {
+              for (const cls of fx.classList) {
+                const origin = info.staticMetadata.classOrigins[cls];
+                if (origin) {
+                  const fileBase = origin.file.split("/").pop();
+                  originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
+                  break;
+                }
+              }
+            }
+            return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
+          }).join("");
+          html += `
+          <div class="hoversource-section">
+            <span class="hoversource-label">Parent Styles: </span>
+            <div class="hoversource-stack">
+              ${effectsHtml}
+            </div>
+          </div>
+        `;
+        }
+        if (info.staticMetadata) {
+          if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+            const commentsHtml = info.staticMetadata.comments.map((c) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${c}</div>`).join("");
+            html += `
+            <div class="hoversource-section">
+              <span class="hoversource-label">Source Comments: </span>
+              <div class="hoversource-stack">
+                ${commentsHtml}
+              </div>
+            </div>
+          `;
+          }
+          if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+            const attrs = Object.entries(info.staticMetadata.rawAttributes).map(([k, v]) => `${k}="${v}"`).join(" ");
+            html += `
+            <div class="hoversource-section">
+              <span class="hoversource-label">Source Attributes: </span>
+              <span class="hoversource-value">${attrs}</span>
+            </div>
+          `;
+          }
+        }
         html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Stack: </span>
@@ -614,7 +807,7 @@
           flexDirection: computed.flexDirection
         }
       };
-      const text = `
+      let text = `
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
 * **File Path**: \`${data.file}\` (Line: ${data.line}, Column: ${data.column})
@@ -627,6 +820,45 @@
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
   - Display: \`${data.styles.display}\` ${data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : ""}
     `.trim();
+      if (info.visualContext && info.visualContext.parentEffects.length > 0) {
+        const parentList = info.visualContext.parentEffects.map((fx) => {
+          const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+          let originLabel = "";
+          if (info.staticMetadata?.classOrigins) {
+            for (const cls of fx.classList) {
+              const origin = info.staticMetadata.classOrigins[cls];
+              if (origin) {
+                originLabel = ` \u2794 [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
+                break;
+              }
+            }
+          }
+          return `  - \`${fx.tagName}${classStr}\` \u2794 \`${fx.property}: ${fx.value}\`${originLabel}`;
+        }).join("\n");
+        text += `
+* **Parent Styles**:
+${parentList}`;
+      }
+      if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
+        const layoutList = Object.entries(info.visualContext.layoutConstraints).map(([k, v]) => `  - \`${k}: ${v}\``).join("\n");
+        text += `
+* **Layout Constraints**:
+${layoutList}`;
+      }
+      if (info.staticMetadata) {
+        if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+          const commentList = info.staticMetadata.comments.map((c) => `  - \`${c}\``).join("\n");
+          text += `
+* **Source Comments**:
+${commentList}`;
+        }
+        if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+          const attrList = Object.entries(info.staticMetadata.rawAttributes).map(([k, v]) => `  - \`${k}="${v}"\``).join("\n");
+          text += `
+* **Source Attributes**:
+${attrList}`;
+        }
+      }
       navigator.clipboard.writeText(text).then(() => {
         console.log("[HoverSource] Copied component metadata to clipboard!");
         if (this.uiVisible && this.tooltipBox) {

@@ -1,4 +1,5 @@
 import { SourceResolver } from "@hoversource/source-resolver";
+import { inspectVisualContext } from "./inspector.js";
 function getCompanionPort() {
     return window.__HOVERSOURCE_PORT__ ?? 3000;
 }
@@ -222,11 +223,24 @@ class HoverSourceOverlay {
     matchShortcut(e, shortcut) {
         if (!shortcut || !shortcut.key)
             return false;
-        const keyMatch = e.key.toLowerCase() === shortcut.key.toLowerCase();
+        // Check modifiers first
         const altMatch = !!e.altKey === !!shortcut.altKey;
         const ctrlMatch = !!e.ctrlKey === !!shortcut.ctrlKey;
         const shiftMatch = !!e.shiftKey === !!shortcut.shiftKey;
-        return keyMatch && altMatch && ctrlMatch && shiftMatch;
+        if (!altMatch || !ctrlMatch || !shiftMatch)
+            return false;
+        const targetKey = shortcut.key.toLowerCase();
+        // Match by e.key (standard representation)
+        const keyMatch = e.key.toLowerCase() === targetKey;
+        // Match by e.code (fallback for layout/modifier distortions, e.g. "KeyS", "KeyQ")
+        let codeMatch = false;
+        if (e.code) {
+            const codeLower = e.code.toLowerCase();
+            codeMatch = codeLower === targetKey ||
+                codeLower === `key${targetKey}` ||
+                codeLower === `digit${targetKey}`;
+        }
+        return keyMatch || codeMatch;
     }
     isTyping(e) {
         const activeEl = document.activeElement;
@@ -334,6 +348,8 @@ class HoverSourceOverlay {
         }
         const info = this.resolver.resolve(target);
         if (info) {
+            // Resolve visual context (parent styles & layout constraints)
+            info.visualContext = inspectVisualContext(target);
             this.currentElement = target;
             this.currentSourceInfo = info;
             // Update DOM UI only if visibility is enabled
@@ -346,15 +362,41 @@ class HoverSourceOverlay {
             fetch(validateUrl)
                 .then(r => r.json())
                 .then(data => {
-                if (data && data.corrected && (data.corrected.line !== info.lineNumber || data.corrected.column !== info.columnNumber)) {
-                    if (this.currentElement === target) {
-                        info.lineNumber = data.corrected.line;
-                        info.columnNumber = data.corrected.column;
-                        this.currentSourceInfo = info;
-                        if (this.uiVisible) {
-                            this.updateTooltip(target, info, e);
-                        }
+                let line = info.lineNumber || 1;
+                let col = info.columnNumber || 1;
+                if (data && data.corrected) {
+                    line = data.corrected.line;
+                    col = data.corrected.column;
+                }
+                if (this.currentElement === target) {
+                    info.lineNumber = line;
+                    info.columnNumber = col;
+                    this.currentSourceInfo = info;
+                    if (this.uiVisible) {
+                        this.updateTooltip(target, info, e);
                     }
+                    // Collect all class names to resolve their CSS origins
+                    const classesToResolve = new Set(info.classList || []);
+                    if (info.visualContext) {
+                        info.visualContext.parentEffects.forEach(fx => {
+                            fx.classList.forEach(cls => classesToResolve.add(cls));
+                        });
+                    }
+                    const classListParam = Array.from(classesToResolve).join(",");
+                    // Fetch static context (comments, raw attributes, and CSS class origins)
+                    const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+                    fetch(staticContextUrl)
+                        .then(res => res.json())
+                        .then(staticData => {
+                        if (staticData && this.currentElement === target) {
+                            info.staticMetadata = staticData;
+                            this.currentSourceInfo = info;
+                            if (this.uiVisible) {
+                                this.updateTooltip(target, info, e);
+                            }
+                        }
+                    })
+                        .catch(err => console.warn("[HoverSource] Static context fetch failed:", err));
                 }
             })
                 .catch(err => console.warn("[HoverSource] Background line validation failed:", err));
@@ -492,6 +534,74 @@ class HoverSourceOverlay {
           </div>
         `;
             }
+            // Render layout constraints
+            if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
+                const constraints = Object.entries(info.visualContext.layoutConstraints)
+                    .map(([prop, val]) => `${prop}: ${val}`)
+                    .join(", ");
+                html += `
+          <div class="hoversource-section">
+            <span class="hoversource-label">Layout: </span>
+            <span class="hoversource-value">${constraints}</span>
+          </div>
+        `;
+            }
+            // Render parent visual effects
+            if (info.visualContext && info.visualContext.parentEffects.length > 0) {
+                const effectsHtml = info.visualContext.parentEffects
+                    .map((fx) => {
+                    const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+                    // Find stylesheet origin for the first matching class name in the parent
+                    let originLabel = "";
+                    if (info.staticMetadata?.classOrigins) {
+                        for (const cls of fx.classList) {
+                            const origin = info.staticMetadata.classOrigins[cls];
+                            if (origin) {
+                                const fileBase = origin.file.split("/").pop();
+                                originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
+                                break;
+                            }
+                        }
+                    }
+                    return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
+                })
+                    .join("");
+                html += `
+          <div class="hoversource-section">
+            <span class="hoversource-label">Parent Styles: </span>
+            <div class="hoversource-stack">
+              ${effectsHtml}
+            </div>
+          </div>
+        `;
+            }
+            // Render static metadata (JSDocs and raw attributes)
+            if (info.staticMetadata) {
+                if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+                    const commentsHtml = info.staticMetadata.comments
+                        .map((c) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${c}</div>`)
+                        .join("");
+                    html += `
+            <div class="hoversource-section">
+              <span class="hoversource-label">Source Comments: </span>
+              <div class="hoversource-stack">
+                ${commentsHtml}
+              </div>
+            </div>
+          `;
+                }
+                if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+                    const attrs = Object.entries(info.staticMetadata.rawAttributes)
+                        .map(([k, v]) => `${k}="${v}"`)
+                        .join(" ");
+                    html += `
+            <div class="hoversource-section">
+              <span class="hoversource-label">Source Attributes: </span>
+              <span class="hoversource-value">${attrs}</span>
+            </div>
+          `;
+                }
+            }
             html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Stack: </span>
@@ -557,7 +667,7 @@ class HoverSourceOverlay {
                 flexDirection: computed.flexDirection
             }
         };
-        const text = `
+        let text = `
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
 * **File Path**: \`${data.file}\` (Line: ${data.line}, Column: ${data.column})
@@ -570,6 +680,45 @@ class HoverSourceOverlay {
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
   - Display: \`${data.styles.display}\` ${data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : ""}
     `.trim();
+        if (info.visualContext && info.visualContext.parentEffects.length > 0) {
+            const parentList = info.visualContext.parentEffects
+                .map((fx) => {
+                const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+                let originLabel = "";
+                if (info.staticMetadata?.classOrigins) {
+                    for (const cls of fx.classList) {
+                        const origin = info.staticMetadata.classOrigins[cls];
+                        if (origin) {
+                            originLabel = ` ➔ [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
+                            break;
+                        }
+                    }
+                }
+                return `  - \`${fx.tagName}${classStr}\` ➔ \`${fx.property}: ${fx.value}\`${originLabel}`;
+            })
+                .join("\n");
+            text += `\n* **Parent Styles**:\n${parentList}`;
+        }
+        if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
+            const layoutList = Object.entries(info.visualContext.layoutConstraints)
+                .map(([k, v]) => `  - \`${k}: ${v}\``)
+                .join("\n");
+            text += `\n* **Layout Constraints**:\n${layoutList}`;
+        }
+        if (info.staticMetadata) {
+            if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+                const commentList = info.staticMetadata.comments
+                    .map((c) => `  - \`${c}\``)
+                    .join("\n");
+                text += `\n* **Source Comments**:\n${commentList}`;
+            }
+            if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+                const attrList = Object.entries(info.staticMetadata.rawAttributes)
+                    .map(([k, v]) => `  - \`${k}="${v}"\``)
+                    .join("\n");
+                text += `\n* **Source Attributes**:\n${attrList}`;
+            }
+        }
         navigator.clipboard.writeText(text).then(() => {
             console.log("[HoverSource] Copied component metadata to clipboard!");
             if (this.uiVisible && this.tooltipBox) {

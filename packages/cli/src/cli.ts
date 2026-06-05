@@ -125,7 +125,19 @@ async function resolveCompanionPort(requestedPort: number): Promise<number> {
     });
     // Wait for the port to free up
     await new Promise((r) => setTimeout(r, 700));
-    return requestedPort;
+
+    // Double check if the port was successfully freed
+    const isNowFree = await new Promise<boolean>((resolve) => {
+      const probe = net.createServer();
+      probe.listen(requestedPort, "127.0.0.1", () => { probe.close(() => resolve(true)); });
+      probe.on("error", () => resolve(false));
+    });
+
+    if (isNowFree) {
+      return requestedPort;
+    } else {
+      console.log(`[HoverSource] Previous instance on port ${requestedPort} could not be terminated (ghost port).`);
+    }
   }
 
   // Something else owns this port — find the next free one

@@ -110,18 +110,27 @@ async function resolveCompanionPort(requestedPort: number): Promise<number> {
 
   // Port taken — check if it's an HS companion
   const isHs = await new Promise<boolean>((resolve) => {
-    http.get(`http://127.0.0.1:${requestedPort}/ping`, (res) => {
+    const req = http.get(`http://127.0.0.1:${requestedPort}/ping`, (res) => {
       let body = "";
       res.on("data", (c: Buffer) => (body += c.toString()));
       res.on("end", () => resolve(body.trim() === "pong"));
-    }).on("error", () => resolve(false));
+    });
+    req.setTimeout(1500, () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.on("error", () => resolve(false));
   });
 
   if (isHs) {
     console.log(`[HoverSource] Previous instance found on port ${requestedPort}. Taking over...`);
     await new Promise<void>((resolve) => {
-      http.get(`http://127.0.0.1:${requestedPort}/shutdown`, () => resolve())
-        .on("error", () => resolve());
+      const req = http.get(`http://127.0.0.1:${requestedPort}/shutdown`, () => resolve());
+      req.setTimeout(1500, () => {
+        req.destroy();
+        resolve();
+      });
+      req.on("error", () => resolve());
     });
     // Wait for the port to free up
     await new Promise((r) => setTimeout(r, 700));

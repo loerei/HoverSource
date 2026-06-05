@@ -319,6 +319,48 @@ function killProcess(pid: number, port: number): Promise<boolean> {
   });
 }
 
+const PATCH_STATE_FILE = path.join(os.tmpdir(), "hoversource_patches.json");
+
+function recordPatchState(filePath: string, originalContent: string) {
+  let state: Record<string, string> = {};
+  if (fs.existsSync(PATCH_STATE_FILE)) {
+    try {
+      state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8"));
+    } catch {}
+  }
+  state[filePath] = originalContent;
+  try {
+    fs.writeFileSync(PATCH_STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
+  } catch {}
+}
+
+function removePatchState(filePath: string) {
+  if (!fs.existsSync(PATCH_STATE_FILE)) return;
+  try {
+    const state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8"));
+    delete state[filePath];
+    if (Object.keys(state).length === 0) {
+      fs.unlinkSync(PATCH_STATE_FILE);
+    } else {
+      fs.writeFileSync(PATCH_STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
+    }
+  } catch {}
+}
+
+function restoreLeftoverPatches() {
+  if (!fs.existsSync(PATCH_STATE_FILE)) return;
+  try {
+    const state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8"));
+    for (const [filePath, originalContent] of Object.entries(state)) {
+      if (fs.existsSync(filePath)) {
+        fs.writeFileSync(filePath, originalContent as string, "utf-8");
+        console.log(`[HoverSource] [Self-Healing] Restored leftover patch in ${filePath}`);
+      }
+    }
+    fs.unlinkSync(PATCH_STATE_FILE);
+  } catch {}
+}
+
 function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: number): { restore: () => void } | undefined {
   const dirsToSearch = [
     path.join(projectRoot, "scripts"),
@@ -340,6 +382,7 @@ function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: nu
           if (content.includes(searchStr)) {
             const newContent = content.replace(new RegExp(searchStr, "g"), `--remote-debugging-port=${newPort}`);
             fs.writeFileSync(fullPath, newContent, "utf-8");
+            recordPatchState(fullPath, content);
             patchedFiles.push({ path: fullPath, originalContent: content });
             console.log(`[HoverSource] Temporarily patched debug port ${oldPort} -> ${newPort} in ${path.relative(projectRoot, fullPath)}`);
           }
@@ -355,6 +398,7 @@ function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: nu
       for (const pf of patchedFiles) {
         try {
           fs.writeFileSync(pf.path, pf.originalContent, "utf-8");
+          removePatchState(pf.path);
           console.log(`[HoverSource] Restored original port configuration in ${path.relative(projectRoot, pf.path)}`);
         } catch {}
       }
@@ -363,6 +407,9 @@ function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: nu
 }
 
 async function main() {
+  // Self-heal any leftover patches from previous crashed/force-killed runs
+  restoreLeftoverPatches();
+
   const { args, subcommand } = getArgs();
   
   const requestedPort = parseInt((args.port as string) || process.env.HOVERSOURCE_PORT || "3000", 10);

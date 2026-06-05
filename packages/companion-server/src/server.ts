@@ -134,6 +134,18 @@ export function loadMergedConfig(projectRoot: string): HoverSourceConfig {
   return config;
 }
 
+// Escape special regex characters to prevent ReDoS
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Resolve a file param (possibly relative) to an absolute path
+function resolveFilePath(fileParam: string, projectRoot: string): string {
+  if (path.isAbsolute(fileParam)) return fileParam;
+  const cleanFile = fileParam.startsWith("/") ? fileParam.substring(1) : fileParam;
+  return path.resolve(projectRoot, cleanFile);
+}
+
 // Simple deep helper
 function mergeDeep(target: any, source: any): any {
   if (typeof target !== "object" || target === null || typeof source !== "object" || source === null) {
@@ -173,7 +185,7 @@ function verifyAndCorrectSourceLocation(
       let matchesClass = false;
 
       if (tagName) {
-        const tagRegex = new RegExp(`<${tagName}\\b|${tagName}`, "i");
+        const tagRegex = new RegExp(`<${escapeRegExp(tagName)}\\b|${escapeRegExp(tagName)}`, "i");
         matchesTag = tagRegex.test(targetLine);
       }
       
@@ -203,7 +215,7 @@ function verifyAndCorrectSourceLocation(
 
     // Second, if no class matched, search for the tagName.
     if (tagName) {
-      const tagPattern = `<${tagName}\\b`;
+      const tagPattern = `<${escapeRegExp(tagName)}\\b`;
       const tagRegex = new RegExp(tagPattern, "i");
       
       let bestLine = -1;
@@ -432,14 +444,7 @@ export function startCompanionServer(config: ServerConfig): http.Server {
         return;
       }
 
-      let absolutePath = fileParam;
-      if (!path.isAbsolute(fileParam)) {
-        let cleanFile = fileParam;
-        if (cleanFile.startsWith("/")) {
-          cleanFile = cleanFile.substring(1);
-        }
-        absolutePath = path.resolve(config.projectRoot, cleanFile);
-      }
+      let absolutePath = resolveFilePath(fileParam, config.projectRoot);
 
       let lineVal = parseInt(lineParam, 10);
       let colVal = parseInt(columnParam, 10);
@@ -469,14 +474,7 @@ export function startCompanionServer(config: ServerConfig): http.Server {
         return;
       }
 
-      let absolutePath = fileParam;
-      if (!path.isAbsolute(fileParam)) {
-        let cleanFile = fileParam;
-        if (cleanFile.startsWith("/")) {
-          cleanFile = cleanFile.substring(1);
-        }
-        absolutePath = path.resolve(config.projectRoot, cleanFile);
-      }
+      const absolutePath = resolveFilePath(fileParam, config.projectRoot);
 
       const lineVal = parseInt(lineParam, 10);
       const colVal = parseInt(columnParam, 10);
@@ -512,14 +510,7 @@ export function startCompanionServer(config: ServerConfig): http.Server {
       }
 
       // Resolve relative path using projectRoot
-      let absolutePath = fileParam;
-      if (!path.isAbsolute(fileParam)) {
-        let cleanFile = fileParam;
-        if (cleanFile.startsWith("/")) {
-          cleanFile = cleanFile.substring(1);
-        }
-        absolutePath = path.resolve(config.projectRoot, cleanFile);
-      }
+      const absolutePath = resolveFilePath(fileParam, config.projectRoot);
 
       if (!fs.existsSync(absolutePath)) {
         res.writeHead(404, { "Content-Type": "application/json" });

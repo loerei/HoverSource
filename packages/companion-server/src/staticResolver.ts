@@ -1,6 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
 
+/** Strip JSDoc/block/line comment markers from a single comment line. */
+function stripCommentMarkers(line: string): string {
+  let s = line.trim();
+  // /** or /*
+  if (s.startsWith("/**")) s = s.slice(3);
+  else if (s.startsWith("/*")) s = s.slice(2);
+  // * (interior block comment line)
+  else if (s.startsWith("*")) s = s.slice(1);
+  // //
+  else if (s.startsWith("//")) s = s.slice(2);
+  // trailing */
+  if (s.endsWith("*/")) s = s.slice(0, -2);
+  return s.trim();
+}
+
 export interface StaticMetadata {
   rawAttributes: Record<string, string>;
   comments: string[];
@@ -198,15 +213,7 @@ export class StaticContextResolver {
       }
 
       if (commentLines.length > 0) {
-        result.comments = commentLines.map(c => {
-          return c
-            .replace(/^\/\*\*\s*/, "")
-            .replace(/^\/\*\s*/, "")
-            .replace(/^\*\s*/, "")
-            .replace(/\s*\*\/$/, "")
-            .replace(/^\/\/\s*/, "")
-            .trim();
-        }).filter(c => c !== "");
+        result.comments = commentLines.map(c => stripCommentMarkers(c)).filter(c => c !== "");
       }
 
       if (classList && classList.length > 0) {

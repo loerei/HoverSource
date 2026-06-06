@@ -3,14 +3,14 @@ import { SourceResolver, ParentVisualEffect } from "@hoversource/source-resolver
 import { inspectVisualContext } from "../inspector.js";
 
 function getCompanionPort(): number {
-  return (window as any).__HOVERSOURCE_PORT__ ?? 3000;
+  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 3000;
 }
 
 export class InspectorAdapter implements InteractionMode {
   public readonly id = "inspector";
   private controller!: OverlayController;
   
-  private resolver = new SourceResolver();
+  private readonly resolver = new SourceResolver();
   private isFrozen = false;
   private minimalMode = false;
   
@@ -93,7 +93,7 @@ export class InspectorAdapter implements InteractionMode {
         let line = info.lineNumber || 1;
         let col = info.columnNumber || 1;
 
-        if (data && data.corrected) {
+        if (data?.corrected) {
           line = data.corrected.line;
           col = data.corrected.column;
         }
@@ -133,6 +133,218 @@ export class InspectorAdapter implements InteractionMode {
       .catch(err => console.warn("[HoverSource] Background line validation failed:", err));
   }
 
+  private getShortcutLabel(shortcut: any): string {
+    if (!shortcut) return "";
+    const parts = [];
+    if (shortcut.ctrlKey) parts.push("Ctrl");
+    if (shortcut.altKey) parts.push("Alt");
+    if (shortcut.shiftKey) parts.push("Shift");
+    parts.push(shortcut.key.toUpperCase());
+    return parts.join("+");
+  }
+
+  private renderMinimalTooltip(
+    element: HTMLElement,
+    info: any,
+    copyLabel: string,
+    freezeLabel: string,
+    minimalLabel: string,
+    dbLabel: string
+  ): string {
+    return `
+      <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
+        <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
+        <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${info.framework}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">File: </span>
+        <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
+          ${info.fileName.split('/').pop().split('\\').pop()}:${info.lineNumber || 1}
+        </span>
+      </div>
+      <div class="hoversource-shortcut-hint">
+        Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config
+      </div>
+    `;
+  }
+
+  private renderBasicStats(element: HTMLElement, info: any, computed: CSSStyleDeclaration): string {
+    const width = element.offsetWidth || element.clientWidth;
+    const height = element.offsetHeight || element.clientHeight;
+    const color = computed.color;
+    const bgColor = computed.backgroundColor;
+
+    return `
+      <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
+        <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
+        <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${info.framework}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">File: </span>
+        <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
+          ${info.fileName.split('/').pop().split('\\').pop()}:${info.lineNumber || 1}
+        </span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Path: </span>
+        <span class="hoversource-value">${info.fileName}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Size: </span>
+        <span class="hoversource-value">${width}px × ${height}px</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Color: </span>
+        <span class="hoversource-value">${color}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Background: </span>
+        <span class="hoversource-value">${bgColor}</span>
+      </div>
+    `;
+  }
+
+  private renderVisualDetails(shadow: string | null, animation: string | null, info: any): string {
+    let html = "";
+    if (shadow && shadow !== "none") {
+      html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Shadow: </span>
+          <span class="hoversource-value">${shadow}</span>
+        </div>
+      `;
+    }
+
+    if (animation) {
+      html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Animation: </span>
+          <span class="hoversource-value">${animation}</span>
+        </div>
+      `;
+    }
+
+    if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
+      const constraints = Object.entries(info.visualContext.layoutConstraints)
+        .map(([prop, val]) => `${prop}: ${val}`)
+        .join(", ");
+      html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Layout: </span>
+          <span class="hoversource-value">${constraints}</span>
+        </div>
+      `;
+    }
+    return html;
+  }
+
+  private renderParentEffects(info: any): string {
+    if (!info.visualContext || info.visualContext.parentEffects.length === 0) {
+      return "";
+    }
+    const effectsHtml = info.visualContext.parentEffects
+      .map((fx: ParentVisualEffect) => {
+        const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+        let originLabel = "";
+        if (info.staticMetadata?.classOrigins) {
+          for (const cls of fx.classList) {
+            const origin = info.staticMetadata.classOrigins[cls];
+            if (origin) {
+              const fileBase = origin.file.split("/").pop();
+              originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
+              break;
+            }
+          }
+        }
+        return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
+      })
+      .join("");
+
+    return `
+      <div class="hoversource-section">
+        <span class="hoversource-label">Parent Styles: </span>
+        <div class="hoversource-stack">
+          ${effectsHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderStaticMetadata(info: any): string {
+    if (!info.staticMetadata) return "";
+    let html = "";
+    if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+      const commentsHtml = info.staticMetadata.comments
+        .map((c: string) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${c}</div>`)
+        .join("");
+      html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Source Comments: </span>
+          <div class="hoversource-stack">
+            ${commentsHtml}
+          </div>
+        </div>
+      `;
+    }
+    if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+      const attrs = Object.entries(info.staticMetadata.rawAttributes)
+        .map(([k, v]) => `${k}="${v}"`)
+        .join(" ");
+      html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Source Attributes: </span>
+          <span class="hoversource-value">${attrs}</span>
+        </div>
+      `;
+    }
+    return html;
+  }
+
+  private renderDetailedTooltip(
+    element: HTMLElement,
+    info: any,
+    copyLabel: string,
+    freezeLabel: string,
+    minimalLabel: string,
+    dbLabel: string
+  ): string {
+    const computed = globalThis.getComputedStyle(element);
+    const shadow = computed.boxShadow;
+    const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
+
+    const stack: string[] = [];
+    let current: HTMLElement | null = element;
+    while (current && stack.length < 5) {
+      const elInfo = this.resolver.resolve(current);
+      if (elInfo?.componentName) {
+        stack.push(elInfo.componentName);
+      } else {
+        const classStr = current.className && typeof current.className === 'string' ? `.${Array.from(current.classList).join(".")}` : "";
+        stack.push(`${current.tagName.toLowerCase()}${classStr}`);
+      }
+      current = current.parentElement;
+    }
+
+    let html = this.renderBasicStats(element, info, computed);
+    html += this.renderVisualDetails(shadow, animation, info);
+    html += this.renderParentEffects(info);
+    html += this.renderStaticMetadata(info);
+
+    html += `
+      <div class="hoversource-section">
+        <span class="hoversource-label">Stack: </span>
+        <div class="hoversource-stack">
+          ${stack.map(item => `<div class="hoversource-stack-item">${item}</div>`).join('')}
+        </div>
+      </div>
+      <div class="hoversource-shortcut-hint">
+        Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config
+      </div>
+    `;
+
+    return html;
+  }
+
   private renderTooltip(e: PointerEvent) {
     if (!this.currentElement || !this.currentSourceInfo) return;
     const element = this.currentElement;
@@ -140,187 +352,14 @@ export class InspectorAdapter implements InteractionMode {
     const config = this.controller.getConfig();
     const shortcuts = config?.shortcuts;
 
-    const getShortcutLabel = (shortcut: any) => {
-      if (!shortcut) return "";
-      const parts = [];
-      if (shortcut.ctrlKey) parts.push("Ctrl");
-      if (shortcut.altKey) parts.push("Alt");
-      if (shortcut.shiftKey) parts.push("Shift");
-      parts.push(shortcut.key.toUpperCase());
-      return parts.join("+");
-    };
+    const copyLabel = this.getShortcutLabel(shortcuts?.copyMetadata) || "[C]";
+    const minimalLabel = this.getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
+    const freezeLabel = this.getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
+    const dbLabel = this.getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
 
-    const copyLabel = getShortcutLabel(shortcuts?.copyMetadata) || "[C]";
-    const minimalLabel = getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
-    const freezeLabel = getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
-    const uiToggleLabel = getShortcutLabel(shortcuts?.toggleUI) || "[Alt+F12]";
-    const dbLabel = getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
-
-    let html = "";
-    if (this.minimalMode) {
-      html = `
-        <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
-          <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
-          <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${info.framework}</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">File: </span>
-          <span class="hoversource-link" onclick="window.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-            ${info.fileName.split('/').pop().split('\\').pop()}:${info.lineNumber || 1}
-          </span>
-        </div>
-        <div class="hoversource-shortcut-hint">
-          Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config
-        </div>
-      `;
-    } else {
-      const computed = window.getComputedStyle(element);
-      const width = element.offsetWidth || element.clientWidth;
-      const height = element.offsetHeight || element.clientHeight;
-      const color = computed.color;
-      const bgColor = computed.backgroundColor;
-      const shadow = computed.boxShadow;
-      const animation = computed.animationName !== "none" ? `${computed.animationName} ${computed.animationDuration}` : null;
-
-      const stack: string[] = [];
-      let current: HTMLElement | null = element;
-      while (current && stack.length < 5) {
-        const elInfo = this.resolver.resolve(current);
-        if (elInfo && elInfo.componentName) {
-          stack.push(elInfo.componentName);
-        } else {
-          const classStr = current.className && typeof current.className === 'string' ? `.${Array.from(current.classList).join(".")}` : "";
-          stack.push(`${current.tagName.toLowerCase()}${classStr}`);
-        }
-        current = current.parentElement;
-      }
-
-      html = `
-        <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
-          <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
-          <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${info.framework}</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">File: </span>
-          <span class="hoversource-link" onclick="window.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-            ${info.fileName.split('/').pop().split('\\').pop()}:${info.lineNumber || 1}
-          </span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Path: </span>
-          <span class="hoversource-value">${info.fileName}</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Size: </span>
-          <span class="hoversource-value">${width}px × ${height}px</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Color: </span>
-          <span class="hoversource-value">${color}</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Background: </span>
-          <span class="hoversource-value">${bgColor}</span>
-        </div>
-      `;
-
-      if (shadow && shadow !== "none") {
-        html += `
-          <div class="hoversource-section">
-            <span class="hoversource-label">Shadow: </span>
-            <span class="hoversource-value">${shadow}</span>
-          </div>
-        `;
-      }
-
-      if (animation) {
-        html += `
-          <div class="hoversource-section">
-            <span class="hoversource-label">Animation: </span>
-            <span class="hoversource-value">${animation}</span>
-          </div>
-        `;
-      }
-
-      if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
-        const constraints = Object.entries(info.visualContext.layoutConstraints)
-          .map(([prop, val]) => `${prop}: ${val}`)
-          .join(", ");
-        html += `
-          <div class="hoversource-section">
-            <span class="hoversource-label">Layout: </span>
-            <span class="hoversource-value">${constraints}</span>
-          </div>
-        `;
-      }
-
-      if (info.visualContext && info.visualContext.parentEffects.length > 0) {
-        const effectsHtml = info.visualContext.parentEffects
-          .map((fx: ParentVisualEffect) => {
-            const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-            let originLabel = "";
-            if (info.staticMetadata?.classOrigins) {
-              for (const cls of fx.classList) {
-                const origin = info.staticMetadata.classOrigins[cls];
-                if (origin) {
-                  const fileBase = origin.file.split("/").pop();
-                  originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
-                  break;
-                }
-              }
-            }
-            return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
-          })
-          .join("");
-        html += `
-          <div class="hoversource-section">
-            <span class="hoversource-label">Parent Styles: </span>
-            <div class="hoversource-stack">
-              ${effectsHtml}
-            </div>
-          </div>
-        `;
-      }
-
-      if (info.staticMetadata) {
-        if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
-          const commentsHtml = info.staticMetadata.comments
-            .map((c: string) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${c}</div>`)
-            .join("");
-          html += `
-            <div class="hoversource-section">
-              <span class="hoversource-label">Source Comments: </span>
-              <div class="hoversource-stack">
-                ${commentsHtml}
-              </div>
-            </div>
-          `;
-        }
-        if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
-          const attrs = Object.entries(info.staticMetadata.rawAttributes)
-            .map(([k, v]) => `${k}="${v}"`)
-            .join(" ");
-          html += `
-            <div class="hoversource-section">
-              <span class="hoversource-label">Source Attributes: </span>
-              <span class="hoversource-value">${attrs}</span>
-            </div>
-          `;
-        }
-      }
-
-      html += `
-        <div class="hoversource-section">
-          <span class="hoversource-label">Stack: </span>
-          <div class="hoversource-stack">
-            ${stack.map(item => `<div class="hoversource-stack-item">${item}</div>`).join('')}
-          </div>
-        </div>
-        <div class="hoversource-shortcut-hint">
-          Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config
-        </div>
-      `;
-    }
+    const html = this.minimalMode
+      ? this.renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel)
+      : this.renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel);
 
     this.controller.drawTooltip(html, e);
   }
@@ -330,7 +369,7 @@ export class InspectorAdapter implements InteractionMode {
     
     const element = this.currentElement;
     const info = this.currentSourceInfo;
-    const computed = window.getComputedStyle(element);
+    const computed = globalThis.getComputedStyle(element);
     
     const data = {
       framework: info.framework,

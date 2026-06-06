@@ -38,13 +38,20 @@ export class DesignAdapter {
     onPointerMove(event) {
         if (this.isFrozen)
             return;
-        this.controller.drawTooltip("", event);
+        // Just re-position the tooltip
+        // In the real design mode, this might calculate relative positions to nearby flex/grid boundaries
+        this.controller.drawTooltip("", event); // We can pass empty string if the engine caches the HTML, but let's just ignore for now since engine positions it.
+        // Actually, drawTooltip replaces the content. The engine's positionTooltip can just be called if we pass the same html, or we rely on the engine to position automatically on mousemove.
     }
     onShortcut(command) {
         if (command === 'toggleFreeze') {
             this.isFrozen = !this.isFrozen;
             this.controller.setFreezeMode(this.isFrozen);
             console.log(`[HoverSource] Design Mode Freeze: ${this.isFrozen}`);
+            // Re-trigger a highlight render to change border color
+            if (this.isFrozen) {
+                // We'd ideally re-render the highlight here, but target is lost unless we track it
+            }
         }
     }
     onConfigUpdate(newConfig) {

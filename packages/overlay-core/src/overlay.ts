@@ -118,7 +118,7 @@ class OverlayEngine implements OverlayController {
         padding: 12px;
         border-radius: 8px;
         font-size: 11px;
-        max-width: 420px;
+        max-width: 460px;
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
         pointer-events: auto;
         z-index: 1000000;
@@ -155,6 +155,72 @@ class OverlayEngine implements OverlayController {
         background: ${isLightTheme ? "rgba(0, 0, 0, 0.05)" : "rgba(255, 255, 255, 0.05)"};
         padding: 2px 4px;
         border-radius: 3px;
+      }
+      .hs-layer-column {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+        padding-top: 4px;
+        flex-shrink: 0;
+      }
+      .hs-layer-dot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 12px;
+        cursor: pointer;
+        border-radius: 3px;
+        position: relative;
+        margin-top: -7px;
+        transition: transform 0.12s, z-index 0.12s;
+      }
+      .hs-layer-dot:first-child {
+        margin-top: 0;
+      }
+      .hs-layer-dot:hover {
+        transform: translateY(-3px);
+        z-index: 100 !important;
+      }
+      .hs-layer-dot svg {
+        overflow: visible;
+      }
+      .hs-layer-shape {
+        fill: ${isLightTheme ? '#e5e7eb' : '#262626'};
+        stroke: ${isLightTheme ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.5)'};
+        stroke-width: 1.5;
+        transition: fill 0.12s, stroke 0.12s;
+      }
+      .hs-layer-dot:hover .hs-layer-shape {
+        fill: ${isLightTheme ? '#d1d5db' : '#3f3f46'};
+        stroke: ${isLightTheme ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.7)'};
+      }
+      .hs-layer-dot--active .hs-layer-shape {
+        fill: #3b82f6;
+        stroke: #60a5fa;
+      }
+      .hs-layer-dot--active:hover .hs-layer-shape {
+        fill: #2563eb;
+        stroke: #3b82f6;
+      }
+      .hs-layer-dot--active svg {
+        filter: drop-shadow(0 1px 3px rgba(59, 130, 246, 0.4));
+      }
+      .hs-layer-hint {
+        font-size: 8px;
+        color: ${isLightTheme ? '#9ca3af' : '#6b7280'};
+        text-align: center;
+        margin-top: 2px;
+        white-space: nowrap;
+      }
+      .hs-tooltip-content-wrapper {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .hoversource-tooltip.hs-tooltip-above .hs-tooltip-content-wrapper {
+        align-items: flex-end;
       }
       .hoversource-shortcut-hint {
         margin-top: 8px;
@@ -330,12 +396,33 @@ class OverlayEngine implements OverlayController {
   private positionTooltip(e: PointerEvent) {
     if (!this.tooltipBox) return;
     const padding = 15;
-    let x = e.clientX + padding;
-    let y = e.clientY + padding;
-
     const boxRect = this.tooltipBox.getBoundingClientRect();
-    if (x + boxRect.width > globalThis.innerWidth) x = e.clientX - boxRect.width - padding;
-    if (y + boxRect.height > globalThis.innerHeight) y = e.clientY - boxRect.height - padding;
+    let x = e.clientX + padding;
+    if (x + boxRect.width > window.innerWidth) {
+      x = e.clientX - boxRect.width - padding;
+    }
+    const maxX = Math.max(0, window.innerWidth - boxRect.width);
+    x = Math.max(0, Math.min(x, maxX));
+
+    const fitsBelow = e.clientY + padding + boxRect.height <= window.innerHeight;
+    const fitsAbove = e.clientY - padding - boxRect.height >= 0;
+
+    let isAbove = false;
+    if (!fitsBelow && fitsAbove) {
+      isAbove = true;
+    } else if (!fitsBelow && !fitsAbove) {
+      const spaceBelow = window.innerHeight - (e.clientY + padding);
+      const spaceAbove = e.clientY - padding;
+      if (spaceAbove > spaceBelow) {
+        isAbove = true;
+      }
+    }
+
+    let y = isAbove ? e.clientY - boxRect.height - padding : e.clientY + padding;
+    const maxY = Math.max(0, window.innerHeight - boxRect.height);
+    y = Math.max(0, Math.min(y, maxY));
+
+    this.tooltipBox.classList.toggle('hs-tooltip-above', isAbove);
 
     this.tooltipBox.style.left = `${x + globalThis.scrollX}px`;
     this.tooltipBox.style.top = `${y + globalThis.scrollY}px`;

@@ -171,7 +171,7 @@
 
   // src/modes/InspectorAdapter.ts
   function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 3e3;
+    return window.__HOVERSOURCE_PORT__ ?? 3e3;
   }
   var InspectorAdapter = class {
     id = "inspector";
@@ -181,52 +181,73 @@
     minimalMode = false;
     currentElement = null;
     currentSourceInfo = null;
+    // --- Layer Picker state ---
+    layerStack = [];
+    activeLayerIndex = 0;
+    layerPickerEnabled = true;
+    layerScrollModifiers = { altKey: true, shiftKey: true, ctrlKey: false };
     activate(controller) {
       this.controller = controller;
       const config = this.controller.getConfig();
       this.minimalMode = !!config?.minimalModeByDefault;
+      this.layerPickerEnabled = config?.layerPickerEnabled !== false;
+      this.layerScrollModifiers = config?.layerPickerScroll ?? { altKey: true, shiftKey: true, ctrlKey: false };
+      if (this.layerPickerEnabled) {
+        window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
+      }
       console.log("[HoverSource] Activated Inspector Mode");
     }
     deactivate() {
       this.controller.clear();
       this.currentElement = null;
       this.currentSourceInfo = null;
+      this.layerStack = [];
+      this.activeLayerIndex = 0;
+      window.removeEventListener("wheel", this.handleAltScroll, { capture: true });
       if (this.isFrozen) {
         this.isFrozen = false;
         this.controller.setFreezeMode(false);
       }
     }
     onPointerOver(event, target) {
-      const info = this.resolver.resolve(target);
-      if (info) {
-        info.visualContext = inspectVisualContext(target);
-        this.currentElement = target;
-        this.currentSourceInfo = info;
-        if (this.controller.isUIVisible()) {
-          this.controller.drawHighlight(target, this.isFrozen);
-          this.renderTooltip(event);
-        }
-        this.fetchBackgroundValidation(info, target, event);
-      } else {
-        this.controller.clear();
-        this.currentElement = null;
-        this.currentSourceInfo = null;
-      }
+      const rawStack = document.elementsFromPoint(event.clientX, event.clientY);
+      const container = this.controller.container;
+      this.layerStack = rawStack.filter((el) => {
+        if (el === document.documentElement || el === document.body)
+          return false;
+        if (container && (el === container || container.contains(el)))
+          return false;
+        return true;
+      });
+      this.activeLayerIndex = 0;
+      this.resolveAndShowLayer(this.activeLayerIndex, event);
     }
     onPointerMove(event) {
-      if (this.currentElement && this.currentSourceInfo && this.controller.isUIVisible()) {
+      if (!this.currentElement)
+        return;
+      const activeEl = this.layerStack[this.activeLayerIndex];
+      if (activeEl && this.activeLayerIndex > 0) {
+        const rect = activeEl.getBoundingClientRect();
+        const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+        if (outside) {
+          this.activeLayerIndex = 0;
+          this.resolveAndShowLayer(0, event);
+          return;
+        }
+      }
+      if (this.currentSourceInfo && this.controller.isUIVisible()) {
         this.controller.drawTooltip("", event);
       }
     }
     onShortcut(command) {
-      if (command === "toggleMinimal") {
-        this.minimalMode = !this.minimalMode;
-        console.log(`[HoverSource] Minimalist Mode: ${this.minimalMode ? "enabled" : "disabled"}`);
-        this.renderTooltip({ clientX: 0, clientY: 0 });
-      } else if (command === "toggleFreeze") {
+      if (command === "toggleFreeze") {
         this.isFrozen = !this.isFrozen;
         this.controller.setFreezeMode(this.isFrozen);
-        console.log(`[HoverSource] Freeze Mode: ${this.isFrozen ? "enabled" : "disabled"}`);
+        console.log(`[HoverSource] Freeze: ${this.isFrozen}`);
+        this.renderTooltip({ clientX: 0, clientY: 0 });
+      } else if (command === "toggleMinimal") {
+        this.minimalMode = !this.minimalMode;
+        console.log(`[HoverSource] Minimal Mode: ${this.minimalMode}`);
         this.renderTooltip({ clientX: 0, clientY: 0 });
       } else if (command === "copyMetadata") {
         this.copyMetadata();
@@ -234,31 +255,82 @@
     }
     onConfigUpdate(newConfig) {
       this.minimalMode = !!newConfig.minimalModeByDefault;
+      const newEnabled = newConfig.layerPickerEnabled !== false;
+      if (newEnabled !== this.layerPickerEnabled) {
+        this.layerPickerEnabled = newEnabled;
+        if (newEnabled) {
+          window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
+        } else {
+          window.removeEventListener("wheel", this.handleAltScroll, { capture: true });
+        }
+      }
+      this.layerScrollModifiers = newConfig.layerPickerScroll ?? this.layerScrollModifiers;
       this.renderTooltip({ clientX: 0, clientY: 0 });
     }
     onUIVisibilityChanged(visible) {
     }
+    handleAltScroll = (e) => {
+      const m = this.layerScrollModifiers;
+      if (!!e.altKey !== !!m.altKey || !!e.shiftKey !== !!m.shiftKey || !!e.ctrlKey !== !!m.ctrlKey)
+        return;
+      if (this.layerStack.length === 0)
+        return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const dir = e.deltaY > 0 ? 1 : -1;
+      this.activeLayerIndex = (this.activeLayerIndex + dir + this.layerStack.length) % this.layerStack.length;
+      this.resolveAndShowLayer(this.activeLayerIndex, { clientX: e.clientX, clientY: e.clientY });
+    };
+    resolveAndShowLayer(index, event) {
+      const target = this.layerStack[index];
+      if (!target) {
+        this.controller.clear();
+        this.currentElement = null;
+        this.currentSourceInfo = null;
+        return;
+      }
+      const info = this.resolver.resolve(target) || {
+        componentName: target.tagName.toLowerCase(),
+        tagName: target.tagName.toLowerCase(),
+        framework: "Unknown",
+        fileName: "",
+        lineNumber: 0,
+        columnNumber: 0,
+        classList: Array.from(target.classList),
+        visualContext: null,
+        staticMetadata: null
+      };
+      info.visualContext = inspectVisualContext(target);
+      this.currentElement = target;
+      this.currentSourceInfo = info;
+      if (this.controller.isUIVisible()) {
+        this.controller.drawHighlight(target, this.isFrozen);
+        this.renderTooltip(event);
+      }
+      if (info.fileName) {
+        this.fetchBackgroundValidation(info, target, event);
+      }
+    }
     fetchBackgroundValidation(info, target, e) {
       const validateUrl = `http://127.0.0.1:${getCompanionPort()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
-      fetch(validateUrl).then((r) => r.json()).then((data) => {
-        let line = info.lineNumber || 1;
-        let col = info.columnNumber || 1;
-        if (data?.corrected) {
-          line = data.corrected.line;
-          col = data.corrected.column;
-        }
+      fetch(validateUrl).then((res) => res.json()).then((data) => {
         if (this.currentElement === target) {
+          let line = info.lineNumber || 1;
+          let col = info.columnNumber || 1;
+          if (data && data.corrected) {
+            line = data.corrected.line;
+            col = data.corrected.column;
+          }
           info.lineNumber = line;
           info.columnNumber = col;
-          this.currentSourceInfo = info;
-          if (this.controller.isUIVisible()) {
-            this.renderTooltip(e);
-          }
-          const classesToResolve = new Set(info.classList || []);
+          const classesToResolve = /* @__PURE__ */ new Set();
           if (info.visualContext) {
             info.visualContext.parentEffects.forEach((fx) => {
               fx.classList.forEach((cls) => classesToResolve.add(cls));
             });
+          }
+          if (info.classList) {
+            info.classList.forEach((cls) => classesToResolve.add(cls));
           }
           const classListParam = Array.from(classesToResolve).join(",");
           const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
@@ -309,10 +381,32 @@
       const height = element.offsetHeight || element.clientHeight;
       const color = computed.color;
       const bgColor = computed.backgroundColor;
+      const tagName = element.tagName.toLowerCase();
+      const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+      const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+      const elementSelector = `${tagName}${classStr}`;
+      let selectorHtml = `<span class="hoversource-value">${elementSelector}</span>`;
+      if (info.staticMetadata?.classOrigins) {
+        const originParts = [];
+        for (const cls of classList) {
+          const origin = info.staticMetadata.classOrigins[cls];
+          if (origin) {
+            const fileBase = origin.file.split("/").pop().split("\\").pop();
+            originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`);
+          }
+        }
+        if (originParts.length > 0) {
+          selectorHtml += ` \u2794 ${originParts.join(" ")}`;
+        }
+      }
       return `
       <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
         <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
         <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${info.framework}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Element: </span>
+        ${selectorHtml}
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
@@ -422,7 +516,7 @@
       return html;
     }
     renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel) {
-      const computed = globalThis.getComputedStyle(element);
+      const computed = window.getComputedStyle(element);
       const shadow = computed.boxShadow;
       const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
       const stack = [];
@@ -465,7 +559,33 @@
       const minimalLabel = this.getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
       const freezeLabel = this.getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
       const dbLabel = this.getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
-      const html = this.minimalMode ? this.renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel) : this.renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel);
+      const topLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M296.5 69.2C311.4 62.3 328.6 62.3 343.5 69.2L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L296.5 69.2z" /></svg>`;
+      const chevronLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M112.1 154.4L276.4 230.3C304.1 243.1 336 243.1 363.7 230.3L528 154.4L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L112.1 154.4z" /></svg>`;
+      const layerDots = this.layerStack.map((el, i) => {
+        const isActive = i === this.activeLayerIndex;
+        const tag = el.tagName.toLowerCase();
+        const cls = Array.from(el.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-")).slice(0, 2).join(".");
+        const label = cls ? `${tag}.${cls}` : tag;
+        const zIndex = this.layerStack.length - i;
+        const svgContent = i === 0 ? topLayerSvg : chevronLayerSvg;
+        return `<div class="hs-layer-dot${isActive ? " hs-layer-dot--active" : ""}" style="z-index: ${zIndex}" title="Layer ${i + 1}: ${label}">${svgContent}</div>`;
+      }).join("");
+      const scrollHint = (() => {
+        const m = this.layerScrollModifiers;
+        const parts = [];
+        if (m.ctrlKey)
+          parts.push("Ctrl");
+        if (m.altKey)
+          parts.push("Alt");
+        if (m.shiftKey)
+          parts.push("Shift");
+        parts.push("Scroll");
+        return parts.join("+");
+      })();
+      const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
+      const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
+      const innerHtml = this.minimalMode ? this.renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel) : this.renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel);
+      const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
       this.controller.drawTooltip(html, e);
     }
     copyMetadata() {
@@ -473,7 +593,7 @@
         return;
       const element = this.currentElement;
       const info = this.currentSourceInfo;
-      const computed = globalThis.getComputedStyle(element);
+      const computed = window.getComputedStyle(element);
       const data = {
         framework: info.framework,
         component: info.componentName || element.tagName.toLowerCase(),
@@ -491,9 +611,27 @@
           flexDirection: computed.flexDirection
         }
       };
+      const tagName = element.tagName.toLowerCase();
+      const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+      const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+      const elementSelector = `${tagName}${classStr}`;
+      let selectorLabel = `\`${elementSelector}\``;
+      if (info.staticMetadata?.classOrigins) {
+        const originList = [];
+        for (const cls of classList) {
+          const origin = info.staticMetadata.classOrigins[cls];
+          if (origin) {
+            originList.push(`[Source: \`${origin.file}\` (Line: \`${origin.line}\`, Column: \`${origin.column}\`)]`);
+          }
+        }
+        if (originList.length > 0) {
+          selectorLabel += ` \u2794 ${originList.join(" ")}`;
+        }
+      }
       let text = `
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
+* **Element**: ${selectorLabel}
 * **File Path**: \`${data.file}\` (Line: ${data.line}, Column: ${data.column})
 * **Framework**: ${data.framework}
 * **Dimensions**: ${data.dimensions}
@@ -506,7 +644,7 @@
     `.trim();
       if (info.visualContext && info.visualContext.parentEffects.length > 0) {
         const parentList = info.visualContext.parentEffects.map((fx) => {
-          const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+          const classStr2 = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
           let originLabel = "";
           if (info.staticMetadata?.classOrigins) {
             for (const cls of fx.classList) {
@@ -517,7 +655,7 @@
               }
             }
           }
-          return `  - \`${fx.tagName}${classStr}\` \u2794 \`${fx.property}: ${fx.value}\`${originLabel}`;
+          return `  - \`${fx.tagName}${classStr2}\` \u2794 \`${fx.property}: ${fx.value}\`${originLabel}`;
         }).join("\n");
         text += `
 * **Parent Styles**:
@@ -595,6 +733,8 @@ ${attrList}`;
         this.isFrozen = !this.isFrozen;
         this.controller.setFreezeMode(this.isFrozen);
         console.log(`[HoverSource] Design Mode Freeze: ${this.isFrozen}`);
+        if (this.isFrozen) {
+        }
       }
     }
     onConfigUpdate(newConfig) {
@@ -702,7 +842,7 @@ ${attrList}`;
         padding: 12px;
         border-radius: 8px;
         font-size: 11px;
-        max-width: 420px;
+        max-width: 460px;
         box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
         pointer-events: auto;
         z-index: 1000000;
@@ -739,6 +879,72 @@ ${attrList}`;
         background: ${isLightTheme ? "rgba(0, 0, 0, 0.05)" : "rgba(255, 255, 255, 0.05)"};
         padding: 2px 4px;
         border-radius: 3px;
+      }
+      .hs-layer-column {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+        padding-top: 4px;
+        flex-shrink: 0;
+      }
+      .hs-layer-dot {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 12px;
+        cursor: pointer;
+        border-radius: 3px;
+        position: relative;
+        margin-top: -7px;
+        transition: transform 0.12s, z-index 0.12s;
+      }
+      .hs-layer-dot:first-child {
+        margin-top: 0;
+      }
+      .hs-layer-dot:hover {
+        transform: translateY(-3px);
+        z-index: 100 !important;
+      }
+      .hs-layer-dot svg {
+        overflow: visible;
+      }
+      .hs-layer-shape {
+        fill: ${isLightTheme ? "#e5e7eb" : "#262626"};
+        stroke: ${isLightTheme ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.5)"};
+        stroke-width: 1.5;
+        transition: fill 0.12s, stroke 0.12s;
+      }
+      .hs-layer-dot:hover .hs-layer-shape {
+        fill: ${isLightTheme ? "#d1d5db" : "#3f3f46"};
+        stroke: ${isLightTheme ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.7)"};
+      }
+      .hs-layer-dot--active .hs-layer-shape {
+        fill: #3b82f6;
+        stroke: #60a5fa;
+      }
+      .hs-layer-dot--active:hover .hs-layer-shape {
+        fill: #2563eb;
+        stroke: #3b82f6;
+      }
+      .hs-layer-dot--active svg {
+        filter: drop-shadow(0 1px 3px rgba(59, 130, 246, 0.4));
+      }
+      .hs-layer-hint {
+        font-size: 8px;
+        color: ${isLightTheme ? "#9ca3af" : "#6b7280"};
+        text-align: center;
+        margin-top: 2px;
+        white-space: nowrap;
+      }
+      .hs-tooltip-content-wrapper {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .hoversource-tooltip.hs-tooltip-above .hs-tooltip-content-wrapper {
+        align-items: flex-end;
       }
       .hoversource-shortcut-hint {
         margin-top: 8px;
@@ -895,13 +1101,29 @@ ${attrList}`;
       if (!this.tooltipBox)
         return;
       const padding = 15;
-      let x = e.clientX + padding;
-      let y = e.clientY + padding;
       const boxRect = this.tooltipBox.getBoundingClientRect();
-      if (x + boxRect.width > globalThis.innerWidth)
+      let x = e.clientX + padding;
+      if (x + boxRect.width > window.innerWidth) {
         x = e.clientX - boxRect.width - padding;
-      if (y + boxRect.height > globalThis.innerHeight)
-        y = e.clientY - boxRect.height - padding;
+      }
+      const maxX = Math.max(0, window.innerWidth - boxRect.width);
+      x = Math.max(0, Math.min(x, maxX));
+      const fitsBelow = e.clientY + padding + boxRect.height <= window.innerHeight;
+      const fitsAbove = e.clientY - padding - boxRect.height >= 0;
+      let isAbove = false;
+      if (!fitsBelow && fitsAbove) {
+        isAbove = true;
+      } else if (!fitsBelow && !fitsAbove) {
+        const spaceBelow = window.innerHeight - (e.clientY + padding);
+        const spaceAbove = e.clientY - padding;
+        if (spaceAbove > spaceBelow) {
+          isAbove = true;
+        }
+      }
+      let y = isAbove ? e.clientY - boxRect.height - padding : e.clientY + padding;
+      const maxY = Math.max(0, window.innerHeight - boxRect.height);
+      y = Math.max(0, Math.min(y, maxY));
+      this.tooltipBox.classList.toggle("hs-tooltip-above", isAbove);
       this.tooltipBox.style.left = `${x + globalThis.scrollX}px`;
       this.tooltipBox.style.top = `${y + globalThis.scrollY}px`;
     }

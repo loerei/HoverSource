@@ -2,11 +2,15 @@ import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js
 export declare class InspectorAdapter implements InteractionMode {
     readonly id = "inspector";
     private controller;
-    private readonly resolver;
+    private resolver;
     private isFrozen;
     private minimalMode;
     private currentElement;
     private currentSourceInfo;
+    private layerStack;
+    private activeLayerIndex;
+    private layerPickerEnabled;
+    private layerScrollModifiers;
     activate(controller: OverlayController): void;
     deactivate(): void;
     onPointerOver(event: PointerEvent, target: HTMLElement): void;
@@ -14,6 +18,8 @@ export declare class InspectorAdapter implements InteractionMode {
     onShortcut(command: SemanticShortcut): void;
     onConfigUpdate(newConfig: any): void;
     onUIVisibilityChanged(visible: boolean): void;
+    private handleAltScroll;
+    private resolveAndShowLayer;
     private fetchBackgroundValidation;
     private getShortcutLabel;
     private renderMinimalTooltip;

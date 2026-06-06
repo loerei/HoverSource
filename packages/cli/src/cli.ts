@@ -727,11 +727,9 @@ async function main() {
   await startCdpInjectionWatch(debugPort, scriptWithPort);
 }
 
-const runMain = () => {
-  main().catch((err) => {
-    console.error("[HoverSource] CLI crashed:", err);
-    process.exit(1);
-  });
-};
-
-runMain();
+try {
+  await main();
+} catch (err) {
+  console.error("[HoverSource] CLI crashed:", err);
+  process.exit(1);
+}

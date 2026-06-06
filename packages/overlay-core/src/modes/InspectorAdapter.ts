@@ -3,24 +3,35 @@ import { SourceResolver, ParentVisualEffect } from "@hoversource/source-resolver
 import { inspectVisualContext } from "../inspector.js";
 
 function getCompanionPort(): number {
-  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 3000;
+  return (window as any).__HOVERSOURCE_PORT__ ?? 3000;
 }
 
 export class InspectorAdapter implements InteractionMode {
   public readonly id = "inspector";
   private controller!: OverlayController;
   
-  private readonly resolver = new SourceResolver();
+  private resolver = new SourceResolver();
   private isFrozen = false;
   private minimalMode = false;
   
   private currentElement: HTMLElement | null = null;
   private currentSourceInfo: any = null;
 
+  // --- Layer Picker state ---
+  private layerStack: HTMLElement[] = [];
+  private activeLayerIndex = 0;
+  private layerPickerEnabled = true;
+  private layerScrollModifiers = { altKey: true, shiftKey: true, ctrlKey: false };
+
   public activate(controller: OverlayController): void {
     this.controller = controller;
     const config = this.controller.getConfig();
     this.minimalMode = !!config?.minimalModeByDefault;
+    this.layerPickerEnabled = config?.layerPickerEnabled !== false;
+    this.layerScrollModifiers = config?.layerPickerScroll ?? { altKey: true, shiftKey: true, ctrlKey: false };
+    if (this.layerPickerEnabled) {
+      window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
+    }
     console.log("[HoverSource] Activated Inspector Mode");
   }
 
@@ -28,6 +39,9 @@ export class InspectorAdapter implements InteractionMode {
     this.controller.clear();
     this.currentElement = null;
     this.currentSourceInfo = null;
+    this.layerStack = [];
+    this.activeLayerIndex = 0;
+    window.removeEventListener("wheel", this.handleAltScroll, { capture: true } as any);
     if (this.isFrozen) {
       this.isFrozen = false;
       this.controller.setFreezeMode(false);
@@ -35,41 +49,50 @@ export class InspectorAdapter implements InteractionMode {
   }
 
   public onPointerOver(event: PointerEvent, target: HTMLElement): void {
-    const info = this.resolver.resolve(target);
-    if (info) {
-      info.visualContext = inspectVisualContext(target);
-      this.currentElement = target;
-      this.currentSourceInfo = info;
-      
-      if (this.controller.isUIVisible()) {
-        this.controller.drawHighlight(target, this.isFrozen);
-        this.renderTooltip(event);
-      }
+    const rawStack = document.elementsFromPoint(event.clientX, event.clientY) as HTMLElement[];
+    const container = (this.controller as any).container as HTMLElement | null;
+    this.layerStack = rawStack.filter(el => {
+      if (el === document.documentElement || el === document.body) return false;
+      if (container && (el === container || container.contains(el))) return false;
+      return true;
+    });
 
-      this.fetchBackgroundValidation(info, target, event);
-    } else {
-      this.controller.clear();
-      this.currentElement = null;
-      this.currentSourceInfo = null;
-    }
+    this.activeLayerIndex = 0;
+    this.resolveAndShowLayer(this.activeLayerIndex, event);
   }
 
   public onPointerMove(event: PointerEvent): void {
-    // Tooltip should always follow the mouse
-    if (this.currentElement && this.currentSourceInfo && this.controller.isUIVisible()) {
+    if (!this.currentElement) return;
+
+    const activeEl = this.layerStack[this.activeLayerIndex];
+    if (activeEl && this.activeLayerIndex > 0) {
+      const rect = activeEl.getBoundingClientRect();
+      const outside =
+        event.clientX < rect.left ||
+        event.clientX > rect.right ||
+        event.clientY < rect.top ||
+        event.clientY > rect.bottom;
+      if (outside) {
+        this.activeLayerIndex = 0;
+        this.resolveAndShowLayer(0, event);
+        return;
+      }
+    }
+
+    if (this.currentSourceInfo && this.controller.isUIVisible()) {
       this.controller.drawTooltip("", event);
     }
   }
 
   public onShortcut(command: SemanticShortcut): void {
-    if (command === 'toggleMinimal') {
-      this.minimalMode = !this.minimalMode;
-      console.log(`[HoverSource] Minimalist Mode: ${this.minimalMode ? "enabled" : "disabled"}`);
-      this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
-    } else if (command === 'toggleFreeze') {
+    if (command === 'toggleFreeze') {
       this.isFrozen = !this.isFrozen;
       this.controller.setFreezeMode(this.isFrozen);
-      console.log(`[HoverSource] Freeze Mode: ${this.isFrozen ? "enabled" : "disabled"}`);
+      console.log(`[HoverSource] Freeze: ${this.isFrozen}`);
+      this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
+    } else if (command === 'toggleMinimal') {
+      this.minimalMode = !this.minimalMode;
+      console.log(`[HoverSource] Minimal Mode: ${this.minimalMode}`);
       this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
     } else if (command === 'copyMetadata') {
       this.copyMetadata();
@@ -78,39 +101,93 @@ export class InspectorAdapter implements InteractionMode {
 
   public onConfigUpdate(newConfig: any): void {
     this.minimalMode = !!newConfig.minimalModeByDefault;
+    const newEnabled = newConfig.layerPickerEnabled !== false;
+    if (newEnabled !== this.layerPickerEnabled) {
+      this.layerPickerEnabled = newEnabled;
+      if (newEnabled) {
+        window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
+      } else {
+        window.removeEventListener("wheel", this.handleAltScroll, { capture: true } as any);
+      }
+    }
+    this.layerScrollModifiers = newConfig.layerPickerScroll ?? this.layerScrollModifiers;
     this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
   }
 
   public onUIVisibilityChanged(visible: boolean): void {
   }
 
+  private handleAltScroll = (e: WheelEvent): void => {
+    const m = this.layerScrollModifiers;
+    if (!!e.altKey !== !!m.altKey || !!e.shiftKey !== !!m.shiftKey || !!e.ctrlKey !== !!m.ctrlKey) return;
+    if (this.layerStack.length === 0) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const dir = e.deltaY > 0 ? 1 : -1;
+    this.activeLayerIndex = (this.activeLayerIndex + dir + this.layerStack.length) % this.layerStack.length;
+    this.resolveAndShowLayer(this.activeLayerIndex, { clientX: e.clientX, clientY: e.clientY } as PointerEvent);
+  };
+
+  private resolveAndShowLayer(index: number, event: PointerEvent): void {
+    const target = this.layerStack[index];
+    if (!target) {
+      this.controller.clear();
+      this.currentElement = null;
+      this.currentSourceInfo = null;
+      return;
+    }
+
+    const info = this.resolver.resolve(target) || {
+      componentName: target.tagName.toLowerCase(),
+      tagName: target.tagName.toLowerCase(),
+      framework: "Unknown",
+      fileName: "",
+      lineNumber: 0,
+      columnNumber: 0,
+      classList: Array.from(target.classList),
+      visualContext: null,
+      staticMetadata: null
+    };
+    info.visualContext = inspectVisualContext(target);
+    this.currentElement = target;
+    this.currentSourceInfo = info;
+
+    if (this.controller.isUIVisible()) {
+      this.controller.drawHighlight(target, this.isFrozen);
+      this.renderTooltip(event);
+    }
+
+    if (info.fileName) {
+      this.fetchBackgroundValidation(info, target, event);
+    }
+  }
+
   private fetchBackgroundValidation(info: any, target: HTMLElement, e: PointerEvent) {
     const validateUrl = `http://127.0.0.1:${getCompanionPort()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
     
     fetch(validateUrl)
-      .then(r => r.json())
+      .then(res => res.json())
       .then(data => {
-        let line = info.lineNumber || 1;
-        let col = info.columnNumber || 1;
-
-        if (data?.corrected) {
-          line = data.corrected.line;
-          col = data.corrected.column;
-        }
-
         if (this.currentElement === target) {
-          info.lineNumber = line;
-          info.columnNumber = col;
-          this.currentSourceInfo = info;
-          if (this.controller.isUIVisible()) {
-            this.renderTooltip(e);
+          let line = info.lineNumber || 1;
+          let col = info.columnNumber || 1;
+
+          if (data && data.corrected) {
+            line = data.corrected.line;
+            col = data.corrected.column;
           }
 
-          const classesToResolve = new Set<string>(info.classList || []);
+          info.lineNumber = line;
+          info.columnNumber = col;
+
+          const classesToResolve = new Set<string>();
           if (info.visualContext) {
-            info.visualContext.parentEffects.forEach((fx: any) => {
-              fx.classList.forEach((cls: string) => classesToResolve.add(cls));
+            info.visualContext.parentEffects.forEach((fx: ParentVisualEffect) => {
+              fx.classList.forEach(cls => classesToResolve.add(cls));
             });
+          }
+          if (info.classList) {
+            info.classList.forEach((cls: string) => classesToResolve.add(cls));
           }
           const classListParam = Array.from(classesToResolve).join(",");
 
@@ -174,10 +251,34 @@ export class InspectorAdapter implements InteractionMode {
     const color = computed.color;
     const bgColor = computed.backgroundColor;
 
+    const tagName = element.tagName.toLowerCase();
+    const classList = Array.from(element.classList).filter((c: string) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+    const elementSelector = `${tagName}${classStr}`;
+    
+    let selectorHtml = `<span class="hoversource-value">${elementSelector}</span>`;
+    if (info.staticMetadata?.classOrigins) {
+      const originParts = [];
+      for (const cls of classList) {
+        const origin = info.staticMetadata.classOrigins[cls];
+        if (origin) {
+          const fileBase = origin.file.split("/").pop().split("\\").pop();
+          originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`);
+        }
+      }
+      if (originParts.length > 0) {
+        selectorHtml += ` ➔ ${originParts.join(" ")}`;
+      }
+    }
+
     return `
       <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
         <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
         <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${info.framework}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Element: </span>
+        ${selectorHtml}
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
@@ -308,7 +409,7 @@ export class InspectorAdapter implements InteractionMode {
     minimalLabel: string,
     dbLabel: string
   ): string {
-    const computed = globalThis.getComputedStyle(element);
+    const computed = window.getComputedStyle(element);
     const shadow = computed.boxShadow;
     const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
 
@@ -357,10 +458,37 @@ export class InspectorAdapter implements InteractionMode {
     const freezeLabel = this.getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
     const dbLabel = this.getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
 
-    const html = this.minimalMode
+    // Build layer column (always rendered, even for a single layer)
+    const topLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M296.5 69.2C311.4 62.3 328.6 62.3 343.5 69.2L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L296.5 69.2z" /></svg>`;
+    const chevronLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M112.1 154.4L276.4 230.3C304.1 243.1 336 243.1 363.7 230.3L528 154.4L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L112.1 154.4z" /></svg>`;
+    const layerDots = this.layerStack.map((el, i) => {
+      const isActive = i === this.activeLayerIndex;
+      const tag = el.tagName.toLowerCase();
+      const cls = Array.from(el.classList)
+        .filter((c: string) => !c.startsWith("hoversource") && !c.startsWith("hs-"))
+        .slice(0, 2).join(".");
+      const label = cls ? `${tag}.${cls}` : tag;
+      const zIndex = this.layerStack.length - i;
+      const svgContent = i === 0 ? topLayerSvg : chevronLayerSvg;
+      return `<div class="hs-layer-dot${isActive ? " hs-layer-dot--active" : ""}" style="z-index: ${zIndex}" title="Layer ${i + 1}: ${label}">${svgContent}</div>`;
+    }).join("");
+    const scrollHint = (() => {
+      const m = this.layerScrollModifiers;
+      const parts: string[] = [];
+      if (m.ctrlKey) parts.push('Ctrl');
+      if (m.altKey) parts.push('Alt');
+      if (m.shiftKey) parts.push('Shift');
+      parts.push('Scroll');
+      return parts.join('+');
+    })();
+    const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
+    const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
+
+    const innerHtml = this.minimalMode
       ? this.renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel)
       : this.renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel);
 
+    const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
     this.controller.drawTooltip(html, e);
   }
 
@@ -369,7 +497,7 @@ export class InspectorAdapter implements InteractionMode {
     
     const element = this.currentElement;
     const info = this.currentSourceInfo;
-    const computed = globalThis.getComputedStyle(element);
+    const computed = window.getComputedStyle(element);
     
     const data = {
       framework: info.framework,
@@ -389,9 +517,29 @@ export class InspectorAdapter implements InteractionMode {
       }
     };
 
+    const tagName = element.tagName.toLowerCase();
+    const classList = Array.from(element.classList).filter((c: string) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+    const elementSelector = `${tagName}${classStr}`;
+
+    let selectorLabel = `\`${elementSelector}\``;
+    if (info.staticMetadata?.classOrigins) {
+      const originList: string[] = [];
+      for (const cls of classList) {
+        const origin = info.staticMetadata.classOrigins[cls];
+        if (origin) {
+          originList.push(`[Source: \`${origin.file}\` (Line: \`${origin.line}\`, Column: \`${origin.column}\`)]`);
+        }
+      }
+      if (originList.length > 0) {
+        selectorLabel += ` ➔ ${originList.join(" ")}`;
+      }
+    }
+
     let text = `
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
+* **Element**: ${selectorLabel}
 * **File Path**: \`${data.file}\` (Line: ${data.line}, Column: ${data.column})
 * **Framework**: ${data.framework}
 * **Dimensions**: ${data.dimensions}

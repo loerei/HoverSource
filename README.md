@@ -13,6 +13,7 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 - **Toggle Overlay (`Alt + H`)**: Show or hide the developer overlay bounding box and floating spec card.
 - **Deep-linking (Click filename)**: Instantly opens the file in your preferred editor (VS Code or Cursor) at the exact line number.
 - **Source Line Correction**: Silently checks and corrects compiler-shifted line numbers in the background.
+- **Layered Element Navigation (`Alt + Shift + Scroll`)**: Cycle through overlapping DOM elements under the cursor using a scroll combination, showing a clean 2D overlapping layer stack in the tooltip to easily target parent/child elements. Customize shortcuts in the dashboard.
 
 ## Clipboard Output
 

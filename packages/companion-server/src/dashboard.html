@@ -190,6 +190,20 @@
                 <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
               </div>
             </div>
+
+            <!-- Shortcut row: Toggle Mode -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
+              <div>
+                <h3 class="text-sm font-medium text-slate-200">Toggle Inspection Mode</h3>
+                <p class="text-slate-500 text-xs mt-0.5">Switch between Inspector and Design modes</p>
+              </div>
+              <div class="flex items-center gap-2" id="shortcut-toggleMode">
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
+                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
+                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
+              </div>
+            </div>
           </div>
 
           <!-- Bottom Actions / Save Target -->
@@ -233,7 +247,8 @@
         toggleMinimal: { key: 'm', altKey: true, ctrlKey: false, shiftKey: false },
         toggleFreeze: { key: 'p', altKey: true, ctrlKey: false, shiftKey: false },
         copyMetadata: { key: 'c', altKey: true, ctrlKey: false, shiftKey: false },
-        openDashboard: { key: 's', altKey: true, ctrlKey: false, shiftKey: false }
+        openDashboard: { key: 's', altKey: true, ctrlKey: false, shiftKey: false },
+        toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
       }
     };
     
@@ -345,6 +360,7 @@
         setupShortcutUI('toggleFreeze', loadedConfig.shortcuts.toggleFreeze);
         setupShortcutUI('copyMetadata', loadedConfig.shortcuts.copyMetadata);
         setupShortcutUI('openDashboard', loadedConfig.shortcuts.openDashboard);
+        setupShortcutUI('toggleMode', loadedConfig.shortcuts.toggleMode || DEFAULT_CONFIG.shortcuts.toggleMode);
 
         checkChanges();
 
@@ -421,7 +437,8 @@
           toggleMinimal: getShortcutFromUI('toggleMinimal'),
           toggleFreeze: getShortcutFromUI('toggleFreeze'),
           copyMetadata: getShortcutFromUI('copyMetadata'),
-          openDashboard: getShortcutFromUI('openDashboard')
+          openDashboard: getShortcutFromUI('openDashboard'),
+          toggleMode: getShortcutFromUI('toggleMode')
         }
       };
 
@@ -451,6 +468,7 @@
       setupShortcutUI('toggleFreeze', DEFAULT_CONFIG.shortcuts.toggleFreeze);
       setupShortcutUI('copyMetadata', DEFAULT_CONFIG.shortcuts.copyMetadata);
       setupShortcutUI('openDashboard', DEFAULT_CONFIG.shortcuts.openDashboard);
+      setupShortcutUI('toggleMode', DEFAULT_CONFIG.shortcuts.toggleMode);
       
       checkChanges();
     };
@@ -467,7 +485,8 @@
           toggleMinimal: getShortcutFromUI('toggleMinimal'),
           toggleFreeze: getShortcutFromUI('toggleFreeze'),
           copyMetadata: getShortcutFromUI('copyMetadata'),
-          openDashboard: getShortcutFromUI('openDashboard')
+          openDashboard: getShortcutFromUI('openDashboard'),
+          toggleMode: getShortcutFromUI('toggleMode')
         }
       };
 

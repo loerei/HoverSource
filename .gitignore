@@ -45,3 +45,7 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.staging.local
+
+# Project management
+refs/
+diff.patch

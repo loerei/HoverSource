@@ -23,13 +23,13 @@ function getArgs() {
     const arg = process.argv[i];
     if (arg.startsWith("--")) {
       const eqIdx = arg.indexOf("=");
-      if (eqIdx !== -1) {
+      if (eqIdx === -1) {
+        // boolean flag
+        args[arg.slice(2)] = true;
+      } else {
         const key = arg.slice(2, eqIdx);
         const value = arg.slice(eqIdx + 1);
         args[key] = value;
-      } else {
-        // boolean flag
-        args[arg.slice(2)] = true;
       }
     } else if (arg.startsWith("-")) {
       const char = arg.slice(1);
@@ -61,8 +61,8 @@ function resolveSubcommand(
   let pkg: any;
   try {
     pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-  } catch {
-    console.error(`[HoverSource] Failed to parse package.json`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to parse package.json:`, err);
     return undefined;
   }
 
@@ -155,7 +155,12 @@ async function resolveCompanionPort(requestedPort: number): Promise<number> {
 }
 
 function openBrowser(url: string) {
-  const startCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+  let startCmd = "xdg-open";
+  if (process.platform === "darwin") {
+    startCmd = "open";
+  } else if (process.platform === "win32") {
+    startCmd = "start";
+  }
   const command = process.platform === "win32" ? `start "" "${url}"` : `${startCmd} "${url}"`;
   exec(command, (err) => {
     if (err) {
@@ -185,8 +190,8 @@ function getPidUsingPort(port: number): Promise<number | undefined> {
           if (line.includes("LISTENING")) {
             const parts = line.trim().split(/\s+/);
             const pidStr = parts[parts.length - 1];
-            const pid = parseInt(pidStr, 10);
-            if (!isNaN(pid) && pid > 0) {
+            const pid = Number.parseInt(pidStr, 10);
+            if (!Number.isNaN(pid) && pid > 0) {
               return resolve(pid);
             }
           }
@@ -196,8 +201,8 @@ function getPidUsingPort(port: number): Promise<number | undefined> {
     } else {
       exec(`lsof -t -i:${port}`, (err, stdout) => {
         if (err || !stdout) return resolve(undefined);
-        const pid = parseInt(stdout.trim(), 10);
-        if (!isNaN(pid) && pid > 0) {
+        const pid = Number.parseInt(stdout.trim(), 10);
+        if (!Number.isNaN(pid) && pid > 0) {
           resolve(pid);
         } else {
           resolve(undefined);
@@ -229,7 +234,7 @@ function getProcessName(pid: number): Promise<string | undefined> {
         }
         const parts = stdout.trim().split(",");
         if (parts[0]) {
-          const name = parts[0].replace(/"/g, "");
+          const name = parts[0].replaceAll('"', "");
           return resolve(name);
         }
         resolve(undefined);
@@ -240,6 +245,60 @@ function getProcessName(pid: number): Promise<string | undefined> {
         resolve(stdout.trim());
       });
     }
+  });
+}
+
+function killProcessWindowsUac(pid: number, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    console.log(`[HoverSource] Normal termination failed. Requesting Administrator elevation (UAC)...`);
+    const tempFile = path.join(os.tmpdir(), `hs_taskkill_${pid}.log`);
+    if (fs.existsSync(tempFile)) {
+      try { fs.unlinkSync(tempFile); } catch (err) {
+        console.debug("[HoverSource] Failed to delete existing temp file:", err);
+      }
+    }
+
+    const elevatorCmd = String.raw`powershell -Command "Start-Process cmd.exe -ArgumentList '/c taskkill /F /PID ${pid} > \"${tempFile}\" 2>&1' -Verb RunAs -WindowStyle Hidden"`;
+    exec(elevatorCmd, (elevatorErr) => {
+      if (elevatorErr) {
+        console.error(`[HoverSource] UAC request canceled or failed: ${elevatorErr.message}`);
+        resolve(false);
+      } else {
+        // Poll the port to see if it frees up
+        let checks = 0;
+        const checkInterval = setInterval(async () => {
+          const free = await isPortFree(port);
+          checks++;
+          if (free) {
+            clearInterval(checkInterval);
+            try { fs.unlinkSync(tempFile); } catch (err) {
+              console.debug("[HoverSource] Temp file delete ignored:", err);
+            }
+            resolve(true);
+          } else if (checks > 20) { // 4 seconds total
+            clearInterval(checkInterval);
+            
+            // Read temp file for failure reasons
+            let errorDetails = "";
+            if (fs.existsSync(tempFile)) {
+              try {
+                errorDetails = fs.readFileSync(tempFile, "utf-8").trim();
+                fs.unlinkSync(tempFile);
+              } catch (err) {
+                console.debug("[HoverSource] Failed to read/delete temp file:", err);
+              }
+            }
+
+            if (errorDetails) {
+              console.error(`\x1b[31m[HoverSource] UAC Taskkill failed: ${errorDetails}\x1b[0m`);
+            } else {
+              console.error(`\x1b[31m[HoverSource] UAC Taskkill failed or was canceled by the user.\x1b[0m`);
+            }
+            resolve(false);
+          }
+        }, 200);
+      }
+    });
   });
 }
 
@@ -268,49 +327,7 @@ function killProcess(pid: number, port: number): Promise<boolean> {
 
       // If failed on Windows, try elevating with UAC
       if (process.platform === "win32") {
-        console.log(`[HoverSource] Normal termination failed. Requesting Administrator elevation (UAC)...`);
-        const tempFile = path.join(os.tmpdir(), `hs_taskkill_${pid}.log`);
-        if (fs.existsSync(tempFile)) {
-          try { fs.unlinkSync(tempFile); } catch {}
-        }
-
-        const elevatorCmd = `powershell -Command "Start-Process cmd.exe -ArgumentList '/c taskkill /F /PID ${pid} > \\"${tempFile}\\" 2>&1' -Verb RunAs -WindowStyle Hidden"`;
-        exec(elevatorCmd, (elevatorErr) => {
-          if (elevatorErr) {
-            console.error(`[HoverSource] UAC request canceled or failed: ${elevatorErr.message}`);
-            resolve(false);
-          } else {
-            // Poll the port to see if it frees up
-            let checks = 0;
-            const checkInterval = setInterval(async () => {
-              const free = await isPortFree(port);
-              checks++;
-              if (free) {
-                clearInterval(checkInterval);
-                try { fs.unlinkSync(tempFile); } catch {}
-                resolve(true);
-              } else if (checks > 20) { // 4 seconds total
-                clearInterval(checkInterval);
-                
-                // Read temp file for failure reasons
-                let errorDetails = "";
-                if (fs.existsSync(tempFile)) {
-                  try {
-                    errorDetails = fs.readFileSync(tempFile, "utf-8").trim();
-                    fs.unlinkSync(tempFile);
-                  } catch {}
-                }
-
-                if (errorDetails) {
-                  console.error(`\x1b[31m[HoverSource] UAC Taskkill failed: ${errorDetails}\x1b[0m`);
-                } else {
-                  console.error(`\x1b[31m[HoverSource] UAC Taskkill failed or was canceled by the user.\x1b[0m`);
-                }
-                resolve(false);
-              }
-            }, 200);
-          }
-        });
+        killProcessWindowsUac(pid, port).then(resolve);
       } else {
         if (stderr) console.error(`[HoverSource] Details: ${stderr.trim()}`);
         resolve(false);
@@ -326,12 +343,16 @@ function recordPatchState(filePath: string, originalContent: string) {
   if (fs.existsSync(PATCH_STATE_FILE)) {
     try {
       state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8"));
-    } catch {}
+    } catch (err) {
+      console.debug("[HoverSource] Failed to parse patch state:", err);
+    }
   }
   state[filePath] = originalContent;
   try {
     fs.writeFileSync(PATCH_STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
-  } catch {}
+  } catch (err) {
+    console.debug("[HoverSource] Failed to write patch state:", err);
+  }
 }
 
 function removePatchState(filePath: string) {
@@ -344,7 +365,9 @@ function removePatchState(filePath: string) {
     } else {
       fs.writeFileSync(PATCH_STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
     }
-  } catch {}
+  } catch (err) {
+    console.debug("[HoverSource] Failed to remove patch state:", err);
+  }
 }
 
 function restoreLeftoverPatches() {
@@ -358,7 +381,31 @@ function restoreLeftoverPatches() {
       }
     }
     fs.unlinkSync(PATCH_STATE_FILE);
-  } catch {}
+  } catch (err) {
+    console.debug("[HoverSource] Leftover patch restore failed:", err);
+  }
+}
+
+function patchSingleFileForDebugPort(
+  fullPath: string,
+  projectRoot: string,
+  oldPort: number,
+  newPort: number,
+  patchedFiles: { path: string; originalContent: string }[]
+): void {
+  try {
+    const content = fs.readFileSync(fullPath, "utf-8");
+    const searchStr = `--remote-debugging-port=${oldPort}`;
+    if (content.includes(searchStr)) {
+      const newContent = content.replaceAll(searchStr, `--remote-debugging-port=${newPort}`);
+      fs.writeFileSync(fullPath, newContent, "utf-8");
+      recordPatchState(fullPath, content);
+      patchedFiles.push({ path: fullPath, originalContent: content });
+      console.log(`[HoverSource] Temporarily patched debug port ${oldPort} -> ${newPort} in ${path.relative(projectRoot, fullPath)}`);
+    }
+  } catch (err) {
+    console.debug(`[HoverSource] Failed to patch file ${fullPath}:`, err);
+  }
 }
 
 function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: number): { restore: () => void } | undefined {
@@ -376,17 +423,7 @@ function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: nu
       const fullPath = path.join(dir, file);
       const stat = fs.statSync(fullPath);
       if (stat.isFile() && (file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".ts") || file.endsWith(".json"))) {
-        try {
-          const content = fs.readFileSync(fullPath, "utf-8");
-          const searchStr = `--remote-debugging-port=${oldPort}`;
-          if (content.includes(searchStr)) {
-            const newContent = content.replace(new RegExp(searchStr, "g"), `--remote-debugging-port=${newPort}`);
-            fs.writeFileSync(fullPath, newContent, "utf-8");
-            recordPatchState(fullPath, content);
-            patchedFiles.push({ path: fullPath, originalContent: content });
-            console.log(`[HoverSource] Temporarily patched debug port ${oldPort} -> ${newPort} in ${path.relative(projectRoot, fullPath)}`);
-          }
-        } catch {}
+        patchSingleFileForDebugPort(fullPath, projectRoot, oldPort, newPort, patchedFiles);
       }
     }
   }
@@ -400,10 +437,188 @@ function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: nu
           fs.writeFileSync(pf.path, pf.originalContent, "utf-8");
           removePatchState(pf.path);
           console.log(`[HoverSource] Restored original port configuration in ${path.relative(projectRoot, pf.path)}`);
-        } catch {}
+        } catch (err) {
+          console.debug(`[HoverSource] Failed to restore file ${pf.path}:`, err);
+        }
       }
     }
   };
+}
+
+async function checkDebugPortInUse(debugPort: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(true));
+    server.once("listening", () => {
+      server.close();
+      resolve(false);
+    });
+    server.listen(debugPort, "127.0.0.1");
+  });
+}
+
+function warnDebugPortInUse(debugPort: number, pid?: number, procName?: string) {
+  console.warn(`\n\x1b[33m[HoverSource] ⚠️  WARNING: Debug port ${debugPort} is already in use by another process!\x1b[0m`);
+  if (pid) {
+    console.warn(`\x1b[33m[HoverSource] Process: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
+  } else {
+    console.warn(`\x1b[33m[HoverSource] Could not identify the process holding the port.\x1b[0m`);
+  }
+  console.warn(`\x1b[33m[HoverSource] Electron will fail to bind to it, and the HoverSource overlay will not appear.\x1b[0m`);
+}
+
+async function handleTerminationOption(pid: number, debugPort: number, autoResolve: boolean): Promise<boolean> {
+  let shouldKill = autoResolve;
+  if (shouldKill) {
+    console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically terminating process ${pid}...`);
+  } else {
+    const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${debugPort}? (y/N): \x1b[0m`);
+    shouldKill = answer.trim().toLowerCase() === "y";
+  }
+
+  if (shouldKill) {
+    console.log(`[HoverSource] Terminating process ${pid}...`);
+    const success = await killProcess(pid, debugPort);
+    if (success) {
+      console.log(`[HoverSource] Process terminated successfully. Port ${debugPort} is now free.`);
+      // Wait a brief moment for OS to release the socket
+      await new Promise((r) => setTimeout(r, 700));
+      return true;
+    } else {
+      console.error(`[HoverSource] Failed to terminate process. You may need to run as administrator or close it manually.`);
+    }
+  }
+  return false;
+}
+
+async function handlePatchOption(
+  debugPort: number,
+  projectRoot: string,
+  autoResolve: boolean
+): Promise<{ newDebugPort: number; patchRestorer?: () => void } | null> {
+  let shouldPatch = autoResolve;
+  if (shouldPatch) {
+    console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically patching debug port to ${debugPort + 1}...`);
+  } else {
+    const portAnswer = await askQuestion(`\x1b[36m[HoverSource] Port ${debugPort} is blocked. Try changing your app's debug port to ${debugPort + 1} temporarily? (y/N): \x1b[0m`);
+    shouldPatch = portAnswer.trim().toLowerCase() === "y";
+  }
+
+  if (shouldPatch) {
+    const newDebugPort = debugPort + 1;
+    const patchResult = findAndPatchDebugPort(projectRoot, debugPort, newDebugPort);
+    if (patchResult) {
+      return { newDebugPort, patchRestorer: patchResult.restore };
+    } else {
+      console.warn(`\x1b[33m[HoverSource] ⚠️ Could not locate any hardcoded references to port ${debugPort} in your scripts/ folder or root.\x1b[0m`);
+    }
+  }
+  return null;
+}
+
+async function resolveDebugPortConflicts(
+  debugPort: number,
+  projectRoot: string,
+  autoResolve: boolean,
+  args: any
+): Promise<{ resolvedDebugPort: number; patchRestorer?: () => void }> {
+  let isDebugPortInUse = await checkDebugPortInUse(debugPort);
+  if (!isDebugPortInUse) {
+    return { resolvedDebugPort: debugPort };
+  }
+
+  const pid = await getPidUsingPort(debugPort);
+  const procName = pid ? await getProcessName(pid) : undefined;
+  warnDebugPortInUse(debugPort, pid, procName);
+
+  const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
+  let portFreed = false;
+  if (isInteractive && pid) {
+    portFreed = await handleTerminationOption(pid, debugPort, autoResolve);
+  }
+
+  let currentDebugPort = debugPort;
+  let patchRestorer: (() => void) | undefined;
+
+  if (!portFreed && isInteractive) {
+    const patch = await handlePatchOption(currentDebugPort, projectRoot, autoResolve);
+    if (patch) {
+      currentDebugPort = patch.newDebugPort;
+      patchRestorer = patch.patchRestorer;
+    }
+  }
+
+  if (currentDebugPort === debugPort && isDebugPortInUse) {
+    console.warn(`\x1b[33m[HoverSource] Proceeding with port ${currentDebugPort} anyway. Overlay connection might fail.\x1b[0m\n`);
+  }
+
+  return { resolvedDebugPort: currentDebugPort, patchRestorer };
+}
+
+async function runProxyMode(targetUrl: string, serverPort: number, args: any): Promise<void> {
+  let targetPort = 3000;
+  try {
+    targetPort = Number.parseInt(new URL(targetUrl).port || "3000", 10);
+  } catch (err) {
+    console.debug("[HoverSource] Failed to parse target port:", err);
+  }
+  const requestedProxyPort = Number.parseInt((args["proxy-port"] as string) || String(targetPort + 1), 10);
+  const proxyPort = await findFreePort(requestedProxyPort);
+  if (proxyPort !== requestedProxyPort) {
+    console.log(`[HoverSource] Proxy port ${requestedProxyPort} in use, using ${proxyPort} instead.`);
+  }
+  const overlayScriptUrl = `http://127.0.0.1:${serverPort}/hoversource-overlay.js`;
+
+  console.log(`[HoverSource] Proxy mode: ${targetUrl} → http://localhost:${proxyPort}`);
+  try {
+    await startProxy(targetUrl, proxyPort, overlayScriptUrl);
+  } catch (err) {
+    console.error(`[HoverSource] Ignored proxy failure:`, err);
+  }
+  console.log(`[HoverSource] Proxy ready. Opening http://localhost:${proxyPort} in your browser...`);
+  openBrowser(`http://localhost:${proxyPort}`);
+}
+
+function runExecMode(execCommand: string, projectRoot: string, debugPort: number): void {
+  console.log(`[HoverSource] Exec mode: spawning → ${execCommand}`);
+  const childEnv = {
+    ...process.env,
+    ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${debugPort}`,
+  };
+  const child = spawn(execCommand, [], {
+    shell: true,
+    env: childEnv,
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
+  child.on("error", (err) => {
+    console.error(`[HoverSource] Failed to spawn exec command:`, err.message);
+  });
+}
+
+async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string): Promise<void> {
+  console.log(`[HoverSource] Watching debug port :${debugPort} for Chromium targets...`);
+  
+  let isInjected = false;
+  
+  const pollAndInject = async () => {
+    try {
+      const injectedCount = await injectOverlayScript(debugPort, scriptWithPort);
+      if (injectedCount > 0 && !isInjected) {
+        console.log(`[HoverSource] Successfully connected and injected into ${injectedCount} target(s).`);
+        isInjected = true;
+      }
+    } catch (err: any) {
+      if (isInjected) {
+        console.log(`[HoverSource] Lost connection or target closed. Re-watching...`);
+        isInjected = false;
+      }
+      console.debug("[HoverSource] Ignored poll injection error:", err.message);
+    }
+  };
+
+  await pollAndInject();
+  setInterval(pollAndInject, 2500);
 }
 
 async function main() {
@@ -415,12 +630,10 @@ async function main() {
   const config = loadMergedConfig(projectRoot);
   const autoResolve = config.autoResolvePortConflicts === true;
   
-  const requestedPort = parseInt((args.port as string) || process.env.HOVERSOURCE_PORT || "3000", 10);
+  const requestedPort = Number.parseInt((args.port as string) || process.env.HOVERSOURCE_PORT || "3000", 10);
   const serverPort = await resolveCompanionPort(requestedPort);
-  if (serverPort === requestedPort) {
-    // Took over or was free — no message needed
-  }
-  let debugPort = parseInt((args["debug-port"] as string) || process.env.HOVERSOURCE_DEBUG_PORT || "9222", 10);
+
+  let debugPort = Number.parseInt((args["debug-port"] as string) || process.env.HOVERSOURCE_DEBUG_PORT || "9222", 10);
   const shouldOpenDashboard = !!args.dashboard;
   const targetUrl = args.target as string | undefined;
   let execCommand = args.exec as string | undefined;
@@ -431,7 +644,9 @@ async function main() {
       try {
         patchRestorer();
         patchRestorer = undefined;
-      } catch {}
+      } catch (err) {
+        console.debug("[HoverSource] Cleanup handler error:", err);
+      }
     }
   };
   process.on("exit", cleanup);
@@ -452,77 +667,9 @@ async function main() {
 
   // If in exec mode, check if the debugPort is already occupied and warn/prompt the user
   if (execCommand) {
-    let isDebugPortInUse = await new Promise<boolean>((resolve) => {
-      const server = net.createServer();
-      server.once("error", () => resolve(true));
-      server.once("listening", () => {
-        server.close();
-        resolve(false);
-      });
-      server.listen(debugPort, "127.0.0.1");
-    });
-    if (isDebugPortInUse) {
-      const pid = await getPidUsingPort(debugPort);
-      const procName = pid ? await getProcessName(pid) : undefined;
-
-      console.warn(`\n\x1b[33m[HoverSource] ⚠️  WARNING: Debug port ${debugPort} is already in use by another process!\x1b[0m`);
-      if (pid) {
-        console.warn(`\x1b[33m[HoverSource] Process: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
-      } else {
-        console.warn(`\x1b[33m[HoverSource] Could not identify the process holding the port.\x1b[0m`);
-      }
-      console.warn(`\x1b[33m[HoverSource] Electron will fail to bind to it, and the HoverSource overlay will not appear.\x1b[0m`);
-
-      const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
-      if (isInteractive && pid) {
-        let shouldKill = autoResolve;
-        if (!shouldKill) {
-          const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${debugPort}? (y/N): \x1b[0m`);
-          shouldKill = answer.trim().toLowerCase() === "y";
-        } else {
-          console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically terminating process ${pid}...`);
-        }
-
-        if (shouldKill) {
-          console.log(`[HoverSource] Terminating process ${pid}...`);
-          const success = await killProcess(pid, debugPort);
-          if (success) {
-            console.log(`[HoverSource] Process terminated successfully. Port ${debugPort} is now free.`);
-            isDebugPortInUse = false;
-            // Wait a brief moment for OS to release the socket
-            await new Promise((r) => setTimeout(r, 700));
-          } else {
-            console.error(`[HoverSource] Failed to terminate process. You may need to run as administrator or close it manually.`);
-          }
-        }
-      }
-
-      if (isDebugPortInUse && isInteractive) {
-        let shouldPatch = autoResolve;
-        if (!shouldPatch) {
-          const portAnswer = await askQuestion(`\x1b[36m[HoverSource] Port ${debugPort} is blocked. Try changing your app's debug port to ${debugPort + 1} temporarily? (y/N): \x1b[0m`);
-          shouldPatch = portAnswer.trim().toLowerCase() === "y";
-        } else {
-          console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically patching debug port to ${debugPort + 1}...`);
-        }
-
-        if (shouldPatch) {
-          const newDebugPort = debugPort + 1;
-          const patchResult = findAndPatchDebugPort(projectRoot, debugPort, newDebugPort);
-          if (patchResult) {
-            patchRestorer = patchResult.restore;
-            debugPort = newDebugPort;
-            isDebugPortInUse = false;
-          } else {
-            console.warn(`\x1b[33m[HoverSource] ⚠️ Could not locate any hardcoded references to port ${debugPort} in your scripts/ folder or root.\x1b[0m`);
-          }
-        }
-      }
-
-      if (isDebugPortInUse) {
-        console.warn(`\x1b[33m[HoverSource] Proceeding with port ${debugPort} anyway. Overlay connection might fail.\x1b[0m\n`);
-      }
-    }
+    const conflicts = await resolveDebugPortConflicts(debugPort, projectRoot, autoResolve, args);
+    debugPort = conflicts.resolvedDebugPort;
+    patchRestorer = conflicts.patchRestorer;
   }
 
   // 1. Start Companion Server
@@ -541,41 +688,13 @@ async function main() {
 
   // ── MODE A: Proxy injection (web/browser apps) ──────────────────────────
   if (targetUrl) {
-    let targetPort = 3000;
-    try {
-      targetPort = parseInt(new URL(targetUrl).port || "3000", 10);
-    } catch {}
-    const requestedProxyPort = parseInt((args["proxy-port"] as string) || String(targetPort + 1), 10);
-    const proxyPort = await findFreePort(requestedProxyPort);
-    if (proxyPort !== requestedProxyPort) {
-      console.log(`[HoverSource] Proxy port ${requestedProxyPort} in use, using ${proxyPort} instead.`);
-    }
-    const overlayScriptUrl = `http://127.0.0.1:${serverPort}/hoversource-overlay.js`;
-
-    console.log(`[HoverSource] Proxy mode: ${targetUrl} → http://localhost:${proxyPort}`);
-    await startProxy(targetUrl, proxyPort, overlayScriptUrl);
-    console.log(`[HoverSource] Proxy ready. Opening http://localhost:${proxyPort} in your browser...`);
-    openBrowser(`http://localhost:${proxyPort}`);
-    return; // No CDP loop needed in proxy mode
+    await runProxyMode(targetUrl, serverPort, args);
+    return;
   }
 
   // ── MODE B: Exec wrapper (Electron apps) ────────────────────────────────
   if (execCommand) {
-    console.log(`[HoverSource] Exec mode: spawning → ${execCommand}`);
-    const childEnv = {
-      ...process.env,
-      ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${debugPort}`,
-    };
-    const child = spawn(execCommand, [], {
-      shell: true,
-      env: childEnv,
-      cwd: projectRoot,
-      stdio: "inherit",
-    });
-    child.on("error", (err) => {
-      console.error(`[HoverSource] Failed to spawn exec command:`, err.message);
-    });
-    // Fall through to CDP injection loop below
+    runExecMode(execCommand, projectRoot, debugPort);
   }
 
   // 3. Locate bundled overlay script
@@ -601,34 +720,18 @@ async function main() {
 
   const scriptContent = fs.readFileSync(scriptPath, "utf-8");
   // Prepend companion port so overlay can connect back regardless of configured port
-  const portBootstrap = `window.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
+  const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
   const scriptWithPort = portBootstrap + scriptContent;
 
   // ── MODE C: Manual CDP (backward compat) ─ user opens their app with debug port
-  console.log(`[HoverSource] Watching debug port :${debugPort} for Chromium targets...`);
-  
-  let isInjected = false;
-  
-  const pollAndInject = async () => {
-    try {
-      const injectedCount = await injectOverlayScript(debugPort, scriptWithPort);
-      if (injectedCount > 0 && !isInjected) {
-        console.log(`[HoverSource] Successfully connected and injected into ${injectedCount} target(s).`);
-        isInjected = true;
-      }
-    } catch (err: any) {
-      if (isInjected) {
-        console.log(`[HoverSource] Lost connection or target closed. Re-watching...`);
-        isInjected = false;
-      }
-    }
-  };
-
-  await pollAndInject();
-  setInterval(pollAndInject, 2500);
+  await startCdpInjectionWatch(debugPort, scriptWithPort);
 }
 
-main().catch((err) => {
-  console.error("[HoverSource] CLI crashed:", err);
-  process.exit(1);
-});
+const runMain = () => {
+  main().catch((err) => {
+    console.error("[HoverSource] CLI crashed:", err);
+    process.exit(1);
+  });
+};
+
+runMain();

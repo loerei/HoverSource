@@ -259,7 +259,7 @@
     <span>Configuration saved successfully!</span>
   </div>
 
-  <script>
+  <script type="module">
     const API_BASE = '';
     let loadedConfig = null;
 
@@ -593,7 +593,11 @@
     }
 
     // Init
-    initDashboard().catch(e => console.error(e));
+    try {
+      await initDashboard();
+    } catch (e) {
+      console.error(e);
+    }
   </script>
 </body>
 </html>

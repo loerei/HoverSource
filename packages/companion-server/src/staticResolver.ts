@@ -62,12 +62,12 @@ function findClassOrigins(projectRoot: string, classNames: string[]): Record<str
       for (const className of classNames) {
         if (origins[className]) continue;
 
-        const pattern = new RegExp(`\\.${className}\\b`);
+        const pattern = new RegExp(String.raw`\.${className}\b`);
         for (let i = 0; i < lines.length; i++) {
-          const match = lines[i].match(pattern);
-          if (match && match.index !== undefined) {
+          const match = pattern.exec(lines[i]);
+          if (match?.index !== undefined) {
             origins[className] = {
-              file: file.replace(/\\/g, "/"),
+              file: file.replaceAll("\\", "/"),
               line: i + 1,
               column: match.index + 1
             };
@@ -81,6 +81,159 @@ function findClassOrigins(projectRoot: string, classNames: string[]): Record<str
 }
 
 export class StaticContextResolver {
+  private findOffsetTagLine(lines: string[], tagLineIdx: number, tagPattern: RegExp): number {
+    for (let offset = 1; offset <= 5; offset++) {
+      if (tagLineIdx - offset >= 0 && tagPattern.test(lines[tagLineIdx - offset])) {
+        return tagLineIdx - offset;
+      }
+      if (tagLineIdx + offset < lines.length && tagPattern.test(lines[tagLineIdx + offset])) {
+        return tagLineIdx + offset;
+      }
+    }
+    return tagLineIdx;
+  }
+
+  private findTagLineIndex(lines: string[], line: number, tagName?: string): number {
+    const tagLineIdx = line - 1;
+    if (tagLineIdx < 0 || tagLineIdx >= lines.length || !tagName) {
+      return tagLineIdx;
+    }
+
+    const tagPattern = new RegExp(String.raw`<${tagName}\b`, "i");
+    if (tagPattern.test(lines[tagLineIdx])) {
+      return tagLineIdx;
+    }
+    return this.findOffsetTagLine(lines, tagLineIdx, tagPattern);
+  }
+
+  private scanLineChars(currentLine: string, state: { inString: boolean; stringChar: string; openBracketCount: number }): boolean {
+    for (let i = 0; i < currentLine.length; i++) {
+      const char = currentLine[i];
+      if (state.inString) {
+        if (char === state.stringChar && currentLine[i - 1] !== "\\") {
+          state.inString = false;
+        }
+      } else if (char === '"' || char === "'" || char === "`") {
+        state.inString = true;
+        state.stringChar = char;
+      } else if (char === "{") {
+        state.openBracketCount++;
+      } else if (char === "}") {
+        state.openBracketCount--;
+      } else if (char === ">" && state.openBracketCount === 0) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private accumulateTagSegment(lines: string[], tagLineIdx: number): string {
+    let segment = "";
+    let scanIdx = tagLineIdx;
+    const state = { inString: false, stringChar: "", openBracketCount: 0 };
+
+    while (scanIdx < lines.length && scanIdx < tagLineIdx + 10) {
+      const currentLine = lines[scanIdx];
+      segment += " " + currentLine;
+      if (this.scanLineChars(currentLine, state)) {
+        break;
+      }
+      scanIdx++;
+    }
+    return segment;
+  }
+
+  private extractAttributeValue(remaining: string): { value: string; consumedLength: number } | null {
+    if (!remaining.startsWith("=")) {
+      return null;
+    }
+    const target = remaining.slice(1).trim();
+    const prefixLength = remaining.length - target.length;
+    
+    let valMatch = null;
+    if (target.startsWith('"')) {
+      valMatch = /^"([^"]*)"/.exec(target);
+    } else if (target.startsWith("'")) {
+      valMatch = /^'([^']*)'/.exec(target);
+    } else if (target.startsWith("{")) {
+      valMatch = /^{([^}]+)}/.exec(target);
+    } else {
+      valMatch = /^([^\s>]+)/.exec(target);
+    }
+
+    if (valMatch) {
+      return {
+        value: valMatch[1] ?? valMatch[0],
+        consumedLength: prefixLength + valMatch[0].length,
+      };
+    }
+    return {
+      value: "true",
+      consumedLength: prefixLength,
+    };
+  }
+
+  private parseAttributes(tagName: string, segment: string, rawAttributes: Record<string, string>): void {
+    const tagPattern = new RegExp(String.raw`<${tagName}\b([\s\S]*?)(?:/\s*)?>`, "i");
+    const match = tagPattern.exec(segment);
+    if (match?.[1]) {
+      let remaining = match[1].trim();
+      while (remaining.length > 0) {
+        remaining = remaining.trim();
+        const keyMatch = /^([\w-]+)/.exec(remaining);
+        if (!keyMatch) break;
+        const name = keyMatch[1];
+        remaining = remaining.slice(name.length).trim();
+        
+        let value = "true";
+        const valResult = this.extractAttributeValue(remaining);
+        if (valResult) {
+          value = valResult.value;
+          remaining = remaining.slice(valResult.consumedLength);
+        }
+        
+        if (!name.startsWith("_debug") && name !== "key") {
+          rawAttributes[name] = value.trim().replaceAll(/\s+/g, " ");
+        }
+      }
+    }
+  }
+
+  private parsePrecedingComments(lines: string[], tagLineIdx: number): string[] {
+    const commentLines: string[] = [];
+    let inBlockComment = false;
+    let checkIdx = tagLineIdx - 1;
+
+    while (checkIdx >= 0 && checkIdx >= tagLineIdx - 15) {
+      const lineText = lines[checkIdx].trim();
+      
+      if (lineText.endsWith("*/")) {
+        inBlockComment = true;
+        if (lineText.startsWith("/*") || lineText.startsWith("/**")) {
+          commentLines.unshift(lineText);
+          inBlockComment = false;
+        } else {
+          commentLines.unshift(lineText);
+        }
+      } else if (inBlockComment) {
+        commentLines.unshift(lineText);
+        if (lineText.startsWith("/*") || lineText.startsWith("/**")) {
+          inBlockComment = false;
+        }
+      } else if (lineText.startsWith("//")) {
+        commentLines.unshift(lineText);
+      } else if (lineText !== "") {
+        break;
+      }
+      checkIdx--;
+    }
+
+    if (commentLines.length > 0) {
+      return commentLines.map(c => stripCommentMarkers(c)).filter(c => c !== "");
+    }
+    return [];
+  }
+
   public async resolveStaticContext(
     projectRoot: string,
     filePath: string,
@@ -104,117 +257,21 @@ export class StaticContextResolver {
       const lines = content.split(/\r?\n/);
 
       // 1. Locate the opening tag line index
-      let tagLineIdx = line - 1;
+      const tagLineIdx = this.findTagLineIndex(lines, line, tagName);
       if (tagLineIdx < 0 || tagLineIdx >= lines.length) {
         return result;
       }
 
-      // If we have a tagName, let's verify if `<tagName` is present in this line.
-      // If not, search a bit upwards/downwards (range of 5 lines) to find the correct line index.
-      if (tagName) {
-        const tagPattern = new RegExp(`<${tagName}\\b`, "i");
-        if (!tagPattern.test(lines[tagLineIdx])) {
-          for (let offset = 1; offset <= 5; offset++) {
-            if (tagLineIdx - offset >= 0 && tagPattern.test(lines[tagLineIdx - offset])) {
-              tagLineIdx -= offset;
-              break;
-            }
-            if (tagLineIdx + offset < lines.length && tagPattern.test(lines[tagLineIdx + offset])) {
-              tagLineIdx += offset;
-              break;
-            }
-          }
-        }
-      }
-
       // 2. Extract raw attributes by reading lines forward starting from tagLineIdx
-      let segment = "";
-      let scanIdx = tagLineIdx;
-      let openBracketCount = 0;
-      let inString = false;
-      let stringChar = "";
-
-      // Accumulate text until tag ends (closed by > or />)
-      while (scanIdx < lines.length && scanIdx < tagLineIdx + 10) {
-        const currentLine = lines[scanIdx];
-        segment += " " + currentLine;
-        
-        let ended = false;
-        for (let i = 0; i < currentLine.length; i++) {
-          const char = currentLine[i];
-          if (inString) {
-            if (char === stringChar && currentLine[i - 1] !== "\\") {
-              inString = false;
-            }
-          } else if (char === '"' || char === "'" || char === "`") {
-            inString = true;
-            stringChar = char;
-          } else if (char === "{") {
-            openBracketCount++;
-          } else if (char === "}") {
-            openBracketCount--;
-          } else if (char === ">" && openBracketCount === 0) {
-            ended = true;
-            break;
-          }
-        }
-
-        if (ended) break;
-        scanIdx++;
-      }
+      const segment = this.accumulateTagSegment(lines, tagLineIdx);
 
       // Parse attributes from the accumulated segment
       if (tagName) {
-        const tagPattern = new RegExp(`<${tagName}\\b([\\s\\S]*?)(?:/\\s*)?>`, "i");
-        const match = segment.match(tagPattern);
-        if (match && match[1]) {
-          const attrSegment = match[1].trim();
-          const attrRegex = /([a-zA-Z0-9_-]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|{([\s\S]*?)}))?/g;
-          let attrMatch;
-          while ((attrMatch = attrRegex.exec(attrSegment)) !== null) {
-            const name = attrMatch[1];
-            const value = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "true";
-            if (!name.startsWith("_debug") && name !== "key") {
-              result.rawAttributes[name] = value.trim().replace(/\s+/g, " ");
-            }
-          }
-        }
+        this.parseAttributes(tagName, segment, result.rawAttributes);
       }
 
       // 3. Extract comments preceding the tag
-      let commentLines: string[] = [];
-      let inBlockComment = false;
-      let checkIdx = tagLineIdx - 1;
-
-      while (checkIdx >= 0 && checkIdx >= tagLineIdx - 15) {
-        const lineText = lines[checkIdx].trim();
-        
-        if (lineText.endsWith("*/")) {
-          inBlockComment = true;
-          if (lineText.startsWith("/*") || lineText.startsWith("/**")) {
-            commentLines.unshift(lineText);
-            inBlockComment = false;
-          } else {
-            commentLines.unshift(lineText);
-          }
-        } else if (inBlockComment) {
-          commentLines.unshift(lineText);
-          if (lineText.startsWith("/*") || lineText.startsWith("/**")) {
-            inBlockComment = false;
-          }
-        } else if (lineText.startsWith("//")) {
-          commentLines.unshift(lineText);
-        } else {
-          if (lineText !== "") {
-            break;
-          }
-        }
-        checkIdx--;
-      }
-
-      if (commentLines.length > 0) {
-        result.comments = commentLines.map(c => stripCommentMarkers(c)).filter(c => c !== "");
-      }
+      result.comments = this.parsePrecedingComments(lines, tagLineIdx);
 
       if (classList && classList.length > 0) {
         result.classOrigins = findClassOrigins(projectRoot, classList);

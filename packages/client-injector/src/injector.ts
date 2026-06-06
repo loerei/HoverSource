@@ -56,7 +56,8 @@ function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
 
     ws.on("message", (data) => {
       try {
-        const msg = JSON.parse(data.toString());
+        const dataStr = typeof data === "string" ? data : (data as Buffer).toString("utf8");
+        const msg = JSON.parse(dataStr);
         if (msg.id === 2) {
           if (msg.error) {
             reject(new Error(`CDP evaluation error: ${JSON.stringify(msg.error)}`));
@@ -133,13 +134,15 @@ export async function broadcastToTargets(port: number, scriptContent: string): P
             // Close after short delay to let message send
             setTimeout(() => ws.close(), 100);
           });
-          ws.on("error", () => {}); // ignore errors silently
+          ws.on("error", (err) => {
+            console.debug("[HoverSource] Ignored connection error:", err);
+          }); // ignore errors silently
         } catch (e) {
-          // ignore target connections errors
+          console.debug("[HoverSource] Ignored connection exception:", e);
         }
       }
     }
   } catch (err) {
-    // ignore fetch JSON errors if port closed
+    console.debug("[HoverSource] Ignored target query exception:", err);
   }
 }

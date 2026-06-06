@@ -173,6 +173,25 @@ HoverSource opens your app in your default browser automatically. Hover any elem
 hs --exec="npm run start"
 ```
 
+## Prerequisites for Electron Apps
+
+For `HoverSource` to inject the overlay into an Electron application, you **must** enable the Chrome DevTools Protocol (CDP) debugging interface in your application's main process.
+
+Add the following to your main process (e.g., `src/main.ts`) **before** the `app.whenReady()` or `app.on('ready')` event is fired:
+
+```typescript
+import { app } from 'electron';
+
+// Enable remote debugging port for HoverSource injection
+app.commandLine.appendSwitch('remote-debugging-port', '9222');
+
+app.whenReady().then(() => {
+  // ... your app setup
+});
+```
+
+Ensure the port specified (`9222`) matches the `--debug-port` flag passed to `hs` if you override the default.
+
 ---
 
 ### Optional flags

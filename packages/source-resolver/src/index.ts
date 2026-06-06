@@ -5,7 +5,7 @@ export * from "./adapters/types.js";
 export * from "./adapters/ReactFiberAdapter.js";
 
 export class SourceResolver {
-  private adapters: SourceAdapter[] = [];
+  private readonly adapters: SourceAdapter[] = [];
 
   constructor() {
     // Register default adapters

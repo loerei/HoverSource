@@ -13,26 +13,27 @@
     canResolve(element) {
       return !!this.getFiber(element);
     }
+    findComponentNameFromFiber(fiber) {
+      let owner = fiber._debugOwner;
+      while (owner) {
+        if (owner.type && typeof owner.type === "function") {
+          return owner.type.name || owner.type.displayName;
+        } else if (owner.type && typeof owner.type === "string") {
+          owner = owner._debugOwner;
+        } else if (owner.type && typeof owner.type === "object" && owner.type.render) {
+          return owner.type.render.name || owner.type.displayName;
+        } else {
+          owner = owner._debugOwner;
+        }
+      }
+      return void 0;
+    }
     resolve(element) {
       let fiber = this.getFiber(element);
       while (fiber) {
         const source = fiber._debugSource;
         if (source) {
-          let componentName = void 0;
-          let owner = fiber._debugOwner;
-          while (owner) {
-            if (owner.type && typeof owner.type === "function") {
-              componentName = owner.type.name || owner.type.displayName;
-              break;
-            } else if (owner.type && typeof owner.type === "string") {
-              owner = owner._debugOwner;
-            } else if (owner.type && typeof owner.type === "object" && owner.type.render) {
-              componentName = owner.type.render.name || owner.type.displayName;
-              break;
-            } else {
-              owner = owner._debugOwner;
-            }
-          }
+          const componentName = this.findComponentNameFromFiber(fiber);
           return {
             fileName: source.fileName,
             lineNumber: source.lineNumber,
@@ -79,7 +80,7 @@
     const parentEffects = [];
     const layoutConstraints = {};
     try {
-      const computed = window.getComputedStyle(element);
+      const computed = globalThis.getComputedStyle(element);
       if (computed.position && computed.position !== "static") {
         layoutConstraints["position"] = computed.position;
       }
@@ -105,73 +106,7 @@
       if (tagName === "body" || tagName === "html") {
         break;
       }
-      try {
-        const comp = window.getComputedStyle(current);
-        const classList = Array.from(current.classList);
-        const mask = comp.maskImage || comp.webkitMaskImage;
-        if (mask && mask !== "none") {
-          parentEffects.push({
-            tagName,
-            classList,
-            property: "mask-image",
-            value: mask
-          });
-        }
-        const backdropFilter = comp.backdropFilter || comp.webkitBackdropFilter;
-        if (backdropFilter && backdropFilter !== "none") {
-          parentEffects.push({
-            tagName,
-            classList,
-            property: "backdrop-filter",
-            value: backdropFilter
-          });
-        }
-        if (comp.filter && comp.filter !== "none") {
-          parentEffects.push({
-            tagName,
-            classList,
-            property: "filter",
-            value: comp.filter
-          });
-        }
-        if (comp.opacity && comp.opacity !== "1" && comp.opacity !== "") {
-          const opacityVal = parseFloat(comp.opacity);
-          if (opacityVal < 1) {
-            parentEffects.push({
-              tagName,
-              classList,
-              property: "opacity",
-              value: comp.opacity
-            });
-          }
-        }
-        if (comp.overflowY && (comp.overflowY === "auto" || comp.overflowY === "scroll" || comp.overflowY === "hidden")) {
-          parentEffects.push({
-            tagName,
-            classList,
-            property: "overflow-y",
-            value: comp.overflowY
-          });
-        }
-        if (comp.overflowX && (comp.overflowX === "auto" || comp.overflowX === "scroll" || comp.overflowX === "hidden")) {
-          parentEffects.push({
-            tagName,
-            classList,
-            property: "overflow-x",
-            value: comp.overflowX
-          });
-        }
-        if (comp.position && (comp.position === "sticky" || comp.position === "fixed")) {
-          parentEffects.push({
-            tagName,
-            classList,
-            property: "position",
-            value: comp.position
-          });
-        }
-      } catch (e) {
-        console.warn(`[HoverSource] Failed to compute styles for parent element <${tagName}>`, e);
-      }
+      inspectParentElementStyle(current, parentEffects);
       current = current.parentElement;
       depth++;
     }
@@ -179,6 +114,59 @@
       parentEffects,
       layoutConstraints
     };
+  }
+  function checkMaskEffect(comp, tagName, classList, parentEffects) {
+    const mask = comp.maskImage || comp.webkitMaskImage;
+    if (mask && mask !== "none") {
+      parentEffects.push({ tagName, classList, property: "mask-image", value: mask });
+    }
+  }
+  function checkBackdropEffect(comp, tagName, classList, parentEffects) {
+    const backdropFilter = comp.backdropFilter || comp.webkitBackdropFilter;
+    if (backdropFilter && backdropFilter !== "none") {
+      parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter });
+    }
+  }
+  function checkFilterEffect(comp, tagName, classList, parentEffects) {
+    if (comp.filter && comp.filter !== "none") {
+      parentEffects.push({ tagName, classList, property: "filter", value: comp.filter });
+    }
+  }
+  function checkOpacityEffect(comp, tagName, classList, parentEffects) {
+    if (comp.opacity && comp.opacity !== "1" && comp.opacity !== "") {
+      const opacityVal = Number.parseFloat(comp.opacity);
+      if (opacityVal < 1) {
+        parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity });
+      }
+    }
+  }
+  function checkOverflowEffect(comp, tagName, classList, parentEffects) {
+    if (comp.overflowY && (comp.overflowY === "auto" || comp.overflowY === "scroll" || comp.overflowY === "hidden")) {
+      parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY });
+    }
+    if (comp.overflowX && (comp.overflowX === "auto" || comp.overflowX === "scroll" || comp.overflowX === "hidden")) {
+      parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX });
+    }
+  }
+  function checkPositionEffect(comp, tagName, classList, parentEffects) {
+    if (comp.position && (comp.position === "sticky" || comp.position === "fixed")) {
+      parentEffects.push({ tagName, classList, property: "position", value: comp.position });
+    }
+  }
+  function inspectParentElementStyle(current, parentEffects) {
+    const tagName = current.tagName.toLowerCase();
+    try {
+      const comp = globalThis.getComputedStyle(current);
+      const classList = Array.from(current.classList);
+      checkMaskEffect(comp, tagName, classList, parentEffects);
+      checkBackdropEffect(comp, tagName, classList, parentEffects);
+      checkFilterEffect(comp, tagName, classList, parentEffects);
+      checkOpacityEffect(comp, tagName, classList, parentEffects);
+      checkOverflowEffect(comp, tagName, classList, parentEffects);
+      checkPositionEffect(comp, tagName, classList, parentEffects);
+    } catch (e) {
+      console.warn(`[HoverSource] Failed to compute styles for parent element <${tagName}>`, e);
+    }
   }
 
   // src/modes/InspectorAdapter.ts

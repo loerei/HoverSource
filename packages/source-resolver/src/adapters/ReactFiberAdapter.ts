@@ -16,6 +16,23 @@ export class ReactFiberAdapter implements SourceAdapter {
     return !!this.getFiber(element);
   }
 
+  private findComponentNameFromFiber(fiber: any): string | undefined {
+    let owner = fiber._debugOwner;
+    while (owner) {
+      if (owner.type && typeof owner.type === "function") {
+        return owner.type.name || owner.type.displayName;
+      } else if (owner.type && typeof owner.type === "string") {
+        // HTML tag name
+        owner = owner._debugOwner;
+      } else if (owner.type && typeof owner.type === "object" && owner.type.render) {
+        return owner.type.render.name || owner.type.displayName;
+      } else {
+        owner = owner._debugOwner;
+      }
+    }
+    return undefined;
+  }
+
   resolve(element: HTMLElement): SourceInfo | null {
     let fiber = this.getFiber(element);
     
@@ -25,22 +42,7 @@ export class ReactFiberAdapter implements SourceAdapter {
       const source = fiber._debugSource;
       if (source) {
         // Extract component name from owner
-        let componentName = undefined;
-        let owner = fiber._debugOwner;
-        while (owner) {
-          if (owner.type && typeof owner.type === "function") {
-            componentName = owner.type.name || owner.type.displayName;
-            break;
-          } else if (owner.type && typeof owner.type === "string") {
-            // HTML tag name
-            owner = owner._debugOwner;
-          } else if (owner.type && typeof owner.type === "object" && owner.type.render) {
-            componentName = owner.type.render.name || owner.type.displayName;
-            break;
-          } else {
-            owner = owner._debugOwner;
-          }
-        }
+        const componentName = this.findComponentNameFromFiber(fiber);
 
         return {
           fileName: source.fileName,

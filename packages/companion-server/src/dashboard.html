@@ -63,7 +63,7 @@
           <div class="space-y-4">
             <!-- Theme Selection -->
             <div>
-              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Overlay Theme</label>
+              <label for="theme" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Overlay Theme</label>
               <select id="theme" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="dark">Dark Theme</option>
                 <option value="light">Light Theme</option>
@@ -73,7 +73,7 @@
 
             <!-- Default Mode -->
             <div>
-              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Default Mode</label>
+              <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Default Mode</span>
               <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
                 <input type="checkbox" id="minimalModeByDefault" class="rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 h-4 w-4">
                 <div>
@@ -97,7 +97,7 @@
 
             <!-- Auto-Resolve Port Conflicts -->
             <div>
-              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Port Conflicts</label>
+              <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Port Conflicts</span>
               <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
                 <input type="checkbox" id="autoResolvePortConflicts" class="rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 h-4 w-4">
                 <div>
@@ -109,7 +109,7 @@
 
             <!-- Target IDE -->
             <div>
-              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Preferred Editor</label>
+              <label for="editor" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Preferred Editor</label>
               <select id="editor" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="vscode">VS Code (code -g)</option>
                 <option value="cursor">Cursor (cursor -g)</option>
@@ -311,7 +311,7 @@
             if (p === data.currentProject) return;
             const opt = document.createElement('option');
             opt.value = 'custom';
-            opt.setAttribute('data-path', p);
+            opt.dataset.path = p;
             const name = p.split('/').pop();
             opt.textContent = `Recent Project: ${name} (${p})`;
             select.appendChild(opt);
@@ -365,7 +365,7 @@
         
         if (target === 'custom') {
           const selectedOpt = select.options[select.selectedIndex];
-          const path = selectedOpt.getAttribute('data-path') || '';
+          const path = selectedOpt.dataset.path || '';
           url += `&customPath=${encodeURIComponent(path)}`;
         } else if (target === 'custom-input') {
           const path = document.getElementById('custom-path-input').value.trim();
@@ -406,7 +406,7 @@
       
       const modBtns = container.querySelectorAll('.modifier-btn');
       modBtns.forEach(btn => {
-        const mod = btn.getAttribute('data-modifier');
+        const mod = btn.dataset.modifier;
         const active = !!shortcutObj[`${mod}Key`];
         setBtnActive(btn, active);
         
@@ -553,7 +553,7 @@
 
       if (target === 'custom') {
         const selectedOpt = select.options[select.selectedIndex];
-        customPath = selectedOpt.getAttribute('data-path') || '';
+        customPath = selectedOpt.dataset.path || '';
       } else if (target === 'custom-input') {
         target = 'custom';
         customPath = document.getElementById('custom-path-input').value.trim();
@@ -593,7 +593,7 @@
     }
 
     // Init
-    initDashboard();
+    initDashboard().catch(e => console.error(e));
   </script>
 </body>
 </html>

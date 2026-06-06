@@ -7,6 +7,10 @@ export declare class InspectorAdapter implements InteractionMode {
     private minimalMode;
     private currentElement;
     private currentSourceInfo;
+    private layerStack;
+    private activeLayerIndex;
+    private layerPickerEnabled;
+    private layerScrollModifiers;
     activate(controller: OverlayController): void;
     deactivate(): void;
     onPointerOver(event: PointerEvent, target: HTMLElement): void;
@@ -14,6 +18,8 @@ export declare class InspectorAdapter implements InteractionMode {
     onShortcut(command: SemanticShortcut): void;
     onConfigUpdate(newConfig: any): void;
     onUIVisibilityChanged(visible: boolean): void;
+    private handleAltScroll;
+    private resolveAndShowLayer;
     private fetchBackgroundValidation;
     private renderTooltip;
     private copyMetadata;

@@ -274,7 +274,7 @@ function killProcess(pid: number, port: number): Promise<boolean> {
           try { fs.unlinkSync(tempFile); } catch {}
         }
 
-        const elevatorCmd = `powershell -Command "Start-Process cmd.exe -ArgumentList '/c taskkill /F /PID ${pid} > \\"${tempFile}\\" 2>&1' -Verb RunAs -WindowStyle Hidden"`;
+        const elevatorCmd = String.raw`powershell -Command "Start-Process cmd.exe -ArgumentList '/c taskkill /F /PID ${pid} > \"${tempFile}\" 2>&1' -Verb RunAs -WindowStyle Hidden"`;
         exec(elevatorCmd, (elevatorErr) => {
           if (elevatorErr) {
             console.error(`[HoverSource] UAC request canceled or failed: ${elevatorErr.message}`);
@@ -621,6 +621,9 @@ async function main() {
         console.log(`[HoverSource] Lost connection or target closed. Re-watching...`);
         isInjected = false;
       }
+      if (process.env.HOVERSOURCE_DEBUG) {
+        console.error("[HoverSource] Polling connection error:", err.message || err);
+      }
     }
   };
 
@@ -628,7 +631,9 @@ async function main() {
   setInterval(pollAndInject, 2500);
 }
 
-main().catch((err) => {
+try {
+  await main();
+} catch (err) {
   console.error("[HoverSource] CLI crashed:", err);
   process.exit(1);
-});
+}

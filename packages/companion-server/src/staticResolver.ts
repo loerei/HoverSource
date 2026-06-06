@@ -143,30 +143,58 @@ export class StaticContextResolver {
     return segment;
   }
 
-  private processSingleAttribute(attrMatch: RegExpExecArray, rawAttributes: Record<string, string>): void {
-    const name = attrMatch[1];
-    let value = attrMatch[2] ?? "true";
-    if (value.length >= 2) {
-      const first = value[0];
-      const last = value.at(-1);
-      if ((first === '"' && last === '"') || (first === "'" && last === "'") || (first === "{" && last === "}")) {
-        value = value.slice(1, -1);
-      }
+  private extractAttributeValue(remaining: string): { value: string; consumedLength: number } | null {
+    if (!remaining.startsWith("=")) {
+      return null;
     }
-    if (!name.startsWith("_debug") && name !== "key") {
-      rawAttributes[name] = value.trim().replaceAll(/\s+/g, " ");
+    const target = remaining.slice(1).trim();
+    const prefixLength = remaining.length - target.length;
+    
+    let valMatch = null;
+    if (target.startsWith('"')) {
+      valMatch = /^"([^"]*)"/.exec(target);
+    } else if (target.startsWith("'")) {
+      valMatch = /^'([^']*)'/.exec(target);
+    } else if (target.startsWith("{")) {
+      valMatch = /^{([^}]+)}/.exec(target);
+    } else {
+      valMatch = /^([^\s>]+)/.exec(target);
     }
+
+    if (valMatch) {
+      return {
+        value: valMatch[1] ?? valMatch[0],
+        consumedLength: prefixLength + valMatch[0].length,
+      };
+    }
+    return {
+      value: "true",
+      consumedLength: prefixLength,
+    };
   }
 
   private parseAttributes(tagName: string, segment: string, rawAttributes: Record<string, string>): void {
     const tagPattern = new RegExp(String.raw`<${tagName}\b([\s\S]*?)(?:/\s*)?>`, "i");
     const match = tagPattern.exec(segment);
     if (match?.[1]) {
-      const attrSegment = match[1].trim();
-      const attrRegex = /([\w-]+)(?:\s*=\s*("[^"]*"|'[^']*'|{[^}]+}))?/g;
-      let attrMatch;
-      while ((attrMatch = attrRegex.exec(attrSegment)) !== null) {
-        this.processSingleAttribute(attrMatch, rawAttributes);
+      let remaining = match[1].trim();
+      while (remaining.length > 0) {
+        remaining = remaining.trim();
+        const keyMatch = /^([\w-]+)/.exec(remaining);
+        if (!keyMatch) break;
+        const name = keyMatch[1];
+        remaining = remaining.slice(name.length).trim();
+        
+        let value = "true";
+        const valResult = this.extractAttributeValue(remaining);
+        if (valResult) {
+          value = valResult.value;
+          remaining = remaining.slice(valResult.consumedLength);
+        }
+        
+        if (!name.startsWith("_debug") && name !== "key") {
+          rawAttributes[name] = value.trim().replaceAll(/\s+/g, " ");
+        }
       }
     }
   }

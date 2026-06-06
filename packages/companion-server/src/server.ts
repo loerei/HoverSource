@@ -138,7 +138,7 @@ export function loadMergedConfig(projectRoot: string): HoverSourceConfig {
 
 // Escape special regex characters to prevent ReDoS
 function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+  return str.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 // Resolve a file param (possibly relative) to an absolute path
@@ -338,32 +338,37 @@ function handleOpenDashboard(req: http.IncomingMessage, res: http.ServerResponse
   });
 }
 
+function readConfigFromFile(filePath: string): any {
+  if (fs.existsSync(filePath)) {
+    try {
+      return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    } catch (e) {
+      console.warn(`[HoverSource] Failed to parse config file at ${filePath}:`, e);
+    }
+  }
+  return null;
+}
+
 function getConfigForTarget(queryTarget: string | null, customPath: string | null, defaultRoot: string): HoverSourceConfig {
   let targetConfig = { ...DEFAULT_CONFIG };
   if (queryTarget === "global") {
     const globalPath = getGlobalConfigPath();
-    if (fs.existsSync(globalPath)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
-        if (raw.recentProjects) delete raw.recentProjects;
-        targetConfig = mergeDeep(targetConfig, raw);
-      } catch {}
+    const raw = readConfigFromFile(globalPath);
+    if (raw) {
+      if (raw.recentProjects) delete raw.recentProjects;
+      targetConfig = mergeDeep(targetConfig, raw);
     }
   } else if (queryTarget === "local") {
     const localPath = getLocalConfigPath(defaultRoot);
-    if (fs.existsSync(localPath)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(localPath, "utf-8"));
-        targetConfig = mergeDeep(targetConfig, raw);
-      } catch {}
+    const raw = readConfigFromFile(localPath);
+    if (raw) {
+      targetConfig = mergeDeep(targetConfig, raw);
     }
   } else if (queryTarget === "custom" && customPath) {
     const customPathConfig = getLocalConfigPath(customPath);
-    if (fs.existsSync(customPathConfig)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(customPathConfig, "utf-8"));
-        targetConfig = mergeDeep(targetConfig, raw);
-      } catch {}
+    const raw = readConfigFromFile(customPathConfig);
+    if (raw) {
+      targetConfig = mergeDeep(targetConfig, raw);
     }
   } else {
     targetConfig = loadMergedConfig(defaultRoot);

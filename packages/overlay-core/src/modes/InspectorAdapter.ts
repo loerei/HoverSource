@@ -195,10 +195,34 @@ export class InspectorAdapter implements InteractionMode {
         current = current.parentElement;
       }
 
+      const tagName = element.tagName.toLowerCase();
+      const classList = Array.from(element.classList).filter((c: string) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+      const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+      const elementSelector = `${tagName}${classStr}`;
+      
+      let selectorHtml = `<span class="hoversource-value">${elementSelector}</span>`;
+      if (info.staticMetadata?.classOrigins) {
+        const originParts = [];
+        for (const cls of classList) {
+          const origin = info.staticMetadata.classOrigins[cls];
+          if (origin) {
+            const fileBase = origin.file.split("/").pop().split("\\").pop();
+            originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`);
+          }
+        }
+        if (originParts.length > 0) {
+          selectorHtml += ` ➔ ${originParts.join(" ")}`;
+        }
+      }
+
       html = `
         <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
           <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
           <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${info.framework}</span>
+        </div>
+        <div class="hoversource-section">
+          <span class="hoversource-label">Element: </span>
+          ${selectorHtml}
         </div>
         <div class="hoversource-section">
           <span class="hoversource-label">File: </span>
@@ -350,9 +374,29 @@ export class InspectorAdapter implements InteractionMode {
       }
     };
 
+    const tagName = element.tagName.toLowerCase();
+    const classList = Array.from(element.classList).filter((c: string) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+    const elementSelector = `${tagName}${classStr}`;
+
+    let selectorLabel = `\`${elementSelector}\``;
+    if (info.staticMetadata?.classOrigins) {
+      const originList: string[] = [];
+      for (const cls of classList) {
+        const origin = info.staticMetadata.classOrigins[cls];
+        if (origin) {
+          originList.push(`[Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`);
+        }
+      }
+      if (originList.length > 0) {
+        selectorLabel += ` ➔ ${originList.join(", ")}`;
+      }
+    }
+
     let text = `
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
+* **Element**: ${selectorLabel}
 * **File Path**: \`${data.file}\` (Line: ${data.line}, Column: ${data.column})
 * **Framework**: ${data.framework}
 * **Dimensions**: ${data.dimensions}

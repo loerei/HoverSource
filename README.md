@@ -13,6 +13,7 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 - **Toggle Overlay (`Alt + H`)**: Show or hide the developer overlay bounding box and floating spec card.
 - **Deep-linking (Click filename)**: Instantly opens the file in your preferred editor (VS Code or Cursor) at the exact line number.
 - **Source Line Correction**: Silently checks and corrects compiler-shifted line numbers in the background.
+- **Element Selector & CSS Source Location**: Captures the exact HTML tag and classes of the hovered element, along with the specific line and file of their CSS definition.
 
 ## Clipboard Output
 
@@ -23,6 +24,7 @@ When you press `Alt + C` on any hovered element, HoverSource copies a Markdown b
 ```markdown
 ### HoverSource Component Metadata
 * **Component**: `ChatThreadView`
+* **Element**: `button.persona-card__action-button` ➔ [Source: `workspace.css` (Line: 60, Column: 1)]
 * **File Path**: `D:/Projects/MyApp/src/features/chat/ChatThreadView.tsx` (Line: 659, Column: 5)
 * **Framework**: React
 * **Dimensions**: 1485x1044

@@ -343,15 +343,37 @@
           if (elInfo && elInfo.componentName) {
             stack.push(elInfo.componentName);
           } else {
-            const classStr = current.className && typeof current.className === "string" ? `.${Array.from(current.classList).join(".")}` : "";
-            stack.push(`${current.tagName.toLowerCase()}${classStr}`);
+            const classStr2 = current.className && typeof current.className === "string" ? `.${Array.from(current.classList).join(".")}` : "";
+            stack.push(`${current.tagName.toLowerCase()}${classStr2}`);
           }
           current = current.parentElement;
+        }
+        const tagName = element.tagName.toLowerCase();
+        const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+        const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+        const elementSelector = `${tagName}${classStr}`;
+        let selectorHtml = `<span class="hoversource-value">${elementSelector}</span>`;
+        if (info.staticMetadata?.classOrigins) {
+          const originParts = [];
+          for (const cls of classList) {
+            const origin = info.staticMetadata.classOrigins[cls];
+            if (origin) {
+              const fileBase = origin.file.split("/").pop().split("\\").pop();
+              originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`);
+            }
+          }
+          if (originParts.length > 0) {
+            selectorHtml += ` \u2794 ${originParts.join(" ")}`;
+          }
         }
         html = `
         <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
           <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
           <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${info.framework}</span>
+        </div>
+        <div class="hoversource-section">
+          <span class="hoversource-label">Element: </span>
+          ${selectorHtml}
         </div>
         <div class="hoversource-section">
           <span class="hoversource-label">File: </span>
@@ -403,7 +425,7 @@
         }
         if (info.visualContext && info.visualContext.parentEffects.length > 0) {
           const effectsHtml = info.visualContext.parentEffects.map((fx) => {
-            const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+            const classStr2 = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
             let originLabel = "";
             if (info.staticMetadata?.classOrigins) {
               for (const cls of fx.classList) {
@@ -415,7 +437,7 @@
                 }
               }
             }
-            return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
+            return `<div class="hoversource-stack-item">${fx.tagName}${classStr2}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
           }).join("");
           html += `
           <div class="hoversource-section">
@@ -485,9 +507,27 @@
           flexDirection: computed.flexDirection
         }
       };
+      const tagName = element.tagName.toLowerCase();
+      const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+      const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+      const elementSelector = `${tagName}${classStr}`;
+      let selectorLabel = `\`${elementSelector}\``;
+      if (info.staticMetadata?.classOrigins) {
+        const originList = [];
+        for (const cls of classList) {
+          const origin = info.staticMetadata.classOrigins[cls];
+          if (origin) {
+            originList.push(`[Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`);
+          }
+        }
+        if (originList.length > 0) {
+          selectorLabel += ` \u2794 ${originList.join(", ")}`;
+        }
+      }
       let text = `
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
+* **Element**: ${selectorLabel}
 * **File Path**: \`${data.file}\` (Line: ${data.line}, Column: ${data.column})
 * **Framework**: ${data.framework}
 * **Dimensions**: ${data.dimensions}
@@ -500,7 +540,7 @@
     `.trim();
       if (info.visualContext && info.visualContext.parentEffects.length > 0) {
         const parentList = info.visualContext.parentEffects.map((fx) => {
-          const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+          const classStr2 = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
           let originLabel = "";
           if (info.staticMetadata?.classOrigins) {
             for (const cls of fx.classList) {
@@ -511,7 +551,7 @@
               }
             }
           }
-          return `  - \`${fx.tagName}${classStr}\` \u2794 \`${fx.property}: ${fx.value}\`${originLabel}`;
+          return `  - \`${fx.tagName}${classStr2}\` \u2794 \`${fx.property}: ${fx.value}\`${originLabel}`;
         }).join("\n");
         text += `
 * **Parent Styles**:

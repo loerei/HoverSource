@@ -21,6 +21,13 @@ export declare class InspectorAdapter implements InteractionMode {
     private handleAltScroll;
     private resolveAndShowLayer;
     private fetchBackgroundValidation;
+    private getShortcutLabel;
+    private renderMinimalTooltip;
+    private renderBasicStats;
+    private renderVisualDetails;
+    private renderParentEffects;
+    private renderStaticMetadata;
+    private renderDetailedTooltip;
     private renderTooltip;
     private copyMetadata;
 }

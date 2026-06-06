@@ -1,7 +1,7 @@
 import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 function getCompanionPort() {
-    return window.__HOVERSOURCE_PORT__ ?? 3000;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 3000;
 }
 class OverlayEngine {
     config = null;
@@ -14,8 +14,11 @@ class OverlayEngine {
     inspectorMode = new InspectorAdapter();
     designMode = new DesignAdapter();
     activeMode = this.inspectorMode;
-    constructor() {
-        this.init();
+    constructor() { }
+    static async launch() {
+        const engine = new OverlayEngine();
+        await engine.init();
+        return engine;
     }
     async init() {
         await this.loadConfig();
@@ -23,10 +26,12 @@ class OverlayEngine {
         this.createUI();
         this.initShortcuts();
         this.activeMode.activate(this);
-        window.addEventListener("pointerover", this.handlePointerOver, { capture: true });
-        window.addEventListener("pointermove", this.handlePointerMove, { capture: true });
-        window.addEventListener("message", (e) => {
-            if (e.data && e.data.type === "HOVERSOURCE_CONFIG_CHANGED") {
+        globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
+        globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
+        globalThis.addEventListener("message", (e) => {
+            if (e.origin === globalThis.location.origin &&
+                e.source === globalThis &&
+                e.data?.type === "HOVERSOURCE_CONFIG_CHANGED") {
                 this.handleConfigUpdate(e.data.config);
             }
         });
@@ -65,7 +70,7 @@ class OverlayEngine {
     }
     initStyles() {
         const isLightTheme = this.config?.theme === "light" ||
-            (this.config?.theme === "system" && !window.matchMedia("(prefers-color-scheme: dark)").matches);
+            (this.config?.theme === "system" && !globalThis.matchMedia("(prefers-color-scheme: dark)").matches);
         const style = document.createElement("style");
         style.id = "hoversource-styles";
         style.innerHTML = `
@@ -227,44 +232,48 @@ class OverlayEngine {
         document.body.appendChild(this.container);
     }
     initShortcuts() {
-        window.addEventListener("keydown", (e) => {
-            const shortcuts = this.config?.shortcuts;
-            if (!shortcuts)
-                return;
-            if (this.matchShortcut(e, shortcuts.toggleUI)) {
-                e.preventDefault();
-                this.uiVisible = !this.uiVisible;
-                if (this.container) {
-                    this.container.style.display = this.uiVisible ? "block" : "none";
-                }
-                console.log(`[HoverSource] UI Tooltip Visibility: ${this.uiVisible ? "visible" : "hidden"} (Background tracking active)`);
-                this.activeMode.onUIVisibilityChanged(this.uiVisible);
-            }
-            if (this.matchShortcut(e, shortcuts.openDashboard) && !this.isTyping(e)) {
-                e.preventDefault();
-                console.log("[HoverSource] Shortcut matched: openDashboard");
-                this.openDashboardInBrowser();
-            }
-            // Hardcoded fallback for toggleMode if not in config
-            const toggleModeShortcut = shortcuts.toggleMode || { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
-            if (this.matchShortcut(e, toggleModeShortcut) && !this.isTyping(e)) {
-                e.preventDefault();
-                this.switchMode();
-            }
-            if (this.matchShortcut(e, shortcuts.toggleMinimal) && !this.isTyping(e)) {
-                e.preventDefault();
-                this.activeMode.onShortcut('toggleMinimal');
-            }
-            if (this.matchShortcut(e, shortcuts.toggleFreeze) && !this.isTyping(e)) {
-                e.preventDefault();
-                this.activeMode.onShortcut('toggleFreeze');
-            }
-            if (this.matchShortcut(e, shortcuts.copyMetadata) && !this.isTyping(e)) {
-                e.preventDefault();
-                this.activeMode.onShortcut('copyMetadata');
-            }
-        });
+        globalThis.addEventListener("keydown", this.handleKeyDown);
     }
+    handleKeyDown = (e) => {
+        const shortcuts = this.config?.shortcuts;
+        if (!shortcuts)
+            return;
+        if (this.matchShortcut(e, shortcuts.toggleUI)) {
+            e.preventDefault();
+            this.uiVisible = !this.uiVisible;
+            if (this.container) {
+                this.container.style.display = this.uiVisible ? "block" : "none";
+            }
+            console.log(`[HoverSource] UI Tooltip Visibility: ${this.uiVisible ? "visible" : "hidden"} (Background tracking active)`);
+            this.activeMode.onUIVisibilityChanged(this.uiVisible);
+            return;
+        }
+        if (this.isTyping(e))
+            return;
+        // Hardcoded fallback for toggleMode if not in config
+        const toggleModeShortcut = shortcuts.toggleMode || { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
+        if (this.matchShortcut(e, shortcuts.openDashboard)) {
+            e.preventDefault();
+            console.log("[HoverSource] Shortcut matched: openDashboard");
+            this.openDashboardInBrowser();
+        }
+        else if (this.matchShortcut(e, toggleModeShortcut)) {
+            e.preventDefault();
+            this.switchMode();
+        }
+        else if (this.matchShortcut(e, shortcuts.toggleMinimal)) {
+            e.preventDefault();
+            this.activeMode.onShortcut('toggleMinimal');
+        }
+        else if (this.matchShortcut(e, shortcuts.toggleFreeze)) {
+            e.preventDefault();
+            this.activeMode.onShortcut('toggleFreeze');
+        }
+        else if (this.matchShortcut(e, shortcuts.copyMetadata)) {
+            e.preventDefault();
+            this.activeMode.onShortcut('copyMetadata');
+        }
+    };
     switchMode() {
         this.activeMode.deactivate();
         this.activeMode = this.activeMode === this.inspectorMode ? this.designMode : this.inspectorMode;
@@ -286,7 +295,7 @@ class OverlayEngine {
         });
     }
     matchShortcut(e, shortcut) {
-        if (!shortcut || !shortcut.key)
+        if (!shortcut?.key)
             return false;
         if (!!e.altKey !== !!shortcut.altKey || !!e.ctrlKey !== !!shortcut.ctrlKey || !!e.shiftKey !== !!shortcut.shiftKey)
             return false;
@@ -327,7 +336,7 @@ class OverlayEngine {
         }
     };
     blockEvent = (e) => {
-        if (this.container && this.container.contains(e.target))
+        if (this.container?.contains(e.target))
             return;
         e.stopImmediatePropagation();
         e.preventDefault();
@@ -339,8 +348,8 @@ class OverlayEngine {
         const rect = target.getBoundingClientRect();
         this.outlineBox.style.width = `${rect.width}px`;
         this.outlineBox.style.height = `${rect.height}px`;
-        this.outlineBox.style.left = `${rect.left + window.scrollX}px`;
-        this.outlineBox.style.top = `${rect.top + window.scrollY}px`;
+        this.outlineBox.style.left = `${rect.left + globalThis.scrollX}px`;
+        this.outlineBox.style.top = `${rect.top + globalThis.scrollY}px`;
         this.outlineBox.style.display = "block";
         this.outlineBox.style.borderColor = isFrozen ? "#f59e0b" : "#3b82f6";
         this.outlineBox.style.backgroundColor = isFrozen ? "rgba(245, 158, 11, 0.15)" : "rgba(59, 130, 246, 0.1)";
@@ -386,8 +395,8 @@ class OverlayEngine {
         const maxY = Math.max(0, window.innerHeight - boxRect.height);
         y = Math.max(0, Math.min(y, maxY));
         this.tooltipBox.classList.toggle('hs-tooltip-above', isAbove);
-        this.tooltipBox.style.left = `${x + window.scrollX}px`;
-        this.tooltipBox.style.top = `${y + window.scrollY}px`;
+        this.tooltipBox.style.left = `${x + globalThis.scrollX}px`;
+        this.tooltipBox.style.top = `${y + globalThis.scrollY}px`;
     }
     clear() {
         if (this.outlineBox)
@@ -404,8 +413,7 @@ class OverlayEngine {
                 const originalText = hint.innerHTML;
                 hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
                 setTimeout(() => {
-                    if (hint)
-                        hint.innerHTML = originalText || "";
+                    hint.innerHTML = originalText || "";
                 }, 1500);
             }
         }
@@ -420,7 +428,7 @@ class OverlayEngine {
             "mousemove", "mouseover"
         ];
         if (this.isFrozen) {
-            events.forEach(event => window.addEventListener(event, this.blockEvent, { capture: true }));
+            events.forEach(event => globalThis.addEventListener(event, this.blockEvent, { capture: true }));
             this.freezeStyle = document.createElement("style");
             this.freezeStyle.id = "hoversource-freeze-styles";
             this.freezeStyle.innerHTML = `
@@ -432,7 +440,7 @@ class OverlayEngine {
             document.head.appendChild(this.freezeStyle);
         }
         else {
-            events.forEach(event => window.removeEventListener(event, this.blockEvent, { capture: true }));
+            events.forEach(event => globalThis.removeEventListener(event, this.blockEvent, { capture: true }));
             if (this.freezeStyle) {
                 this.freezeStyle.remove();
                 this.freezeStyle = null;
@@ -440,7 +448,7 @@ class OverlayEngine {
         }
     }
 }
-window.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
+globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
     let url = `http://127.0.0.1:${getCompanionPort()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
         url += `&tagName=${encodeURIComponent(tagName)}`;
@@ -458,8 +466,8 @@ window.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
     })
         .catch(e => console.error("[HoverSource] Failed to reach companion server:", e));
 };
-if (!window.__HoverSourceInitialized__) {
-    window.__HoverSourceInitialized__ = true;
-    new OverlayEngine();
+if (!globalThis.__HoverSourceInitialized__) {
+    globalThis.__HoverSourceInitialized__ = true;
+    OverlayEngine.launch();
     console.log("[HoverSource] Overlay injected.");
 }

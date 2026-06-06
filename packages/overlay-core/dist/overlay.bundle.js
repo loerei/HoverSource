@@ -252,14 +252,14 @@
       }
     }
     onShortcut(command) {
-      if (command === "toggleMinimal") {
-        this.minimalMode = !this.minimalMode;
-        console.log(`[HoverSource] Minimalist Mode: ${this.minimalMode ? "enabled" : "disabled"}`);
-        this.renderTooltip({ clientX: 0, clientY: 0 });
-      } else if (command === "toggleFreeze") {
+      if (command === "toggleFreeze") {
         this.isFrozen = !this.isFrozen;
         this.controller.setFreezeMode(this.isFrozen);
-        console.log(`[HoverSource] Freeze Mode: ${this.isFrozen ? "enabled" : "disabled"}`);
+        console.log(`[HoverSource] Freeze: ${this.isFrozen}`);
+        this.renderTooltip({ clientX: 0, clientY: 0 });
+      } else if (command === "toggleMinimal") {
+        this.minimalMode = !this.minimalMode;
+        console.log(`[HoverSource] Minimal Mode: ${this.minimalMode}`);
         this.renderTooltip({ clientX: 0, clientY: 0 });
       } else if (command === "copyMetadata") {
         this.copyMetadata();
@@ -281,7 +281,6 @@
     }
     onUIVisibilityChanged(visible) {
     }
-    // --- Layer Picker helpers ---
     handleAltScroll = (e) => {
       const m = this.layerScrollModifiers;
       if (!!e.altKey !== !!m.altKey || !!e.shiftKey !== !!m.shiftKey || !!e.ctrlKey !== !!m.ctrlKey)
@@ -326,25 +325,24 @@
     }
     fetchBackgroundValidation(info, target, e) {
       const validateUrl = `http://127.0.0.1:${getCompanionPort()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
-      fetch(validateUrl).then((r) => r.json()).then((data) => {
-        let line = info.lineNumber || 1;
-        let col = info.columnNumber || 1;
-        if (data && data.corrected) {
-          line = data.corrected.line;
-          col = data.corrected.column;
-        }
+      fetch(validateUrl).then((res) => res.json()).then((data) => {
         if (this.currentElement === target) {
+          let line = info.lineNumber || 1;
+          let col = info.columnNumber || 1;
+          if (data && data.corrected) {
+            line = data.corrected.line;
+            col = data.corrected.column;
+          }
           info.lineNumber = line;
           info.columnNumber = col;
-          this.currentSourceInfo = info;
-          if (this.controller.isUIVisible()) {
-            this.renderTooltip(e);
-          }
-          const classesToResolve = new Set(info.classList || []);
+          const classesToResolve = /* @__PURE__ */ new Set();
           if (info.visualContext) {
             info.visualContext.parentEffects.forEach((fx) => {
               fx.classList.forEach((cls) => classesToResolve.add(cls));
             });
+          }
+          if (info.classList) {
+            info.classList.forEach((cls) => classesToResolve.add(cls));
           }
           const classListParam = Array.from(classesToResolve).join(",");
           const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
@@ -360,6 +358,208 @@
         }
       }).catch((err) => console.warn("[HoverSource] Background line validation failed:", err));
     }
+    getShortcutLabel(shortcut) {
+      if (!shortcut)
+        return "";
+      const parts = [];
+      if (shortcut.ctrlKey)
+        parts.push("Ctrl");
+      if (shortcut.altKey)
+        parts.push("Alt");
+      if (shortcut.shiftKey)
+        parts.push("Shift");
+      parts.push(shortcut.key.toUpperCase());
+      return parts.join("+");
+    }
+    renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel) {
+      return `
+      <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
+        <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
+        <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${info.framework}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">File: </span>
+        <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
+          ${info.fileName.split("/").pop().split("\\").pop()}:${info.lineNumber || 1}
+        </span>
+      </div>
+      <div class="hoversource-shortcut-hint">
+        Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config
+      </div>
+    `;
+    }
+    renderBasicStats(element, info, computed) {
+      const width = element.offsetWidth || element.clientWidth;
+      const height = element.offsetHeight || element.clientHeight;
+      const color = computed.color;
+      const bgColor = computed.backgroundColor;
+      const tagName = element.tagName.toLowerCase();
+      const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+      const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+      const elementSelector = `${tagName}${classStr}`;
+      let selectorHtml = `<span class="hoversource-value">${elementSelector}</span>`;
+      if (info.staticMetadata?.classOrigins) {
+        const originParts = [];
+        for (const cls of classList) {
+          const origin = info.staticMetadata.classOrigins[cls];
+          if (origin) {
+            const fileBase = origin.file.split("/").pop().split("\\").pop();
+            originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`);
+          }
+        }
+        if (originParts.length > 0) {
+          selectorHtml += ` \u2794 ${originParts.join(" ")}`;
+        }
+      }
+      return `
+      <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
+        <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
+        <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${info.framework}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Element: </span>
+        ${selectorHtml}
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">File: </span>
+        <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
+          ${info.fileName.split("/").pop().split("\\").pop()}:${info.lineNumber || 1}
+        </span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Path: </span>
+        <span class="hoversource-value">${info.fileName}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Size: </span>
+        <span class="hoversource-value">${width}px \xD7 ${height}px</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Color: </span>
+        <span class="hoversource-value">${color}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Background: </span>
+        <span class="hoversource-value">${bgColor}</span>
+      </div>
+    `;
+    }
+    renderVisualDetails(shadow, animation, info) {
+      let html = "";
+      if (shadow && shadow !== "none") {
+        html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Shadow: </span>
+          <span class="hoversource-value">${shadow}</span>
+        </div>
+      `;
+      }
+      if (animation) {
+        html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Animation: </span>
+          <span class="hoversource-value">${animation}</span>
+        </div>
+      `;
+      }
+      if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
+        const constraints = Object.entries(info.visualContext.layoutConstraints).map(([prop, val]) => `${prop}: ${val}`).join(", ");
+        html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Layout: </span>
+          <span class="hoversource-value">${constraints}</span>
+        </div>
+      `;
+      }
+      return html;
+    }
+    renderParentEffects(info) {
+      if (!info.visualContext || info.visualContext.parentEffects.length === 0) {
+        return "";
+      }
+      const effectsHtml = info.visualContext.parentEffects.map((fx) => {
+        const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+        let originLabel = "";
+        if (info.staticMetadata?.classOrigins) {
+          for (const cls of fx.classList) {
+            const origin = info.staticMetadata.classOrigins[cls];
+            if (origin) {
+              const fileBase = origin.file.split("/").pop();
+              originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
+              break;
+            }
+          }
+        }
+        return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
+      }).join("");
+      return `
+      <div class="hoversource-section">
+        <span class="hoversource-label">Parent Styles: </span>
+        <div class="hoversource-stack">
+          ${effectsHtml}
+        </div>
+      </div>
+    `;
+    }
+    renderStaticMetadata(info) {
+      if (!info.staticMetadata)
+        return "";
+      let html = "";
+      if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+        const commentsHtml = info.staticMetadata.comments.map((c) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${c}</div>`).join("");
+        html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Source Comments: </span>
+          <div class="hoversource-stack">
+            ${commentsHtml}
+          </div>
+        </div>
+      `;
+      }
+      if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+        const attrs = Object.entries(info.staticMetadata.rawAttributes).map(([k, v]) => `${k}="${v}"`).join(" ");
+        html += `
+        <div class="hoversource-section">
+          <span class="hoversource-label">Source Attributes: </span>
+          <span class="hoversource-value">${attrs}</span>
+        </div>
+      `;
+      }
+      return html;
+    }
+    renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel) {
+      const computed = window.getComputedStyle(element);
+      const shadow = computed.boxShadow;
+      const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
+      const stack = [];
+      let current = element;
+      while (current && stack.length < 5) {
+        const elInfo = this.resolver.resolve(current);
+        if (elInfo?.componentName) {
+          stack.push(elInfo.componentName);
+        } else {
+          const classStr = current.className && typeof current.className === "string" ? `.${Array.from(current.classList).join(".")}` : "";
+          stack.push(`${current.tagName.toLowerCase()}${classStr}`);
+        }
+        current = current.parentElement;
+      }
+      let html = this.renderBasicStats(element, info, computed);
+      html += this.renderVisualDetails(shadow, animation, info);
+      html += this.renderParentEffects(info);
+      html += this.renderStaticMetadata(info);
+      html += `
+      <div class="hoversource-section">
+        <span class="hoversource-label">Stack: </span>
+        <div class="hoversource-stack">
+          ${stack.map((item) => `<div class="hoversource-stack-item">${item}</div>`).join("")}
+        </div>
+      </div>
+      <div class="hoversource-shortcut-hint">
+        Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config
+      </div>
+    `;
+      return html;
+    }
     renderTooltip(e) {
       if (!this.currentElement || !this.currentSourceInfo)
         return;
@@ -367,23 +567,10 @@
       const info = this.currentSourceInfo;
       const config = this.controller.getConfig();
       const shortcuts = config?.shortcuts;
-      const getShortcutLabel = (shortcut) => {
-        if (!shortcut)
-          return "";
-        const parts = [];
-        if (shortcut.ctrlKey)
-          parts.push("Ctrl");
-        if (shortcut.altKey)
-          parts.push("Alt");
-        if (shortcut.shiftKey)
-          parts.push("Shift");
-        parts.push(shortcut.key.toUpperCase());
-        return parts.join("+");
-      };
-      const copyLabel = getShortcutLabel(shortcuts?.copyMetadata) || "[C]";
-      const minimalLabel = getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
-      const freezeLabel = getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
-      const dbLabel = getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
+      const copyLabel = this.getShortcutLabel(shortcuts?.copyMetadata) || "[C]";
+      const minimalLabel = this.getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
+      const freezeLabel = this.getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
+      const dbLabel = this.getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
       const topLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M296.5 69.2C311.4 62.3 328.6 62.3 343.5 69.2L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L296.5 69.2z" /></svg>`;
       const chevronLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M112.1 154.4L276.4 230.3C304.1 243.1 336 243.1 363.7 230.3L528 154.4L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L112.1 154.4z" /></svg>`;
       const layerDots = this.layerStack.map((el, i) => {
@@ -409,177 +596,7 @@
       })();
       const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
       const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
-      let innerHtml = "";
-      if (this.minimalMode) {
-        innerHtml = `
-        <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
-          <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
-          <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${info.framework}</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">File: </span>
-          <span class="hoversource-link" onclick="window.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-            ${info.fileName.split("/").pop().split("\\").pop()}:${info.lineNumber || 1}
-          </span>
-        </div>
-        <div class="hoversource-shortcut-hint">
-          Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config
-        </div>
-      `;
-      } else {
-        const computed = window.getComputedStyle(element);
-        const width = element.offsetWidth || element.clientWidth;
-        const height = element.offsetHeight || element.clientHeight;
-        const color = computed.color;
-        const bgColor = computed.backgroundColor;
-        const shadow = computed.boxShadow;
-        const animation = computed.animationName !== "none" ? `${computed.animationName} ${computed.animationDuration}` : null;
-        const stack = [];
-        let current = element;
-        while (current && stack.length < 5) {
-          const elInfo = this.resolver.resolve(current);
-          if (elInfo && elInfo.componentName) {
-            stack.push(elInfo.componentName);
-          } else {
-            const classStr2 = current.className && typeof current.className === "string" ? `.${Array.from(current.classList).join(".")}` : "";
-            stack.push(`${current.tagName.toLowerCase()}${classStr2}`);
-          }
-          current = current.parentElement;
-        }
-        const tagName = element.tagName.toLowerCase();
-        const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-        const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
-        const elementSelector = `${tagName}${classStr}`;
-        let selectorHtml = `<span class="hoversource-value">${elementSelector}</span>`;
-        if (info.staticMetadata?.classOrigins) {
-          const originParts = [];
-          for (const cls of classList) {
-            const origin = info.staticMetadata.classOrigins[cls];
-            if (origin) {
-              const fileBase = origin.file.split("/").pop().split("\\").pop();
-              originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`);
-            }
-          }
-          if (originParts.length > 0) {
-            selectorHtml += ` \u2794 ${originParts.join(" ")}`;
-          }
-        }
-        innerHtml = `
-        <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
-          <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
-          <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${info.framework}</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Element: </span>
-          ${selectorHtml}
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">File: </span>
-          <span class="hoversource-link" onclick="window.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-            ${info.fileName.split("/").pop().split("\\").pop()}:${info.lineNumber || 1}
-          </span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Path: </span>
-          <span class="hoversource-value">${info.fileName}</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Size: </span>
-          <span class="hoversource-value">${width}px \xD7 ${height}px</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Color: </span>
-          <span class="hoversource-value">${color}</span>
-        </div>
-        <div class="hoversource-section">
-          <span class="hoversource-label">Background: </span>
-          <span class="hoversource-value">${bgColor}</span>
-        </div>
-      `;
-        if (shadow && shadow !== "none") {
-          innerHtml += `
-          <div class="hoversource-section">
-            <span class="hoversource-label">Shadow: </span>
-            <span class="hoversource-value">${shadow}</span>
-          </div>
-        `;
-        }
-        if (animation) {
-          innerHtml += `
-          <div class="hoversource-section">
-            <span class="hoversource-label">Animation: </span>
-            <span class="hoversource-value">${animation}</span>
-          </div>
-        `;
-        }
-        if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
-          const constraints = Object.entries(info.visualContext.layoutConstraints).map(([prop, val]) => `${prop}: ${val}`).join(", ");
-          innerHtml += `
-          <div class="hoversource-section">
-            <span class="hoversource-label">Layout: </span>
-            <span class="hoversource-value">${constraints}</span>
-          </div>
-        `;
-        }
-        if (info.visualContext && info.visualContext.parentEffects.length > 0) {
-          const effectsHtml = info.visualContext.parentEffects.map((fx) => {
-            const classStr2 = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-            let originLabel = "";
-            if (info.staticMetadata?.classOrigins) {
-              for (const cls of fx.classList) {
-                const origin = info.staticMetadata.classOrigins[cls];
-                if (origin) {
-                  const fileBase = origin.file.split("/").pop();
-                  originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
-                  break;
-                }
-              }
-            }
-            return `<div class="hoversource-stack-item">${fx.tagName}${classStr2}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
-          }).join("");
-          innerHtml += `
-          <div class="hoversource-section">
-            <span class="hoversource-label">Parent Styles: </span>
-            <div class="hoversource-stack">
-              ${effectsHtml}
-            </div>
-          </div>
-        `;
-        }
-        if (info.staticMetadata) {
-          if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
-            const commentsHtml = info.staticMetadata.comments.map((c) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${c}</div>`).join("");
-            innerHtml += `
-            <div class="hoversource-section">
-              <span class="hoversource-label">Source Comments: </span>
-              <div class="hoversource-stack">
-                ${commentsHtml}
-              </div>
-            </div>
-          `;
-          }
-          if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
-            const attrs = Object.entries(info.staticMetadata.rawAttributes).map(([k, v]) => `${k}="${v}"`).join(" ");
-            innerHtml += `
-            <div class="hoversource-section">
-              <span class="hoversource-label">Source Attributes: </span>
-              <span class="hoversource-value">${attrs}</span>
-            </div>
-          `;
-          }
-        }
-        innerHtml += `
-        <div class="hoversource-section">
-          <span class="hoversource-label">Stack: </span>
-          <div class="hoversource-stack">
-            ${stack.map((item) => `<div class="hoversource-stack-item">${item}</div>`).join("")}
-          </div>
-        </div>
-        <div class="hoversource-shortcut-hint">
-          Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config
-        </div>
-      `;
-      }
+      const innerHtml = this.minimalMode ? this.renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel) : this.renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel);
       const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
       this.controller.drawTooltip(html, e);
     }
@@ -616,11 +633,11 @@
         for (const cls of classList) {
           const origin = info.staticMetadata.classOrigins[cls];
           if (origin) {
-            originList.push(`[Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`);
+            originList.push(`[Source: \`${origin.file}\` (Line: \`${origin.line}\`, Column: \`${origin.column}\`)]`);
           }
         }
         if (originList.length > 0) {
-          selectorLabel += ` \u2794 ${originList.join(", ")}`;
+          selectorLabel += ` \u2794 ${originList.join(" ")}`;
         }
       }
       let text = `
@@ -740,9 +757,9 @@ ${attrList}`;
 
   // src/overlay.ts
   function getCompanionPort2() {
-    return window.__HOVERSOURCE_PORT__ ?? 3e3;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 3e3;
   }
-  var OverlayEngine = class {
+  var OverlayEngine = class _OverlayEngine {
     config = null;
     container = null;
     outlineBox = null;
@@ -754,7 +771,11 @@ ${attrList}`;
     designMode = new DesignAdapter();
     activeMode = this.inspectorMode;
     constructor() {
-      this.init();
+    }
+    static async launch() {
+      const engine = new _OverlayEngine();
+      await engine.init();
+      return engine;
     }
     async init() {
       await this.loadConfig();
@@ -762,10 +783,10 @@ ${attrList}`;
       this.createUI();
       this.initShortcuts();
       this.activeMode.activate(this);
-      window.addEventListener("pointerover", this.handlePointerOver, { capture: true });
-      window.addEventListener("pointermove", this.handlePointerMove, { capture: true });
-      window.addEventListener("message", (e) => {
-        if (e.data && e.data.type === "HOVERSOURCE_CONFIG_CHANGED") {
+      globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
+      globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
+      globalThis.addEventListener("message", (e) => {
+        if (e.origin === globalThis.location.origin && e.source === globalThis && e.data?.type === "HOVERSOURCE_CONFIG_CHANGED") {
           this.handleConfigUpdate(e.data.config);
         }
       });
@@ -802,7 +823,7 @@ ${attrList}`;
       }
     }
     initStyles() {
-      const isLightTheme = this.config?.theme === "light" || this.config?.theme === "system" && !window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const isLightTheme = this.config?.theme === "light" || this.config?.theme === "system" && !globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
       const style = document.createElement("style");
       style.id = "hoversource-styles";
       style.innerHTML = `
@@ -964,43 +985,43 @@ ${attrList}`;
       document.body.appendChild(this.container);
     }
     initShortcuts() {
-      window.addEventListener("keydown", (e) => {
-        const shortcuts = this.config?.shortcuts;
-        if (!shortcuts)
-          return;
-        if (this.matchShortcut(e, shortcuts.toggleUI)) {
-          e.preventDefault();
-          this.uiVisible = !this.uiVisible;
-          if (this.container) {
-            this.container.style.display = this.uiVisible ? "block" : "none";
-          }
-          console.log(`[HoverSource] UI Tooltip Visibility: ${this.uiVisible ? "visible" : "hidden"} (Background tracking active)`);
-          this.activeMode.onUIVisibilityChanged(this.uiVisible);
-        }
-        if (this.matchShortcut(e, shortcuts.openDashboard) && !this.isTyping(e)) {
-          e.preventDefault();
-          console.log("[HoverSource] Shortcut matched: openDashboard");
-          this.openDashboardInBrowser();
-        }
-        const toggleModeShortcut = shortcuts.toggleMode || { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
-        if (this.matchShortcut(e, toggleModeShortcut) && !this.isTyping(e)) {
-          e.preventDefault();
-          this.switchMode();
-        }
-        if (this.matchShortcut(e, shortcuts.toggleMinimal) && !this.isTyping(e)) {
-          e.preventDefault();
-          this.activeMode.onShortcut("toggleMinimal");
-        }
-        if (this.matchShortcut(e, shortcuts.toggleFreeze) && !this.isTyping(e)) {
-          e.preventDefault();
-          this.activeMode.onShortcut("toggleFreeze");
-        }
-        if (this.matchShortcut(e, shortcuts.copyMetadata) && !this.isTyping(e)) {
-          e.preventDefault();
-          this.activeMode.onShortcut("copyMetadata");
-        }
-      });
+      globalThis.addEventListener("keydown", this.handleKeyDown);
     }
+    handleKeyDown = (e) => {
+      const shortcuts = this.config?.shortcuts;
+      if (!shortcuts)
+        return;
+      if (this.matchShortcut(e, shortcuts.toggleUI)) {
+        e.preventDefault();
+        this.uiVisible = !this.uiVisible;
+        if (this.container) {
+          this.container.style.display = this.uiVisible ? "block" : "none";
+        }
+        console.log(`[HoverSource] UI Tooltip Visibility: ${this.uiVisible ? "visible" : "hidden"} (Background tracking active)`);
+        this.activeMode.onUIVisibilityChanged(this.uiVisible);
+        return;
+      }
+      if (this.isTyping(e))
+        return;
+      const toggleModeShortcut = shortcuts.toggleMode || { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
+      if (this.matchShortcut(e, shortcuts.openDashboard)) {
+        e.preventDefault();
+        console.log("[HoverSource] Shortcut matched: openDashboard");
+        this.openDashboardInBrowser();
+      } else if (this.matchShortcut(e, toggleModeShortcut)) {
+        e.preventDefault();
+        this.switchMode();
+      } else if (this.matchShortcut(e, shortcuts.toggleMinimal)) {
+        e.preventDefault();
+        this.activeMode.onShortcut("toggleMinimal");
+      } else if (this.matchShortcut(e, shortcuts.toggleFreeze)) {
+        e.preventDefault();
+        this.activeMode.onShortcut("toggleFreeze");
+      } else if (this.matchShortcut(e, shortcuts.copyMetadata)) {
+        e.preventDefault();
+        this.activeMode.onShortcut("copyMetadata");
+      }
+    };
     switchMode() {
       this.activeMode.deactivate();
       this.activeMode = this.activeMode === this.inspectorMode ? this.designMode : this.inspectorMode;
@@ -1018,7 +1039,7 @@ ${attrList}`;
       });
     }
     matchShortcut(e, shortcut) {
-      if (!shortcut || !shortcut.key)
+      if (!shortcut?.key)
         return false;
       if (!!e.altKey !== !!shortcut.altKey || !!e.ctrlKey !== !!shortcut.ctrlKey || !!e.shiftKey !== !!shortcut.shiftKey)
         return false;
@@ -1057,7 +1078,7 @@ ${attrList}`;
       }
     };
     blockEvent = (e) => {
-      if (this.container && this.container.contains(e.target))
+      if (this.container?.contains(e.target))
         return;
       e.stopImmediatePropagation();
       e.preventDefault();
@@ -1069,8 +1090,8 @@ ${attrList}`;
       const rect = target.getBoundingClientRect();
       this.outlineBox.style.width = `${rect.width}px`;
       this.outlineBox.style.height = `${rect.height}px`;
-      this.outlineBox.style.left = `${rect.left + window.scrollX}px`;
-      this.outlineBox.style.top = `${rect.top + window.scrollY}px`;
+      this.outlineBox.style.left = `${rect.left + globalThis.scrollX}px`;
+      this.outlineBox.style.top = `${rect.top + globalThis.scrollY}px`;
       this.outlineBox.style.display = "block";
       this.outlineBox.style.borderColor = isFrozen ? "#f59e0b" : "#3b82f6";
       this.outlineBox.style.backgroundColor = isFrozen ? "rgba(245, 158, 11, 0.15)" : "rgba(59, 130, 246, 0.1)";
@@ -1115,8 +1136,8 @@ ${attrList}`;
       const maxY = Math.max(0, window.innerHeight - boxRect.height);
       y = Math.max(0, Math.min(y, maxY));
       this.tooltipBox.classList.toggle("hs-tooltip-above", isAbove);
-      this.tooltipBox.style.left = `${x + window.scrollX}px`;
-      this.tooltipBox.style.top = `${y + window.scrollY}px`;
+      this.tooltipBox.style.left = `${x + globalThis.scrollX}px`;
+      this.tooltipBox.style.top = `${y + globalThis.scrollY}px`;
     }
     clear() {
       if (this.outlineBox)
@@ -1133,8 +1154,7 @@ ${attrList}`;
           const originalText = hint.innerHTML;
           hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
           setTimeout(() => {
-            if (hint)
-              hint.innerHTML = originalText || "";
+            hint.innerHTML = originalText || "";
           }, 1500);
         }
       }
@@ -1162,7 +1182,7 @@ ${attrList}`;
         "mouseover"
       ];
       if (this.isFrozen) {
-        events.forEach((event) => window.addEventListener(event, this.blockEvent, { capture: true }));
+        events.forEach((event) => globalThis.addEventListener(event, this.blockEvent, { capture: true }));
         this.freezeStyle = document.createElement("style");
         this.freezeStyle.id = "hoversource-freeze-styles";
         this.freezeStyle.innerHTML = `
@@ -1173,7 +1193,7 @@ ${attrList}`;
       `;
         document.head.appendChild(this.freezeStyle);
       } else {
-        events.forEach((event) => window.removeEventListener(event, this.blockEvent, { capture: true }));
+        events.forEach((event) => globalThis.removeEventListener(event, this.blockEvent, { capture: true }));
         if (this.freezeStyle) {
           this.freezeStyle.remove();
           this.freezeStyle = null;
@@ -1181,7 +1201,7 @@ ${attrList}`;
       }
     }
   };
-  window.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
+  globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
     let url = `http://127.0.0.1:${getCompanionPort2()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
       url += `&tagName=${encodeURIComponent(tagName)}`;
@@ -1195,9 +1215,9 @@ ${attrList}`;
       }
     }).catch((e) => console.error("[HoverSource] Failed to reach companion server:", e));
   };
-  if (!window.__HoverSourceInitialized__) {
-    window.__HoverSourceInitialized__ = true;
-    new OverlayEngine();
+  if (!globalThis.__HoverSourceInitialized__) {
+    globalThis.__HoverSourceInitialized__ = true;
+    OverlayEngine.launch();
     console.log("[HoverSource] Overlay injected.");
   }
 })();

@@ -117,7 +117,7 @@ export class InspectorAdapter implements InteractionMode {
   public onUIVisibilityChanged(visible: boolean): void {
   }
 
-  private handleAltScroll = (e: WheelEvent): void => {
+  private readonly handleAltScroll = (e: WheelEvent): void => {
     const m = this.layerScrollModifiers;
     if (!!e.altKey !== !!m.altKey || !!e.shiftKey !== !!m.shiftKey || !!e.ctrlKey !== !!m.ctrlKey) return;
     if (this.layerStack.length === 0) return;
@@ -492,6 +492,62 @@ export class InspectorAdapter implements InteractionMode {
     this.controller.drawTooltip(html, e);
   }
 
+  private formatSelectorLabel(tagName: string, classList: string[], classOrigins: Record<string, any> | undefined): string {
+    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+    const elementSelector = `${tagName}${classStr}`;
+    let label = `\`${elementSelector}\``;
+    if (classOrigins) {
+      const originList: string[] = [];
+      for (const cls of classList) {
+        const origin = classOrigins[cls];
+        if (origin) {
+          originList.push(`[Source: \`${origin.file}\` (Line: \`${origin.line}\`, Column: \`${origin.column}\`)]`);
+        }
+      }
+      if (originList.length > 0) {
+        label += ` ➔ ${originList.join(" ")}`;
+      }
+    }
+    return label;
+  }
+
+  private formatParentStyles(parentEffects: ParentVisualEffect[], classOrigins: Record<string, any> | undefined): string {
+    return parentEffects
+      .map((fx: ParentVisualEffect) => {
+        const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+        let originLabel = "";
+        if (classOrigins) {
+          for (const cls of fx.classList) {
+            const origin = classOrigins[cls];
+            if (origin) {
+              originLabel = ` ➔ [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
+              break;
+            }
+          }
+        }
+        return `  - \`${fx.tagName}${classStr}\` ➔ \`${fx.property}: ${fx.value}\`${originLabel}`;
+      })
+      .join("\n");
+  }
+
+  private formatLayoutConstraints(layoutConstraints: Record<string, any>): string {
+    return Object.entries(layoutConstraints)
+      .map(([k, v]) => `  - \`${k}: ${v}\``)
+      .join("\n");
+  }
+
+  private formatSourceComments(comments: string[]): string {
+    return comments
+      .map((c: string) => `  - \`${c}\``)
+      .join("\n");
+  }
+
+  private formatSourceAttributes(rawAttributes: Record<string, any>): string {
+    return Object.entries(rawAttributes)
+      .map(([k, v]) => `  - \`${k}="${v}"\``)
+      .join("\n");
+  }
+
   private copyMetadata() {
     if (!this.currentSourceInfo || !this.currentElement) return;
     
@@ -519,22 +575,7 @@ export class InspectorAdapter implements InteractionMode {
 
     const tagName = element.tagName.toLowerCase();
     const classList = Array.from(element.classList).filter((c: string) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
-    const elementSelector = `${tagName}${classStr}`;
-
-    let selectorLabel = `\`${elementSelector}\``;
-    if (info.staticMetadata?.classOrigins) {
-      const originList: string[] = [];
-      for (const cls of classList) {
-        const origin = info.staticMetadata.classOrigins[cls];
-        if (origin) {
-          originList.push(`[Source: \`${origin.file}\` (Line: \`${origin.line}\`, Column: \`${origin.column}\`)]`);
-        }
-      }
-      if (originList.length > 0) {
-        selectorLabel += ` ➔ ${originList.join(" ")}`;
-      }
-    }
+    const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
 
     let text = `
 ### HoverSource Component Metadata
@@ -552,45 +593,22 @@ export class InspectorAdapter implements InteractionMode {
     `.trim();
 
     if (info.visualContext && info.visualContext.parentEffects.length > 0) {
-      const parentList = info.visualContext.parentEffects
-        .map((fx: ParentVisualEffect) => {
-          const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-          
-          let originLabel = "";
-          if (info.staticMetadata?.classOrigins) {
-            for (const cls of fx.classList) {
-              const origin = info.staticMetadata.classOrigins[cls];
-              if (origin) {
-                originLabel = ` ➔ [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
-                break;
-              }
-            }
-          }
-
-          return `  - \`${fx.tagName}${classStr}\` ➔ \`${fx.property}: ${fx.value}\`${originLabel}`;
-        })
-        .join("\n");
+      const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
       text += `\n* **Parent Styles**:\n${parentList}`;
     }
 
     if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
-      const layoutList = Object.entries(info.visualContext.layoutConstraints)
-        .map(([k, v]) => `  - \`${k}: ${v}\``)
-        .join("\n");
+      const layoutList = this.formatLayoutConstraints(info.visualContext.layoutConstraints);
       text += `\n* **Layout Constraints**:\n${layoutList}`;
     }
 
     if (info.staticMetadata) {
       if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
-        const commentList = info.staticMetadata.comments
-          .map((c: string) => `  - \`${c}\``)
-          .join("\n");
+        const commentList = this.formatSourceComments(info.staticMetadata.comments);
         text += `\n* **Source Comments**:\n${commentList}`;
       }
       if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
-        const attrList = Object.entries(info.staticMetadata.rawAttributes)
-          .map(([k, v]) => `  - \`${k}="${v}"\``)
-          .join("\n");
+        const attrList = this.formatSourceAttributes(info.staticMetadata.rawAttributes);
         text += `\n* **Source Attributes**:\n${attrList}`;
       }
     }

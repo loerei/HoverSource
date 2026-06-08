@@ -444,6 +444,57 @@ export class InspectorAdapter {
         const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
         this.controller.drawTooltip(html, e);
     }
+    formatSelectorLabel(tagName, classList, classOrigins) {
+        const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+        const elementSelector = `${tagName}${classStr}`;
+        let label = `\`${elementSelector}\``;
+        if (classOrigins) {
+            const originList = [];
+            for (const cls of classList) {
+                const origin = classOrigins[cls];
+                if (origin) {
+                    originList.push(`[Source: \`${origin.file}\` (Line: \`${origin.line}\`, Column: \`${origin.column}\`)]`);
+                }
+            }
+            if (originList.length > 0) {
+                label += ` ➔ ${originList.join(" ")}`;
+            }
+        }
+        return label;
+    }
+    formatParentStyles(parentEffects, classOrigins) {
+        return parentEffects
+            .map((fx) => {
+            const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+            let originLabel = "";
+            if (classOrigins) {
+                for (const cls of fx.classList) {
+                    const origin = classOrigins[cls];
+                    if (origin) {
+                        originLabel = ` ➔ [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
+                        break;
+                    }
+                }
+            }
+            return `  - \`${fx.tagName}${classStr}\` ➔ \`${fx.property}: ${fx.value}\`${originLabel}`;
+        })
+            .join("\n");
+    }
+    formatLayoutConstraints(layoutConstraints) {
+        return Object.entries(layoutConstraints)
+            .map(([k, v]) => `  - \`${k}: ${v}\``)
+            .join("\n");
+    }
+    formatSourceComments(comments) {
+        return comments
+            .map((c) => `  - \`${c}\``)
+            .join("\n");
+    }
+    formatSourceAttributes(rawAttributes) {
+        return Object.entries(rawAttributes)
+            .map(([k, v]) => `  - \`${k}="${v}"\``)
+            .join("\n");
+    }
     copyMetadata() {
         if (!this.currentSourceInfo || !this.currentElement)
             return;
@@ -469,21 +520,7 @@ export class InspectorAdapter {
         };
         const tagName = element.tagName.toLowerCase();
         const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-        const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
-        const elementSelector = `${tagName}${classStr}`;
-        let selectorLabel = `\`${elementSelector}\``;
-        if (info.staticMetadata?.classOrigins) {
-            const originList = [];
-            for (const cls of classList) {
-                const origin = info.staticMetadata.classOrigins[cls];
-                if (origin) {
-                    originList.push(`[Source: \`${origin.file}\` (Line: \`${origin.line}\`, Column: \`${origin.column}\`)]`);
-                }
-            }
-            if (originList.length > 0) {
-                selectorLabel += ` ➔ ${originList.join(" ")}`;
-            }
-        }
+        const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
         let text = `
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
@@ -499,41 +536,20 @@ export class InspectorAdapter {
   - Display: \`${data.styles.display}\` ${data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : ""}
     `.trim();
         if (info.visualContext && info.visualContext.parentEffects.length > 0) {
-            const parentList = info.visualContext.parentEffects
-                .map((fx) => {
-                const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-                let originLabel = "";
-                if (info.staticMetadata?.classOrigins) {
-                    for (const cls of fx.classList) {
-                        const origin = info.staticMetadata.classOrigins[cls];
-                        if (origin) {
-                            originLabel = ` ➔ [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
-                            break;
-                        }
-                    }
-                }
-                return `  - \`${fx.tagName}${classStr}\` ➔ \`${fx.property}: ${fx.value}\`${originLabel}`;
-            })
-                .join("\n");
+            const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
             text += `\n* **Parent Styles**:\n${parentList}`;
         }
         if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
-            const layoutList = Object.entries(info.visualContext.layoutConstraints)
-                .map(([k, v]) => `  - \`${k}: ${v}\``)
-                .join("\n");
+            const layoutList = this.formatLayoutConstraints(info.visualContext.layoutConstraints);
             text += `\n* **Layout Constraints**:\n${layoutList}`;
         }
         if (info.staticMetadata) {
             if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
-                const commentList = info.staticMetadata.comments
-                    .map((c) => `  - \`${c}\``)
-                    .join("\n");
+                const commentList = this.formatSourceComments(info.staticMetadata.comments);
                 text += `\n* **Source Comments**:\n${commentList}`;
             }
             if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
-                const attrList = Object.entries(info.staticMetadata.rawAttributes)
-                    .map(([k, v]) => `  - \`${k}="${v}"\``)
-                    .join("\n");
+                const attrList = this.formatSourceAttributes(info.staticMetadata.rawAttributes);
                 text += `\n* **Source Attributes**:\n${attrList}`;
             }
         }

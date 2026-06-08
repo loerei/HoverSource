@@ -18,7 +18,7 @@ export declare class InspectorAdapter implements InteractionMode {
     onShortcut(command: SemanticShortcut): void;
     onConfigUpdate(newConfig: any): void;
     onUIVisibilityChanged(visible: boolean): void;
-    private handleAltScroll;
+    private readonly handleAltScroll;
     private resolveAndShowLayer;
     private fetchBackgroundValidation;
     private getShortcutLabel;
@@ -29,5 +29,10 @@ export declare class InspectorAdapter implements InteractionMode {
     private renderStaticMetadata;
     private renderDetailedTooltip;
     private renderTooltip;
+    private formatSelectorLabel;
+    private formatParentStyles;
+    private formatLayoutConstraints;
+    private formatSourceComments;
+    private formatSourceAttributes;
     private copyMetadata;
 }

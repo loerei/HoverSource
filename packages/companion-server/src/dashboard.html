@@ -475,10 +475,8 @@
       };
     }
 
-    function checkChanges() {
-      if (!loadedConfig) return;
-      
-      const current = {
+    function getConfigFromUI() {
+      return {
         theme: document.getElementById('theme').value,
         minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
         editor: document.getElementById('editor').value,
@@ -494,6 +492,12 @@
         },
         layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll')
       };
+    }
+
+    function checkChanges() {
+      if (!loadedConfig) return;
+      
+      const current = getConfigFromUI();
 
       const hasChanged = JSON.stringify(current) !== JSON.stringify(loadedConfig);
       const saveBtn = document.getElementById('save-btn');
@@ -530,22 +534,7 @@
 
     // Save configuration
     document.getElementById('save-btn').onclick = async () => {
-      const config = {
-        theme: document.getElementById('theme').value,
-        minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
-        editor: document.getElementById('editor').value,
-        autoResolvePortConflicts: document.getElementById('autoResolvePortConflicts').checked,
-        layerPickerEnabled: document.getElementById('layerPickerEnabled').checked,
-        shortcuts: {
-          toggleUI: getShortcutFromUI('toggleUI'),
-          toggleMinimal: getShortcutFromUI('toggleMinimal'),
-          toggleFreeze: getShortcutFromUI('toggleFreeze'),
-          copyMetadata: getShortcutFromUI('copyMetadata'),
-          openDashboard: getShortcutFromUI('openDashboard'),
-          toggleMode: getShortcutFromUI('toggleMode')
-        },
-        layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll')
-      };
+      const config = getConfigFromUI();
 
       const select = document.getElementById('save-target');
       let target = select.value;

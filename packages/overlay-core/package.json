@@ -12,6 +12,7 @@
     "@hoversource/source-resolver": "*"
   },
   "devDependencies": {
-    "esbuild": "^0.20.0"
+    "esbuild": "^0.20.0",
+    "vitest": "^4.1.8"
   }
 }

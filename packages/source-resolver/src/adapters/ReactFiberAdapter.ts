@@ -1,4 +1,4 @@
-import { SourceAdapter, SourceInfo } from "./types.js";
+import { SourceAdapter, SourceInfo, AncestorInfo } from "./types.js";
 
 export class ReactFiberAdapter implements SourceAdapter {
   name = "react-fiber";
@@ -35,7 +35,7 @@ export class ReactFiberAdapter implements SourceAdapter {
 
   resolve(element: HTMLElement): SourceInfo | null {
     let fiber = this.getFiber(element);
-    
+
     // Walk up the fiber tree if the current node doesn't have a debug source,
     // as some wrapper divs or host elements might not have it directly.
     while (fiber) {
@@ -58,5 +58,76 @@ export class ReactFiberAdapter implements SourceAdapter {
     }
 
     return null;
+  }
+
+  /**
+   * Walks up the DOM from `element`, collecting layout and source info for
+   * each ancestor up to `maxDepth` levels. Returns ancestors ordered from
+   * closest (index 0) to furthest.
+   *
+   * Always resolves: selector, display, position.
+   * Resolves conditionally: layoutProps (flex/grid only), fileName/lineNumber/componentName (fiber only).
+   */
+  resolveAncestors(element: HTMLElement, maxDepth = 8): AncestorInfo[] {
+    const results: AncestorInfo[] = [];
+    let current: HTMLElement | null = element.parentElement;
+    let depth = 0;
+
+    while (current && current !== document.documentElement && depth < maxDepth) {
+      try {
+        const comp = globalThis.getComputedStyle(current);
+        const display = comp.display || "block";
+        const position = comp.position || "static";
+
+        const info: AncestorInfo = {
+          selector: this.buildSelector(current),
+          display,
+          position,
+        };
+
+        // Collect flex/grid layout props
+        if (display === "flex" || display === "inline-flex") {
+          info.layoutProps = {
+            "flex-direction": comp.flexDirection,
+            "justify-content": comp.justifyContent,
+            "align-items": comp.alignItems,
+            "gap": comp.gap,
+            "flex-wrap": comp.flexWrap,
+          };
+        } else if (display === "grid" || display === "inline-grid") {
+          info.layoutProps = {
+            "grid-template-columns": comp.gridTemplateColumns,
+            "grid-template-rows": comp.gridTemplateRows,
+            "gap": comp.gap,
+          };
+        }
+
+        // Attempt fiber source resolution
+        const sourceInfo = this.resolve(current);
+        if (sourceInfo) {
+          info.fileName = sourceInfo.fileName;
+          info.lineNumber = sourceInfo.lineNumber;
+          info.componentName = sourceInfo.componentName;
+        }
+
+        results.push(info);
+      } catch {
+        // Skip elements where getComputedStyle throws (e.g. detached)
+      }
+
+      current = current.parentElement;
+      depth++;
+    }
+
+    return results;
+  }
+
+  private buildSelector(el: HTMLElement): string {
+    const tag = el.tagName.toLowerCase();
+    const id = el.id ? `#${el.id}` : "";
+    const classes = Array.from(el.classList)
+      .filter(c => c && !c.startsWith("hoversource") && !c.startsWith("hs-"))
+      .join(".");
+    return `${tag}${id}${classes ? "." + classes : ""}`;
   }
 }

@@ -444,25 +444,50 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
   });
 }
 
-function handleValidateLine(req: http.IncomingMessage, res: http.ServerResponse, url: URL, config: ServerConfig) {
+interface RequestLocationParams {
+  fileParam: string;
+  lineVal: number;
+  colVal: number;
+  tagNameParam?: string;
+  classList: string[];
+  absolutePath: string;
+}
+
+function parseLocationParams(url: URL, projectRoot: string): RequestLocationParams | null {
   const fileParam = url.searchParams.get("file");
+  if (!fileParam) {
+    return null;
+  }
   const lineParam = url.searchParams.get("line") || "1";
   const columnParam = url.searchParams.get("column") || "1";
   const tagNameParam = url.searchParams.get("tagName") || undefined;
   const classListParam = url.searchParams.get("classList") || undefined;
 
-  if (!fileParam) {
+  const absolutePath = resolveFilePath(fileParam, projectRoot);
+  const lineVal = Number.parseInt(lineParam, 10);
+  const colVal = Number.parseInt(columnParam, 10);
+  const classList = classListParam ? classListParam.split(",") : [];
+
+  return {
+    fileParam,
+    lineVal,
+    colVal,
+    tagNameParam,
+    classList,
+    absolutePath
+  };
+}
+
+function handleValidateLine(req: http.IncomingMessage, res: http.ServerResponse, url: URL, config: ServerConfig) {
+  const params = parseLocationParams(url, config.projectRoot);
+  if (!params) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Missing 'file' parameter" }));
     return;
   }
 
-  const absolutePath = resolveFilePath(fileParam, config.projectRoot);
-  const lineVal = Number.parseInt(lineParam, 10);
-  const colVal = Number.parseInt(columnParam, 10);
-  const classes = classListParam ? classListParam.split(",") : [];
-
-  const corrected = verifyAndCorrectSourceLocation(absolutePath, lineVal, colVal, tagNameParam, classes);
+  const { absolutePath, lineVal, colVal, tagNameParam, classList } = params;
+  const corrected = verifyAndCorrectSourceLocation(absolutePath, lineVal, colVal, tagNameParam, classList);
 
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({
@@ -478,22 +503,14 @@ function handleStaticContext(
   config: ServerConfig,
   staticResolver: StaticContextResolver
 ) {
-  const fileParam = url.searchParams.get("file");
-  const lineParam = url.searchParams.get("line") || "1";
-  const columnParam = url.searchParams.get("column") || "1";
-  const tagNameParam = url.searchParams.get("tagName") || undefined;
-  const classListParam = url.searchParams.get("classList") || undefined;
-
-  if (!fileParam) {
+  const params = parseLocationParams(url, config.projectRoot);
+  if (!params) {
     res.writeHead(400, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Missing 'file' parameter" }));
     return;
   }
 
-  const absolutePath = resolveFilePath(fileParam, config.projectRoot);
-  const lineVal = Number.parseInt(lineParam, 10);
-  const colVal = Number.parseInt(columnParam, 10);
-  const classList = classListParam ? classListParam.split(",") : [];
+  const { absolutePath, lineVal, colVal, tagNameParam, classList } = params;
 
   staticResolver.resolveStaticContext(config.projectRoot, absolutePath, lineVal, colVal, tagNameParam, classList)
     .then(metadata => {

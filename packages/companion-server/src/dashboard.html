@@ -85,7 +85,7 @@
 
             <!-- Layer Picker -->
             <div>
-              <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Layer Picker</label>
+              <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Layer Picker</span>
               <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
                 <input type="checkbox" id="layerPickerEnabled" class="rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 h-4 w-4">
                 <div>
@@ -439,7 +439,7 @@
       if (!container) return;
       const modBtns = container.querySelectorAll('.modifier-btn');
       modBtns.forEach(btn => {
-        const mod = btn.getAttribute('data-modifier');
+        const mod = btn.dataset.modifier;
         setBtnActive(btn, !!shortcutObj[`${mod}Key`]);
         btn.onclick = () => {
           setBtnActive(btn, !btn.classList.contains('bg-blue-600'));
@@ -475,10 +475,8 @@
       };
     }
 
-    function checkChanges() {
-      if (!loadedConfig) return;
-      
-      const current = {
+    function getConfigFromUI() {
+      return {
         theme: document.getElementById('theme').value,
         minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
         editor: document.getElementById('editor').value,
@@ -494,6 +492,12 @@
         },
         layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll')
       };
+    }
+
+    function checkChanges() {
+      if (!loadedConfig) return;
+      
+      const current = getConfigFromUI();
 
       const hasChanged = JSON.stringify(current) !== JSON.stringify(loadedConfig);
       const saveBtn = document.getElementById('save-btn');
@@ -530,22 +534,7 @@
 
     // Save configuration
     document.getElementById('save-btn').onclick = async () => {
-      const config = {
-        theme: document.getElementById('theme').value,
-        minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
-        editor: document.getElementById('editor').value,
-        autoResolvePortConflicts: document.getElementById('autoResolvePortConflicts').checked,
-        layerPickerEnabled: document.getElementById('layerPickerEnabled').checked,
-        shortcuts: {
-          toggleUI: getShortcutFromUI('toggleUI'),
-          toggleMinimal: getShortcutFromUI('toggleMinimal'),
-          toggleFreeze: getShortcutFromUI('toggleFreeze'),
-          copyMetadata: getShortcutFromUI('copyMetadata'),
-          openDashboard: getShortcutFromUI('openDashboard'),
-          toggleMode: getShortcutFromUI('toggleMode')
-        },
-        layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll')
-      };
+      const config = getConfigFromUI();
 
       const select = document.getElementById('save-target');
       let target = select.value;

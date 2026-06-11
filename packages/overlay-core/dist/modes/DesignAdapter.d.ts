@@ -1,13 +1,111 @@
 import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js";
+export type SnapBoundaryH = "Left-Edge" | "Right-Edge" | "Center-Axis";
+export type SnapBoundaryV = "Top-Edge" | "Bottom-Edge" | "Center-Axis";
 export declare class DesignAdapter implements InteractionMode {
     readonly id = "design";
     private controller;
     private isFrozen;
+    private readonly resolver;
+    private targetElement;
+    private targetRect;
+    private anchorHElement;
+    private anchorVElement;
+    private isSnappedH;
+    private isSnappedV;
+    private snapBoundaryH;
+    private snapBoundaryV;
+    private snapX;
+    private snapY;
+    private snapMouseX;
+    private snapMouseY;
+    private dX;
+    private dY;
+    private lastMouseX;
+    private lastMouseY;
+    private crosshairX;
+    private crosshairY;
+    private isDragging;
+    private dragStartX;
+    private dragStartY;
+    private dragStartCrosshairX;
+    private dragStartCrosshairY;
+    private svgOverlay;
+    private badgeElementH;
+    private badgeElementV;
+    private dragBlocker;
     activate(controller: OverlayController): void;
     deactivate(): void;
     onPointerOver(event: PointerEvent, target: HTMLElement): void;
     onPointerMove(event: PointerEvent): void;
+    private updateTargetAtPosition;
+    private readonly handleDragStart;
+    private readonly handleDragMove;
+    private readonly handleDragEnd;
+    private getSnapCandidates;
+    private selectBestH;
+    private selectBestV;
+    private assignHorizontalSnap;
+    private assignVerticalSnap;
+    private checkSnapping;
+    private drawHorizontalGuide;
+    private drawVerticalGuide;
+    private drawCrosshairAndDragHandle;
+    private updateVisuals;
+    private getHorizontalOffset;
+    private getVerticalOffset;
+    private formatAnchorStatus;
+    private renderTooltip;
     onShortcut(command: SemanticShortcut): void;
+    private readonly handleKeyDown;
+    private getAnchorDisplayInfo;
+    private getRelatedFilesList;
+    private getPlacementAndRules;
+    private getTargetSelector;
+    private buildMetadataText;
+    private getLayoutContextInfo;
+    private copyMetadata;
     onConfigUpdate(newConfig: any): void;
     onUIVisibilityChanged(visible: boolean): void;
 }
+export interface SnapResult {
+    horizontal: {
+        boundary: SnapBoundaryH;
+        offset: number;
+        distance: number;
+        value: number;
+    };
+    vertical: {
+        boundary: SnapBoundaryV;
+        offset: number;
+        distance: number;
+        value: number;
+    };
+}
+export declare function findNearestSnapPoint(x: number, y: number, rect: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+    right: number;
+    bottom: number;
+}): SnapResult;
+export declare function shouldReleaseSnap(mouseX: number, mouseY: number, snapMouseX: number, snapMouseY: number, deadzone: number): boolean;
+export declare function calculateNudge(key: string, shiftKey: boolean, currentDx: number, currentDy: number): {
+    dX: number;
+    dY: number;
+};
+export declare function getLayoutRules(boundaryH: "Left-Edge" | "Right-Edge" | "Center-Axis" | null, boundaryV: "Top-Edge" | "Bottom-Edge" | "Center-Axis" | null, dX: number, dY: number): string;
+export declare function findCommonAncestor(el1: HTMLElement | null, el2: HTMLElement | null): HTMLElement;
+export declare function getSelector(el: HTMLElement | null): string;
+export interface SuggestedCSSParams {
+    boundaryH: SnapBoundaryH | null;
+    boundaryV: SnapBoundaryV | null;
+    offsetH: number;
+    offsetV: number;
+    parentContainer: HTMLElement;
+    activeX: number;
+    activeY: number;
+    anchorH: HTMLElement | null;
+    anchorV: HTMLElement | null;
+}
+export declare function getSuggestedCSS(params: SuggestedCSSParams): string;

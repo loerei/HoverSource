@@ -1,4 +1,4 @@
-import { SourceAdapter, SourceInfo } from "./adapters/types.js";
+import { SourceAdapter, SourceInfo, AncestorInfo } from "./adapters/types.js";
 import { ReactFiberAdapter } from "./adapters/ReactFiberAdapter.js";
 
 export * from "./adapters/types.js";
@@ -6,10 +6,12 @@ export * from "./adapters/ReactFiberAdapter.js";
 
 export class SourceResolver {
   private readonly adapters: SourceAdapter[] = [];
+  private readonly fiberAdapter: ReactFiberAdapter;
 
   constructor() {
     // Register default adapters
-    this.adapters.push(new ReactFiberAdapter());
+    this.fiberAdapter = new ReactFiberAdapter();
+    this.adapters.push(this.fiberAdapter);
   }
 
   registerAdapter(adapter: SourceAdapter) {
@@ -29,5 +31,15 @@ export class SourceResolver {
       }
     }
     return null;
+  }
+
+  /**
+   * Walks up the DOM from `element` and returns layout + source info for
+   * each ancestor (up to `maxDepth` levels). Delegates to the React fiber
+   * adapter for source resolution; display/position are always resolved via
+   * getComputedStyle regardless of framework.
+   */
+  resolveAncestors(element: HTMLElement, maxDepth = 8): AncestorInfo[] {
+    return this.fiberAdapter.resolveAncestors(element, maxDepth);
   }
 }

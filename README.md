@@ -8,13 +8,35 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 
 ## Features
 
-- **Copy AI-Ready Metadata (`Alt + C`)**: Copies a structured Markdown block to your clipboard — component name, exact file path with line/column, computed styles, parent visual effects with CSS source locations, layout constraints, JSDoc comments, and raw JSX attributes.
+- **Dual Interaction Modes**:
+  - **Inspector Mode**: Hover over components to view layout boundaries, selector paths, and file deep-links. Copies `HoverSource Component Metadata` with `Alt + C`.
+  - **Design Mode (`Alt + X` to toggle)**: Drag a targeting crosshair to snap against horizontal/vertical edges and measure pixel-perfect offsets. Copies `HoverSource Design Placement Metadata` with `Alt + C`.
+- **Copy AI-Ready Metadata (`Alt + C`)**: Copies a structured Markdown block to your clipboard — component name, exact file path with line/column, computed styles, parent visual effects with CSS source locations, layout constraints, JSDoc comments, and raw JSX attributes (or snapping offsets and absolute CSS anchors in Design Mode).
 - **Freeze State (`Alt + P`)**: Locks dynamic elements (like tooltips, popovers, or dropdowns) in place so you can hover and capture them without them disappearing.
 - **Toggle Overlay (`Alt + H`)**: Show or hide the developer overlay bounding box and floating spec card.
 - **Deep-linking (Click filename)**: Instantly opens the file in your preferred editor (VS Code or Cursor) at the exact line number.
 - **Source Line Correction**: Silently checks and corrects compiler-shifted line numbers in the background.
 - **Layered Element Navigation (`Alt + Shift + Scroll`)**: Cycle through overlapping DOM elements under the cursor using a scroll combination, showing a clean 2D overlapping layer stack in the tooltip to easily target parent/child elements. Customize shortcuts in the dashboard.
 - **Element Selector & CSS Source Location**: Captures the exact HTML tag and classes of the hovered element, along with the specific line and file of their CSS definition.
+
+## Modes of Operation
+
+HoverSource runs in two distinct interaction modes depending on your task. You can toggle between them at any time by pressing **`Alt + X`**.
+
+### 1. Inspector Mode (Default)
+Ideal for debugging, modifying, or refactoring existing elements.
+- Hovering elements highlights their layout bounding box and opens a floating card containing file paths, component names, CSS locations, and layout context.
+- Pressing **`Alt + C`** copies **Component Metadata** (see [Clipboard Output](#clipboard-output)).
+
+### 2. Design Mode
+Ideal for positioning new UI elements (cards, badges, modals, tooltips) relative to existing elements.
+- Activates a drag-and-drop targeting crosshair.
+- Snaps the crosshair horizontally or vertically against nearby element boundaries (edges or center axes) to measure precise offsets (`dX`, `dY`).
+- Pressing **`Alt + C`** copies **Design Placement Metadata** containing:
+  - Exact target and snap anchor selectors.
+  - Pixel-perfect offsets and boundaries.
+  - Pre-computed absolute position CSS block (`top`, `left`, `white-space`).
+  - Structural guidance for AI agents to decide on DOM insertion and flex/grid adjustments.
 
 ## Clipboard Output
 
@@ -106,6 +128,51 @@ This lets an AI agent patch the exact CSS rule in one step, without grepping the
   - `Renders the scrollable message list for the active chat thread.`
 * **Source Attributes**:
   - `data-testid="chat-thread-body"`
+```
+
+### Design Placement Metadata (Design Mode)
+
+When in Design Mode, pressing `Alt + C` copies a design layout specification block directing the AI on how to position a new element relative to existing elements:
+
+```markdown
+### HoverSource Design Placement Metadata
+* **Component**: `Card`
+* **Element**: `div#login-card.card`
+* **File Path**: `packages/overlay-core/prototype/index.html` (Line: 122, Column: 5)
+* **Framework**: Vanilla
+* **Horizontal Anchor**:
+  - Selector: `div#login-card.card`
+  - Boundary: `Right-Edge`
+  - Crosshair distance from boundary (NOT a CSS value): `+123px` (Free)
+* **Vertical Anchor**:
+  - Selector: `div#login-card.card`
+  - Boundary: `Top-Edge`
+  - Crosshair distance from boundary (NOT a CSS value): `+40px` (Free)
+
+#### Layout Context (auto-resolved at runtime)
+* **Positioned Ancestor**: none found within 8 levels — CSS rules may need `position: relative` added to a parent
+* **Anchor Element**: `div#login-card.card` (display: block)
+* **Direct Parent of Anchor**: `div.sandbox-container` (display: flex)
+* **USE THIS CSS** (do not use the distance values above as CSS — use this block):
+```css
+position: absolute;
+  left: calc(100% + 123px);
+  top: 40px;
+  white-space: nowrap;
+```
+* **Source Files to Examine**:
+- [index.html](file:///D:/Projects/HoverSource/packages/overlay-core/prototype/index.html#L122)
+
+#### For the AI Agent
+The CSS above assumes the new element will be a direct child of the Positioned Ancestor.
+You must determine the actual DOM insertion point by examining the source files above.
+The following is NOT resolved automatically and requires your judgment:
+- **DOM insertion point**: where in the JSX/template tree the new element belongs (sibling of anchor, child of a wrapper, inside a portal, etc.)
+- **Whether `position: absolute` is appropriate**: if the anchor or its parent is a flex/grid container, a flex/grid child approach may be more appropriate
+- **Whether the Positioned Ancestor has `position: relative` in source**: verify it is not conditionally applied
+
+Suggested layout insertion (heuristic only):
+* Target DOM Parent: `div#login-card.card` (same as anchor)
 ```
 
 ## HoverSource in the wild

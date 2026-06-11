@@ -226,8 +226,12 @@ export class InspectorAdapter implements InteractionMode {
     copyLabel: string,
     freezeLabel: string,
     minimalLabel: string,
-    dbLabel: string
+    dbLabel: string,
+    modeLabel: string
   ): string {
+    const hintText = `Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
+    const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+
     return `
       <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
         <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
@@ -240,7 +244,7 @@ export class InspectorAdapter implements InteractionMode {
         </span>
       </div>
       <div class="hoversource-shortcut-hint">
-        Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config
+        ${hintHtml}
       </div>
     `;
   }
@@ -407,7 +411,8 @@ export class InspectorAdapter implements InteractionMode {
     copyLabel: string,
     freezeLabel: string,
     minimalLabel: string,
-    dbLabel: string
+    dbLabel: string,
+    modeLabel: string
   ): string {
     const computed = window.getComputedStyle(element);
     const shadow = computed.boxShadow;
@@ -431,6 +436,9 @@ export class InspectorAdapter implements InteractionMode {
     html += this.renderParentEffects(info);
     html += this.renderStaticMetadata(info);
 
+    const hintText = `Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
+    const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+
     html += `
       <div class="hoversource-section">
         <span class="hoversource-label">Stack: </span>
@@ -439,7 +447,7 @@ export class InspectorAdapter implements InteractionMode {
         </div>
       </div>
       <div class="hoversource-shortcut-hint">
-        Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config
+        ${hintHtml}
       </div>
     `;
 
@@ -457,6 +465,7 @@ export class InspectorAdapter implements InteractionMode {
     const minimalLabel = this.getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
     const freezeLabel = this.getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
     const dbLabel = this.getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
+    const modeLabel = this.getShortcutLabel(shortcuts?.toggleMode) || "[Alt+X]";
 
     // Build layer column (always rendered, even for a single layer)
     const topLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M296.5 69.2C311.4 62.3 328.6 62.3 343.5 69.2L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L296.5 69.2z" /></svg>`;
@@ -485,8 +494,8 @@ export class InspectorAdapter implements InteractionMode {
     const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
 
     const innerHtml = this.minimalMode
-      ? this.renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel)
-      : this.renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel);
+      ? this.renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel, modeLabel)
+      : this.renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel, modeLabel);
 
     const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
     this.controller.drawTooltip(html, e);

@@ -1,7 +1,7 @@
 import { SourceResolver } from "@hoversource/source-resolver";
 import { inspectVisualContext } from "../inspector.js";
 function getCompanionPort() {
-    return window.__HOVERSOURCE_PORT__ ?? 3000;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 3000;
 }
 export class InspectorAdapter {
     id = "inspector";
@@ -155,7 +155,7 @@ export class InspectorAdapter {
             if (this.currentElement === target) {
                 let line = info.lineNumber || 1;
                 let col = info.columnNumber || 1;
-                if (data && data.corrected) {
+                if (data?.corrected) {
                     line = data.corrected.line;
                     col = data.corrected.column;
                 }
@@ -368,7 +368,7 @@ export class InspectorAdapter {
         return html;
     }
     renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
-        const computed = window.getComputedStyle(element);
+        const computed = globalThis.getComputedStyle(element);
         const shadow = computed.boxShadow;
         const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
         const stack = [];
@@ -505,7 +505,7 @@ export class InspectorAdapter {
             return;
         const element = this.currentElement;
         const info = this.currentSourceInfo;
-        const computed = window.getComputedStyle(element);
+        const computed = globalThis.getComputedStyle(element);
         const data = {
             framework: info.framework,
             component: info.componentName || element.tagName.toLowerCase(),

@@ -1,9 +1,11 @@
 import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js";
+export type SnapBoundaryH = "Left-Edge" | "Right-Edge" | "Center-Axis";
+export type SnapBoundaryV = "Top-Edge" | "Bottom-Edge" | "Center-Axis";
 export declare class DesignAdapter implements InteractionMode {
     readonly id = "design";
     private controller;
     private isFrozen;
-    private resolver;
+    private readonly resolver;
     private targetElement;
     private targetRect;
     private anchorHElement;
@@ -36,27 +38,44 @@ export declare class DesignAdapter implements InteractionMode {
     onPointerOver(event: PointerEvent, target: HTMLElement): void;
     onPointerMove(event: PointerEvent): void;
     private updateTargetAtPosition;
-    private handleDragStart;
-    private handleDragMove;
-    private handleDragEnd;
+    private readonly handleDragStart;
+    private readonly handleDragMove;
+    private readonly handleDragEnd;
+    private getSnapCandidates;
+    private selectBestH;
+    private selectBestV;
+    private assignHorizontalSnap;
+    private assignVerticalSnap;
     private checkSnapping;
+    private drawHorizontalGuide;
+    private drawVerticalGuide;
+    private drawCrosshairAndDragHandle;
     private updateVisuals;
+    private getHorizontalOffset;
+    private getVerticalOffset;
+    private formatAnchorStatus;
     private renderTooltip;
     onShortcut(command: SemanticShortcut): void;
-    private handleKeyDown;
+    private readonly handleKeyDown;
+    private getAnchorDisplayInfo;
+    private getRelatedFilesList;
+    private getPlacementAndRules;
+    private getTargetSelector;
+    private buildMetadataText;
+    private getLayoutContextInfo;
     private copyMetadata;
     onConfigUpdate(newConfig: any): void;
     onUIVisibilityChanged(visible: boolean): void;
 }
 export interface SnapResult {
     horizontal: {
-        boundary: "Left-Edge" | "Right-Edge" | "Center-Axis";
+        boundary: SnapBoundaryH;
         offset: number;
         distance: number;
         value: number;
     };
     vertical: {
-        boundary: "Top-Edge" | "Bottom-Edge" | "Center-Axis";
+        boundary: SnapBoundaryV;
         offset: number;
         distance: number;
         value: number;
@@ -78,4 +97,15 @@ export declare function calculateNudge(key: string, shiftKey: boolean, currentDx
 export declare function getLayoutRules(boundaryH: "Left-Edge" | "Right-Edge" | "Center-Axis" | null, boundaryV: "Top-Edge" | "Bottom-Edge" | "Center-Axis" | null, dX: number, dY: number): string;
 export declare function findCommonAncestor(el1: HTMLElement | null, el2: HTMLElement | null): HTMLElement;
 export declare function getSelector(el: HTMLElement | null): string;
-export declare function getSuggestedCSS(boundaryH: "Left-Edge" | "Right-Edge" | "Center-Axis" | null, boundaryV: "Top-Edge" | "Bottom-Edge" | "Center-Axis" | null, offsetH: number, offsetV: number, parentContainer: HTMLElement, activeX: number, activeY: number, anchorH: HTMLElement | null, anchorV: HTMLElement | null): string;
+export interface SuggestedCSSParams {
+    boundaryH: SnapBoundaryH | null;
+    boundaryV: SnapBoundaryV | null;
+    offsetH: number;
+    offsetV: number;
+    parentContainer: HTMLElement;
+    activeX: number;
+    activeY: number;
+    anchorH: HTMLElement | null;
+    anchorV: HTMLElement | null;
+}
+export declare function getSuggestedCSS(params: SuggestedCSSParams): string;

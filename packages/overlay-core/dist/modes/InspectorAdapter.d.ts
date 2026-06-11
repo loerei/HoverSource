@@ -2,7 +2,7 @@ import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js
 export declare class InspectorAdapter implements InteractionMode {
     readonly id = "inspector";
     private controller;
-    private resolver;
+    private readonly resolver;
     private isFrozen;
     private minimalMode;
     private currentElement;

@@ -1,15 +1,18 @@
 import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js";
 import { SourceResolver } from "@hoversource/source-resolver";
 
+export type SnapBoundaryH = "Left-Edge" | "Right-Edge" | "Center-Axis";
+export type SnapBoundaryV = "Top-Edge" | "Bottom-Edge" | "Center-Axis";
+
 function getCompanionPort(): number {
-  return (window as any).__HOVERSOURCE_PORT__ ?? 3000;
+  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 3000;
 }
 
 export class DesignAdapter implements InteractionMode {
   public readonly id = "design";
   private controller!: OverlayController;
   private isFrozen = false;
-  private resolver = new SourceResolver();
+  private readonly resolver = new SourceResolver();
 
   // Snapping and offset state
   private targetElement: HTMLElement | null = null;
@@ -18,8 +21,8 @@ export class DesignAdapter implements InteractionMode {
   private anchorVElement: HTMLElement | null = null;
   private isSnappedH = false;
   private isSnappedV = false;
-  private snapBoundaryH: "Left-Edge" | "Right-Edge" | "Center-Axis" | null = null;
-  private snapBoundaryV: "Top-Edge" | "Bottom-Edge" | "Center-Axis" | null = null;
+  private snapBoundaryH: SnapBoundaryH | null = null;
+  private snapBoundaryV: SnapBoundaryV | null = null;
   private snapX = 0;
   private snapY = 0;
   private snapMouseX = 0;
@@ -56,8 +59,8 @@ export class DesignAdapter implements InteractionMode {
     this.anchorVElement = null;
 
     // Spawn at the center of the window
-    this.crosshairX = window.innerWidth / 2;
-    this.crosshairY = window.innerHeight / 2;
+    this.crosshairX = globalThis.innerWidth / 2;
+    this.crosshairY = globalThis.innerHeight / 2;
     this.lastMouseX = this.crosshairX;
     this.lastMouseY = this.crosshairY;
 
@@ -112,7 +115,7 @@ export class DesignAdapter implements InteractionMode {
     this.checkSnapping(this.crosshairX, this.crosshairY);
     this.updateVisuals();
 
-    window.addEventListener("keydown", this.handleKeyDown, { capture: true });
+    globalThis.addEventListener("keydown", this.handleKeyDown, { capture: true });
     console.log("[HoverSource] Activated Design Mode - Spawned at Center");
   }
 
@@ -125,9 +128,9 @@ export class DesignAdapter implements InteractionMode {
       this.dragBlocker.remove();
       this.dragBlocker = null;
     }
-    window.removeEventListener("keydown", this.handleKeyDown, { capture: true });
-    window.removeEventListener("pointermove", this.handleDragMove, { capture: true });
-    window.removeEventListener("pointerup", this.handleDragEnd, { capture: true });
+    globalThis.removeEventListener("keydown", this.handleKeyDown, { capture: true });
+    globalThis.removeEventListener("pointermove", this.handleDragMove, { capture: true });
+    globalThis.removeEventListener("pointerup", this.handleDragEnd, { capture: true });
     if (this.isFrozen) {
       this.isFrozen = false;
       this.controller.setFreezeMode(false);
@@ -148,15 +151,11 @@ export class DesignAdapter implements InteractionMode {
   private updateTargetAtPosition(x: number, y: number): void {
     const container = (this.controller as any).container as HTMLElement | null;
     const elements = document.elementsFromPoint(x, y) as HTMLElement[];
-    let target = elements.find(el => {
+    const target = elements.find(el => {
       if (el === document.documentElement || el === document.body) return false;
       if (container && (el === container || container.contains(el))) return false;
       return true;
-    }) as HTMLElement | undefined;
-
-    if (!target) {
-      target = this.anchorHElement || this.anchorVElement || undefined;
-    }
+    }) ?? this.anchorHElement ?? this.anchorVElement ?? undefined;
 
     if (target) {
       this.targetElement = target;
@@ -167,7 +166,7 @@ export class DesignAdapter implements InteractionMode {
     }
   }
 
-  private handleDragStart = (e: PointerEvent): void => {
+  private readonly handleDragStart = (e: PointerEvent): void => {
     e.preventDefault();
     e.stopPropagation();
     this.isDragging = true;
@@ -191,11 +190,11 @@ export class DesignAdapter implements InteractionMode {
       container.appendChild(this.dragBlocker);
     }
 
-    window.addEventListener("pointermove", this.handleDragMove, { capture: true });
-    window.addEventListener("pointerup", this.handleDragEnd, { capture: true });
+    globalThis.addEventListener("pointermove", this.handleDragMove, { capture: true });
+    globalThis.addEventListener("pointerup", this.handleDragEnd, { capture: true });
   };
 
-  private handleDragMove = (e: PointerEvent): void => {
+  private readonly handleDragMove = (e: PointerEvent): void => {
     if (!this.isDragging) return;
     e.preventDefault();
     e.stopPropagation();
@@ -228,7 +227,7 @@ export class DesignAdapter implements InteractionMode {
     this.renderTooltip(e);
   };
 
-  private handleDragEnd = (e: PointerEvent): void => {
+  private readonly handleDragEnd = (e: PointerEvent): void => {
     e.preventDefault();
     e.stopPropagation();
     this.isDragging = false;
@@ -236,11 +235,11 @@ export class DesignAdapter implements InteractionMode {
       this.dragBlocker.remove();
       this.dragBlocker = null;
     }
-    window.removeEventListener("pointermove", this.handleDragMove, { capture: true });
-    window.removeEventListener("pointerup", this.handleDragEnd, { capture: true });
+    globalThis.removeEventListener("pointermove", this.handleDragMove, { capture: true });
+    globalThis.removeEventListener("pointerup", this.handleDragEnd, { capture: true });
   };
 
-  private checkSnapping(mouseX: number, mouseY: number): void {
+  private getSnapCandidates(mouseX: number, mouseY: number): { element: HTMLElement; rect: DOMRect }[] {
     const container = (this.controller as any).container as HTMLElement | null;
     const allEls = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, p, a, button, input, textarea, label, span, div, section, main, article, li, img, svg")) as HTMLElement[];
     const candidates: { element: HTMLElement; rect: DOMRect }[] = [];
@@ -259,30 +258,23 @@ export class DesignAdapter implements InteractionMode {
       candidates.push({ element: el, rect });
     }
 
-    if (candidates.length === 0) {
-      this.anchorHElement = null;
-      this.anchorVElement = null;
-      this.isSnappedH = false;
-      this.isSnappedV = false;
-      this.snapBoundaryH = null;
-      this.snapBoundaryV = null;
-      return;
-    }
+    return candidates;
+  }
 
-    // Select H-Anchor
-    let bestH: { element: HTMLElement; rect: DOMRect; boundary: "Left-Edge" | "Right-Edge" | "Center-Axis"; value: number; distance: number } | null = null;
+  private selectBestH(
+    candidates: { element: HTMLElement; rect: DOMRect }[],
+    mouseX: number,
+    mouseY: number
+  ): { element: HTMLElement; rect: DOMRect; boundary: SnapBoundaryH; value: number; distance: number } | null {
+    let bestH: { element: HTMLElement; rect: DOMRect; boundary: SnapBoundaryH; value: number; distance: number } | null = null;
     let minScoreH = Infinity;
 
     for (const cand of candidates) {
       const rect = cand.rect;
-      const leftVal = rect.left;
-      const rightVal = rect.right;
-      const centerVal = rect.left + rect.width / 2;
-
       const opts = [
-        { boundary: "Left-Edge" as const, value: leftVal },
-        { boundary: "Right-Edge" as const, value: rightVal },
-        { boundary: "Center-Axis" as const, value: centerVal }
+        { boundary: "Left-Edge" as const, value: rect.left },
+        { boundary: "Right-Edge" as const, value: rect.right },
+        { boundary: "Center-Axis" as const, value: rect.left + rect.width / 2 }
       ];
 
       for (const opt of opts) {
@@ -308,21 +300,23 @@ export class DesignAdapter implements InteractionMode {
         }
       }
     }
+    return bestH;
+  }
 
-    // Select V-Anchor
-    let bestV: { element: HTMLElement; rect: DOMRect; boundary: "Top-Edge" | "Bottom-Edge" | "Center-Axis"; value: number; distance: number } | null = null;
+  private selectBestV(
+    candidates: { element: HTMLElement; rect: DOMRect }[],
+    mouseX: number,
+    mouseY: number
+  ): { element: HTMLElement; rect: DOMRect; boundary: SnapBoundaryV; value: number; distance: number } | null {
+    let bestV: { element: HTMLElement; rect: DOMRect; boundary: SnapBoundaryV; value: number; distance: number } | null = null;
     let minScoreV = Infinity;
 
     for (const cand of candidates) {
       const rect = cand.rect;
-      const topVal = rect.top;
-      const bottomVal = rect.bottom;
-      const centerVal = rect.top + rect.height / 2;
-
       const opts = [
-        { boundary: "Top-Edge" as const, value: topVal },
-        { boundary: "Bottom-Edge" as const, value: bottomVal },
-        { boundary: "Center-Axis" as const, value: centerVal }
+        { boundary: "Top-Edge" as const, value: rect.top },
+        { boundary: "Bottom-Edge" as const, value: rect.bottom },
+        { boundary: "Center-Axis" as const, value: rect.top + rect.height / 2 }
       ];
 
       for (const opt of opts) {
@@ -348,8 +342,13 @@ export class DesignAdapter implements InteractionMode {
         }
       }
     }
+    return bestV;
+  }
 
-    // Assign Snapping and Offsets
+  private assignHorizontalSnap(
+    bestH: { element: HTMLElement; rect: DOMRect; boundary: SnapBoundaryH; value: number; distance: number } | null,
+    mouseX: number
+  ): void {
     if (bestH) {
       this.anchorHElement = bestH.element;
       this.snapBoundaryH = bestH.boundary;
@@ -369,7 +368,12 @@ export class DesignAdapter implements InteractionMode {
       this.snapBoundaryH = null;
       this.isSnappedH = false;
     }
+  }
 
+  private assignVerticalSnap(
+    bestV: { element: HTMLElement; rect: DOMRect; boundary: SnapBoundaryV; value: number; distance: number } | null,
+    mouseY: number
+  ): void {
     if (bestV) {
       this.anchorVElement = bestV.element;
       this.snapBoundaryV = bestV.boundary;
@@ -389,6 +393,156 @@ export class DesignAdapter implements InteractionMode {
       this.snapBoundaryV = null;
       this.isSnappedV = false;
     }
+  }
+
+  private checkSnapping(mouseX: number, mouseY: number): void {
+    const candidates = this.getSnapCandidates(mouseX, mouseY);
+
+    if (candidates.length === 0) {
+      this.anchorHElement = null;
+      this.anchorVElement = null;
+      this.isSnappedH = false;
+      this.isSnappedV = false;
+      this.snapBoundaryH = null;
+      this.snapBoundaryV = null;
+      return;
+    }
+
+    // Select H-Anchor
+    const bestH = this.selectBestH(candidates, mouseX, mouseY);
+
+    // Select V-Anchor
+    const bestV = this.selectBestV(candidates, mouseX, mouseY);
+
+    // Assign Snapping and Offsets
+    this.assignHorizontalSnap(bestH, mouseX);
+    this.assignVerticalSnap(bestV, mouseY);
+  }
+
+  private drawHorizontalGuide(
+    svgNS: string,
+    dotViewportX: number,
+    dotAbsX: number,
+    dotAbsY: number
+  ): void {
+    const rectH = this.anchorHElement ? this.anchorHElement.getBoundingClientRect() : null;
+    if (this.anchorHElement && rectH) {
+      const rectAbsLeft = rectH.left + globalThis.scrollX;
+      const rectAbsRight = rectH.right + globalThis.scrollX;
+      const rectAbsCenterX = rectAbsLeft + rectH.width / 2;
+
+      let anchorX = rectAbsLeft;
+      if (this.snapBoundaryH === "Right-Edge") {
+        anchorX = rectAbsRight;
+      } else if (this.snapBoundaryH === "Center-Axis") {
+        anchorX = rectAbsCenterX;
+      }
+
+      const lineH = document.createElementNS(svgNS, "line");
+      lineH.setAttribute("x1", anchorX.toString());
+      lineH.setAttribute("y1", dotAbsY.toString());
+      lineH.setAttribute("x2", dotAbsX.toString());
+      lineH.setAttribute("y2", dotAbsY.toString());
+      lineH.setAttribute("stroke", "#10b981");
+      lineH.setAttribute("stroke-dasharray", "4");
+      lineH.setAttribute("stroke-width", "1.5");
+      this.svgOverlay!.appendChild(lineH);
+
+      const offsetH = Math.round(dotViewportX - (anchorX - globalThis.scrollX));
+      const displayOffsetH = offsetH >= 0 ? `+${offsetH}` : `${offsetH}`;
+
+      if (this.badgeElementH) {
+        this.badgeElementH.textContent = `${displayOffsetH}px`;
+        this.badgeElementH.style.display = "block";
+        this.badgeElementH.style.left = `${(anchorX + dotAbsX) / 2 - 20}px`;
+        this.badgeElementH.style.top = `${dotAbsY - 20}px`;
+      }
+    }
+  }
+
+  private drawVerticalGuide(
+    svgNS: string,
+    dotViewportY: number,
+    dotAbsX: number,
+    dotAbsY: number
+  ): void {
+    const rectV = this.anchorVElement ? this.anchorVElement.getBoundingClientRect() : null;
+    if (this.anchorVElement && rectV) {
+      const rectAbsTop = rectV.top + globalThis.scrollY;
+      const rectAbsBottom = rectV.bottom + globalThis.scrollY;
+      const rectAbsCenterY = rectAbsTop + rectV.height / 2;
+
+      let anchorY = rectAbsTop;
+      if (this.snapBoundaryV === "Bottom-Edge") {
+        anchorY = rectAbsBottom;
+      } else if (this.snapBoundaryV === "Center-Axis") {
+        anchorY = rectAbsCenterY;
+      }
+
+      const lineV = document.createElementNS(svgNS, "line");
+      lineV.setAttribute("x1", dotAbsX.toString());
+      lineV.setAttribute("y1", anchorY.toString());
+      lineV.setAttribute("x2", dotAbsX.toString());
+      lineV.setAttribute("y2", dotAbsY.toString());
+      lineV.setAttribute("stroke", "#10b981");
+      lineV.setAttribute("stroke-dasharray", "4");
+      lineV.setAttribute("stroke-width", "1.5");
+      this.svgOverlay!.appendChild(lineV);
+
+      const offsetV = Math.round(dotViewportY - (anchorY - globalThis.scrollY));
+      const displayOffsetV = offsetV >= 0 ? `+${offsetV}` : `${offsetV}`;
+
+      if (this.badgeElementV) {
+        this.badgeElementV.textContent = `${displayOffsetV}px`;
+        this.badgeElementV.style.display = "block";
+        this.badgeElementV.style.left = `${dotAbsX + 10}px`;
+        this.badgeElementV.style.top = `${(anchorY + dotAbsY) / 2 - 8}px`;
+      }
+    }
+  }
+
+  private drawCrosshairAndDragHandle(
+    svgNS: string,
+    dotAbsX: number,
+    dotAbsY: number
+  ): void {
+    const crosshairCircle = document.createElementNS(svgNS, "circle");
+    crosshairCircle.setAttribute("cx", dotAbsX.toString());
+    crosshairCircle.setAttribute("cy", dotAbsY.toString());
+    crosshairCircle.setAttribute("r", "5");
+    crosshairCircle.setAttribute("fill", "none");
+    crosshairCircle.setAttribute("stroke", "#10b981");
+    crosshairCircle.setAttribute("stroke-width", "1.5");
+    this.svgOverlay!.appendChild(crosshairCircle);
+
+    const crosshairH = document.createElementNS(svgNS, "line");
+    crosshairH.setAttribute("x1", (dotAbsX - 8).toString());
+    crosshairH.setAttribute("y1", dotAbsY.toString());
+    crosshairH.setAttribute("x2", (dotAbsX + 8).toString());
+    crosshairH.setAttribute("y2", dotAbsY.toString());
+    crosshairH.setAttribute("stroke", "#10b981");
+    crosshairH.setAttribute("stroke-width", "1.5");
+    this.svgOverlay!.appendChild(crosshairH);
+
+    const crosshairV = document.createElementNS(svgNS, "line");
+    crosshairV.setAttribute("x1", dotAbsX.toString());
+    crosshairV.setAttribute("y1", (dotAbsY - 8).toString());
+    crosshairV.setAttribute("x2", dotAbsX.toString());
+    crosshairV.setAttribute("y2", (dotAbsY + 8).toString());
+    crosshairV.setAttribute("stroke", "#10b981");
+    crosshairV.setAttribute("stroke-width", "1.5");
+    this.svgOverlay!.appendChild(crosshairV);
+
+    // Draw larger invisible drag handle target to ease click interactions
+    const dragHandle = document.createElementNS(svgNS, "circle") as SVGElement;
+    dragHandle.setAttribute("cx", dotAbsX.toString());
+    dragHandle.setAttribute("cy", dotAbsY.toString());
+    dragHandle.setAttribute("r", "15");
+    dragHandle.setAttribute("fill", "transparent");
+    dragHandle.style.cursor = "move";
+    dragHandle.style.pointerEvents = "auto";
+    dragHandle.addEventListener("pointerdown", this.handleDragStart);
+    this.svgOverlay!.appendChild(dragHandle);
   }
 
   private updateVisuals(): void {
@@ -436,113 +590,46 @@ export class DesignAdapter implements InteractionMode {
     }
 
     // Draw horizontal guide relative to H-Anchor
-    const rectH = this.anchorHElement ? this.anchorHElement.getBoundingClientRect() : null;
-    if (this.anchorHElement && rectH) {
-      const rectAbsLeft = rectH.left + globalThis.scrollX;
-      const rectAbsRight = rectH.right + globalThis.scrollX;
-      const rectAbsCenterX = rectAbsLeft + rectH.width / 2;
-
-      let anchorX = rectAbsLeft;
-      if (this.snapBoundaryH === "Right-Edge") {
-        anchorX = rectAbsRight;
-      } else if (this.snapBoundaryH === "Center-Axis") {
-        anchorX = rectAbsCenterX;
-      }
-
-      const lineH = document.createElementNS(svgNS, "line");
-      lineH.setAttribute("x1", anchorX.toString());
-      lineH.setAttribute("y1", dotAbsY.toString());
-      lineH.setAttribute("x2", dotAbsX.toString());
-      lineH.setAttribute("y2", dotAbsY.toString());
-      lineH.setAttribute("stroke", "#10b981");
-      lineH.setAttribute("stroke-dasharray", "4");
-      lineH.setAttribute("stroke-width", "1.5");
-      this.svgOverlay.appendChild(lineH);
-
-      const offsetH = Math.round(dotViewportX - (anchorX - globalThis.scrollX));
-      const displayOffsetH = offsetH >= 0 ? `+${offsetH}` : `${offsetH}`;
-
-      if (this.badgeElementH) {
-        this.badgeElementH.textContent = `${displayOffsetH}px`;
-        this.badgeElementH.style.display = "block";
-        this.badgeElementH.style.left = `${(anchorX + dotAbsX) / 2 - 20}px`;
-        this.badgeElementH.style.top = `${dotAbsY - 20}px`;
-      }
-    }
+    this.drawHorizontalGuide(svgNS, dotViewportX, dotAbsX, dotAbsY);
 
     // Draw vertical guide relative to V-Anchor
-    const rectV = this.anchorVElement ? this.anchorVElement.getBoundingClientRect() : null;
-    if (this.anchorVElement && rectV) {
-      const rectAbsTop = rectV.top + globalThis.scrollY;
-      const rectAbsBottom = rectV.bottom + globalThis.scrollY;
-      const rectAbsCenterY = rectAbsTop + rectV.height / 2;
+    this.drawVerticalGuide(svgNS, dotViewportY, dotAbsX, dotAbsY);
 
-      let anchorY = rectAbsTop;
-      if (this.snapBoundaryV === "Bottom-Edge") {
-        anchorY = rectAbsBottom;
-      } else if (this.snapBoundaryV === "Center-Axis") {
-        anchorY = rectAbsCenterY;
-      }
+    // Draw placement crosshair & drag handle
+    this.drawCrosshairAndDragHandle(svgNS, dotAbsX, dotAbsY);
+  }
 
-      const lineV = document.createElementNS(svgNS, "line");
-      lineV.setAttribute("x1", dotAbsX.toString());
-      lineV.setAttribute("y1", anchorY.toString());
-      lineV.setAttribute("x2", dotAbsX.toString());
-      lineV.setAttribute("y2", dotAbsY.toString());
-      lineV.setAttribute("stroke", "#10b981");
-      lineV.setAttribute("stroke-dasharray", "4");
-      lineV.setAttribute("stroke-width", "1.5");
-      this.svgOverlay.appendChild(lineV);
-
-      const offsetV = Math.round(dotViewportY - (anchorY - globalThis.scrollY));
-      const displayOffsetV = offsetV >= 0 ? `+${offsetV}` : `${offsetV}`;
-
-      if (this.badgeElementV) {
-        this.badgeElementV.textContent = `${displayOffsetV}px`;
-        this.badgeElementV.style.display = "block";
-        this.badgeElementV.style.left = `${dotAbsX + 10}px`;
-        this.badgeElementV.style.top = `${(anchorY + dotAbsY) / 2 - 8}px`;
-      }
+  private getHorizontalOffset(dotViewportX: number): number {
+    const rectH = this.anchorHElement ? this.anchorHElement.getBoundingClientRect() : null;
+    let valH = 0;
+    if (rectH) {
+      valH = rectH.left;
+      if (this.snapBoundaryH === "Right-Edge") valH = rectH.right;
+      else if (this.snapBoundaryH === "Center-Axis") valH = rectH.left + rectH.width / 2;
     }
+    return Math.round(dotViewportX - valH);
+  }
 
-    // Draw placement crosshair
-    const crosshairCircle = document.createElementNS(svgNS, "circle");
-    crosshairCircle.setAttribute("cx", dotAbsX.toString());
-    crosshairCircle.setAttribute("cy", dotAbsY.toString());
-    crosshairCircle.setAttribute("r", "5");
-    crosshairCircle.setAttribute("fill", "none");
-    crosshairCircle.setAttribute("stroke", "#10b981");
-    crosshairCircle.setAttribute("stroke-width", "1.5");
-    this.svgOverlay.appendChild(crosshairCircle);
+  private getVerticalOffset(dotViewportY: number): number {
+    const rectV = this.anchorVElement ? this.anchorVElement.getBoundingClientRect() : null;
+    let valV = 0;
+    if (rectV) {
+      valV = rectV.top;
+      if (this.snapBoundaryV === "Bottom-Edge") valV = rectV.bottom;
+      else if (this.snapBoundaryV === "Center-Axis") valV = rectV.top + rectV.height / 2;
+    }
+    return Math.round(dotViewportY - valV);
+  }
 
-    const crosshairH = document.createElementNS(svgNS, "line");
-    crosshairH.setAttribute("x1", (dotAbsX - 8).toString());
-    crosshairH.setAttribute("y1", dotAbsY.toString());
-    crosshairH.setAttribute("x2", (dotAbsX + 8).toString());
-    crosshairH.setAttribute("y2", dotAbsY.toString());
-    crosshairH.setAttribute("stroke", "#10b981");
-    crosshairH.setAttribute("stroke-width", "1.5");
-    this.svgOverlay.appendChild(crosshairH);
-
-    const crosshairV = document.createElementNS(svgNS, "line");
-    crosshairV.setAttribute("x1", dotAbsX.toString());
-    crosshairV.setAttribute("y1", (dotAbsY - 8).toString());
-    crosshairV.setAttribute("x2", dotAbsX.toString());
-    crosshairV.setAttribute("y2", (dotAbsY + 8).toString());
-    crosshairV.setAttribute("stroke", "#10b981");
-    crosshairV.setAttribute("stroke-width", "1.5");
-    this.svgOverlay.appendChild(crosshairV);
-
-    // Draw larger invisible drag handle target to ease click interactions
-    const dragHandle = document.createElementNS(svgNS, "circle");
-    dragHandle.setAttribute("cx", dotAbsX.toString());
-    dragHandle.setAttribute("cy", dotAbsY.toString());
-    dragHandle.setAttribute("r", "15");
-    dragHandle.setAttribute("fill", "transparent");
-    dragHandle.style.cursor = "move";
-    dragHandle.style.pointerEvents = "auto";
-    dragHandle.addEventListener("pointerdown", this.handleDragStart);
-    this.svgOverlay.appendChild(dragHandle);
+  private formatAnchorStatus(
+    element: HTMLElement | null,
+    selector: string,
+    boundary: SnapBoundaryH | SnapBoundaryV | null,
+    offset: number
+  ): string {
+    if (!element) return `<span style="color: #6b7280;">No Anchor</span>`;
+    const sign = offset >= 0 ? "+" : "";
+    return `<span style="color: #10b981; font-weight:bold;">${selector} @ ${boundary || "None"} (${sign}${offset}px)</span>`;
   }
 
   private renderTooltip(e: PointerEvent): void {
@@ -568,30 +655,15 @@ export class DesignAdapter implements InteractionMode {
     const dotViewportX = (this.isSnappedH ? this.snapX : this.crosshairX) + this.dX;
     const dotViewportY = (this.isSnappedV ? this.snapY : this.crosshairY) + this.dY;
 
-    // Calculate H and V offsets
-    const rectH = this.anchorHElement ? this.anchorHElement.getBoundingClientRect() : null;
-    let valH = 0;
-    if (rectH) {
-      valH = rectH.left;
-      if (this.snapBoundaryH === "Right-Edge") valH = rectH.right;
-      else if (this.snapBoundaryH === "Center-Axis") valH = rectH.left + rectH.width / 2;
-    }
-    const offsetH = Math.round(dotViewportX - valH);
-
-    const rectV = this.anchorVElement ? this.anchorVElement.getBoundingClientRect() : null;
-    let valV = 0;
-    if (rectV) {
-      valV = rectV.top;
-      if (this.snapBoundaryV === "Bottom-Edge") valV = rectV.bottom;
-      else if (this.snapBoundaryV === "Center-Axis") valV = rectV.top + rectV.height / 2;
-    }
-    const offsetV = Math.round(dotViewportY - valV);
+    // Calculate H and V offsets using helpers
+    const offsetH = this.getHorizontalOffset(dotViewportX);
+    const offsetV = this.getVerticalOffset(dotViewportY);
 
     const selectorH = this.anchorHElement ? getSelector(this.anchorHElement) : "None";
     const selectorV = this.anchorVElement ? getSelector(this.anchorVElement) : "None";
 
-    const hStatus = this.anchorHElement ? `<span style="color: #10b981; font-weight:bold;">${selectorH} @ ${this.snapBoundaryH || 'None'} (${offsetH >= 0 ? '+' : ''}${offsetH}px)</span>` : "<span style=\"color: #6b7280;\">No Anchor</span>";
-    const vStatus = this.anchorVElement ? `<span style="color: #10b981; font-weight:bold;">${selectorV} @ ${this.snapBoundaryV || 'None'} (${offsetV >= 0 ? '+' : ''}${offsetV}px)</span>` : "<span style=\"color: #6b7280;\">No Anchor</span>";
+    const hStatus = this.formatAnchorStatus(this.anchorHElement, selectorH, this.snapBoundaryH, offsetH);
+    const vStatus = this.formatAnchorStatus(this.anchorVElement, selectorV, this.snapBoundaryV, offsetV);
 
     const fileBase = info.fileName
       ? info.fileName.split('/').pop()?.split('\\').pop() || "unknown"
@@ -646,7 +718,7 @@ export class DesignAdapter implements InteractionMode {
     }
   }
 
-  private handleKeyDown = (e: KeyboardEvent) => {
+  private readonly handleKeyDown = (e: KeyboardEvent) => {
     const activeEl = document.activeElement;
     if (activeEl) {
       const tag = activeEl.tagName.toLowerCase();
@@ -668,6 +740,208 @@ export class DesignAdapter implements InteractionMode {
     }
   };
 
+  private getAnchorDisplayInfo(anchorForContext: HTMLElement | null): {
+    display: string;
+    note: string | null;
+  } {
+    if (!anchorForContext) {
+      return { display: "", note: null };
+    }
+    try {
+      const anchorComp = globalThis.getComputedStyle(anchorForContext);
+      const d = anchorComp.display || "block";
+      if (d === "flex" || d === "inline-flex") {
+        return {
+          display: `${d} (flex-direction: ${anchorComp.flexDirection})`,
+          note: `Anchor element is a flex container. If inserting a new child into it, a flex child approach (e.g. margin-left: auto) may be more appropriate than position: absolute.`
+        };
+      } else if (d === "grid" || d === "inline-grid") {
+        return {
+          display: d,
+          note: `Anchor element is a grid container. If inserting a new child into it, a grid child approach may be more appropriate than position: absolute.`
+        };
+      } else {
+        return { display: d, note: null };
+      }
+    } catch {
+      return { display: "", note: null };
+    }
+  }
+
+  private getRelatedFilesList(anchorFile: string, anchorLine: number, ancestors: any[]): string[] {
+    const seenFiles = new Set<string>([anchorFile]);
+    const relatedFiles: string[] = anchorFile
+      ? [`\`${anchorFile}\` (Line: ${anchorLine}) — anchor component`]
+      : [];
+
+    for (const anc of ancestors) {
+      if (anc.fileName && !seenFiles.has(anc.fileName)) {
+        seenFiles.add(anc.fileName);
+        const label = anc.componentName ? ` — \`${anc.componentName}\`` : "";
+        relatedFiles.push(`\`${anc.fileName}\` (Line: ${anc.lineNumber || 1})${label}`);
+      }
+    }
+    return relatedFiles;
+  }
+
+  private getPlacementAndRules(commonParent: HTMLElement): {
+    offsetH: number;
+    offsetV: number;
+    cssRules: string;
+  } {
+    const dotViewportX = (this.isSnappedH ? this.snapX : this.crosshairX) + this.dX;
+    const dotViewportY = (this.isSnappedV ? this.snapY : this.crosshairY) + this.dY;
+
+    const offsetH = this.getHorizontalOffset(dotViewportX);
+    const offsetV = this.getVerticalOffset(dotViewportY);
+
+    const cssRules = getSuggestedCSS({
+      boundaryH: this.snapBoundaryH,
+      boundaryV: this.snapBoundaryV,
+      offsetH,
+      offsetV,
+      parentContainer: commonParent,
+      activeX: dotViewportX,
+      activeY: dotViewportY,
+      anchorH: this.anchorHElement,
+      anchorV: this.anchorVElement
+    });
+
+    return { offsetH, offsetV, cssRules };
+  }
+
+  private getTargetSelector(): string {
+    if (!this.targetElement) return "";
+    const tagName = this.targetElement.tagName.toLowerCase();
+    const classList = Array.from(this.targetElement.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+    const idStr = this.targetElement.id ? `#${this.targetElement.id}` : "";
+    return `${tagName}${idStr}${classStr}`;
+  }
+
+  private buildMetadataText(p: {
+    component: string;
+    selector: string;
+    filePath: string;
+    line: number;
+    column: number;
+    framework: string;
+    selectorH: string;
+    boundaryH: string;
+    signH: string;
+    offsetH: number;
+    isSnappedHText: string;
+    selectorV: string;
+    boundaryV: string;
+    signV: string;
+    offsetV: number;
+    isSnappedVText: string;
+    posAncLine: string;
+    anchorForContextSelector: string;
+    anchorElementDisplay: string;
+    anchorNoteStr: string;
+    directParentLine: string;
+    warningStr: string;
+    cssRules: string;
+    filesSection: string;
+    targetParentSelector: string;
+    targetParentType: string;
+  }): string {
+    return `
+### HoverSource Design Placement Metadata
+* **Component**: \`${p.component}\`
+* **Element**: \`${p.selector}\`
+* **File Path**: \`${p.filePath}\` (Line: ${p.line}, Column: ${p.column})
+* **Framework**: ${p.framework}
+* **Horizontal Anchor**:
+  - Selector: \`${p.selectorH}\`
+  - Boundary: \`${p.boundaryH}\`
+  - Crosshair distance from boundary (NOT a CSS value): \`${p.signH}${p.offsetH}px\` (${p.isSnappedHText})
+* **Vertical Anchor**:
+  - Selector: \`${p.selectorV}\`
+  - Boundary: \`${p.boundaryV}\`
+  - Crosshair distance from boundary (NOT a CSS value): \`${p.signV}${p.offsetV}px\` (${p.isSnappedVText})
+
+#### Layout Context (auto-resolved at runtime)
+* **Positioned Ancestor**: ${p.posAncLine}
+* **Anchor Element**: \`${p.anchorForContextSelector}\` (display: ${p.anchorElementDisplay})
+${p.anchorNoteStr}\
+* **Direct Parent of Anchor**: ${p.directParentLine}
+${p.warningStr}\
+* **USE THIS CSS** (do not use the distance values above as CSS — use this block):
+\`\`\`css
+${p.cssRules}
+\`\`\`
+* **Source Files to Examine**:
+${p.filesSection}
+
+#### For the AI Agent
+The CSS above assumes the new element will be a direct child of the Positioned Ancestor.
+You must determine the actual DOM insertion point by examining the source files above.
+The following is NOT resolved automatically and requires your judgment:
+- **DOM insertion point**: where in the JSX/template tree the new element belongs
+  (sibling of anchor, child of a wrapper, inside a portal, etc.)
+- **Whether \`position: absolute\` is appropriate**: if the anchor or its parent is a flex/grid
+  container, a flex/grid child approach may be more appropriate
+- **Whether the Positioned Ancestor has \`position: relative\` in source**: verify
+  it is not conditionally applied
+
+Suggested layout insertion (heuristic only):
+* Target DOM Parent: \`${p.targetParentSelector}\` (${p.targetParentType})
+`.trim();
+  }
+
+  private getLayoutContextInfo(
+    info: any,
+    anchorForContext: HTMLElement,
+    ancestors: any[]
+  ): {
+    posAncLine: string;
+    directParentLine: string;
+    layoutWarning: string | null;
+    filesSection: string;
+  } {
+    const positionedAncestor = ancestors.find(a => a.position !== "static") ?? null;
+    const directParent = ancestors[0] ?? null;
+
+    const anchorFile = info.fileName || "";
+    const relatedFiles = this.getRelatedFilesList(anchorFile, info.lineNumber || 1, ancestors);
+
+    let posAncLine = "none found within 8 levels — CSS rules may need `position: relative` added to a parent";
+    if (positionedAncestor) {
+      const sourceInfo = positionedAncestor.fileName
+        ? `, source: \`${positionedAncestor.fileName}\`:${positionedAncestor.lineNumber || 1}`
+        : ", source unresolved (no fiber)";
+      posAncLine = `\`${positionedAncestor.selector}\` (position: ${positionedAncestor.position})${sourceInfo}`;
+    }
+
+    let directParentLine = "unresolved";
+    if (directParent) {
+      let layoutPropsStr = "";
+      if (directParent.layoutProps) {
+        layoutPropsStr = "\n  - " + Object.entries(directParent.layoutProps)
+          .filter(([, v]) => v && v !== "normal" && v !== "0px")
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(" | ");
+      }
+      directParentLine = `\`${directParent.selector}\` (display: ${directParent.display})${layoutPropsStr}`;
+    }
+
+    const parentDisplay = directParent?.display ?? "";
+    let layoutWarning = null;
+    const isParentFlexOrGrid = parentDisplay === "flex" || parentDisplay === "inline-flex" || parentDisplay === "grid" || parentDisplay === "inline-grid";
+    if (isParentFlexOrGrid) {
+      const childType = parentDisplay.startsWith("grid") ? "grid" : "flex";
+      layoutWarning = `Direct parent is a ${parentDisplay} container. Inserting as a ${childType} child or with position: absolute are both options — verify which fits the component layout.`;
+    }
+
+    const filesSection = relatedFiles.length > 0
+      ? relatedFiles.map(f => `  - ${f}`).join("\n")
+      : "  - No source files resolved (fiber not available — non-React or production build)";
+
+    return { posAncLine, directParentLine, layoutWarning, filesSection };
+  }
+
   private copyMetadata(): void {
     if (!this.targetElement) return;
 
@@ -687,158 +961,59 @@ export class DesignAdapter implements InteractionMode {
     const commonParent = findCommonAncestor(this.anchorHElement, this.anchorVElement);
     const parentSelector = getSelector(commonParent);
 
-    // Calculate active placement coordinates
-    const dotViewportX = (this.isSnappedH ? this.snapX : this.crosshairX) + this.dX;
-    const dotViewportY = (this.isSnappedV ? this.snapY : this.crosshairY) + this.dY;
-
-    // Calculate H and V offsets
-    const rectH = this.anchorHElement ? this.anchorHElement.getBoundingClientRect() : null;
-    let valH = 0;
-    if (rectH) {
-      valH = rectH.left;
-      if (this.snapBoundaryH === "Right-Edge") valH = rectH.right;
-      else if (this.snapBoundaryH === "Center-Axis") valH = rectH.left + rectH.width / 2;
-    }
-    const offsetH = Math.round(dotViewportX - valH);
-
-    const rectV = this.anchorVElement ? this.anchorVElement.getBoundingClientRect() : null;
-    let valV = 0;
-    if (rectV) {
-      valV = rectV.top;
-      if (this.snapBoundaryV === "Bottom-Edge") valV = rectV.bottom;
-      else if (this.snapBoundaryV === "Center-Axis") valV = rectV.top + rectV.height / 2;
-    }
-    const offsetV = Math.round(dotViewportY - valV);
-
-    const cssRules = getSuggestedCSS(
-      this.snapBoundaryH,
-      this.snapBoundaryV,
-      offsetH,
-      offsetV,
-      commonParent,
-      dotViewportX,
-      dotViewportY,
-      this.anchorHElement,
-      this.anchorVElement
-    );
+    const { offsetH, offsetV, cssRules } = this.getPlacementAndRules(commonParent);
 
     const isHAndVSame = this.anchorHElement && this.anchorHElement === this.anchorVElement;
-    const tagName = this.targetElement.tagName.toLowerCase();
-    const classList = Array.from(this.targetElement.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
-    const idStr = this.targetElement.id ? `#${this.targetElement.id}` : "";
-    const selector = `${tagName}${idStr}${classStr}`;
+    const selector = this.getTargetSelector();
 
-    // --- Variation E: Tier 2 — Layout Context (auto-resolved) ---
+    // --- Layout Context ---
     const anchorForContext = this.anchorHElement || this.anchorVElement || this.targetElement;
     const ancestors = this.resolver.resolveAncestors(anchorForContext, 8);
 
-    // Anchor element's own computed display — key for insertion strategy
-    let anchorElementDisplay = "";
-    let anchorDisplayNote: string | null = null;
-    if (anchorForContext) {
-      try {
-        const anchorComp = globalThis.getComputedStyle(anchorForContext);
-        const d = anchorComp.display || "block";
-        if (d === "flex" || d === "inline-flex") {
-          anchorElementDisplay = `${d} (flex-direction: ${anchorComp.flexDirection})`;
-          anchorDisplayNote = `Anchor element is a flex container. If inserting a new child into it, a flex child approach (e.g. margin-left: auto) may be more appropriate than position: absolute.`;
-        } else if (d === "grid" || d === "inline-grid") {
-          anchorElementDisplay = d;
-          anchorDisplayNote = `Anchor element is a grid container. If inserting a new child into it, a grid child approach may be more appropriate than position: absolute.`;
-        } else {
-          anchorElementDisplay = d;
-        }
-      } catch { /* skip */ }
-    }
+    const anchorDisplayInfo = this.getAnchorDisplayInfo(anchorForContext);
+    const anchorElementDisplay = anchorDisplayInfo.display;
+    const anchorDisplayNote = anchorDisplayInfo.note;
 
-    // Find nearest positioned ancestor (first with position !== static)
-    const positionedAncestor = ancestors.find(a => a.position !== "static") ?? null;
+    const contextInfo = this.getLayoutContextInfo(info, anchorForContext, ancestors);
 
-    // Direct parent is always ancestors[0]
-    const directParent = ancestors[0] ?? null;
+    const signH = offsetH >= 0 ? "+" : "";
+    const isSnappedHText = this.isSnappedH ? "Snapped" : "Free";
+    const signV = offsetV >= 0 ? "+" : "";
+    const isSnappedVText = this.isSnappedV ? "Snapped" : "Free";
+    const targetParentSelector = isHAndVSame ? selectorH : parentSelector;
+    const targetParentType = isHAndVSame ? "same as anchor" : "common ancestor of H and V anchors";
 
-    // Collect unique source files from resolved ancestors (exclude duplicates and anchor file)
-    const anchorFile = info.fileName || "";
-    const seenFiles = new Set<string>([anchorFile]);
-    const relatedFiles: string[] = anchorFile ? [`\`${anchorFile}\` (Line: ${info.lineNumber || 1}) — anchor component`] : [];
+    const anchorNoteStr = anchorDisplayNote ? `  - ${anchorDisplayNote}\n` : "";
+    const warningStr = contextInfo.layoutWarning ? `* ${contextInfo.layoutWarning}\n` : "";
 
-    for (const anc of ancestors) {
-      if (anc.fileName && !seenFiles.has(anc.fileName)) {
-        seenFiles.add(anc.fileName);
-        const label = anc.componentName ? ` — \`${anc.componentName}\`` : "";
-        relatedFiles.push(`\`${anc.fileName}\` (Line: ${anc.lineNumber || 1})${label}`);
-      }
-    }
-
-    // Build layout context section
-    const posAncLine = positionedAncestor
-      ? `\`${positionedAncestor.selector}\` (position: ${positionedAncestor.position})`
-        + (positionedAncestor.fileName ? `, source: \`${positionedAncestor.fileName}\`:${positionedAncestor.lineNumber || 1}` : ", source unresolved (no fiber)")
-      : "none found within 8 levels — CSS rules may need `position: relative` added to a parent";
-
-    const directParentLine = directParent
-      ? `\`${directParent.selector}\` (display: ${directParent.display})`
-        + (directParent.layoutProps
-          ? "\n  - " + Object.entries(directParent.layoutProps)
-              .filter(([, v]) => v && v !== "normal" && v !== "0px")
-              .map(([k, v]) => `${k}: ${v}`)
-              .join(" | ")
-          : "")
-      : "unresolved";
-
-    // Note: if direct parent is flex/grid, inserting with position:absolute requires a positioned ancestor
-    const parentDisplay = directParent?.display ?? "";
-    const layoutWarning = (parentDisplay === "flex" || parentDisplay === "inline-flex" || parentDisplay === "grid" || parentDisplay === "inline-grid")
-      ? `Direct parent is a ${parentDisplay} container. Inserting as a ${parentDisplay.startsWith("grid") ? "grid" : "flex"} child or with position: absolute are both options — verify which fits the component layout.`
-      : null;
-
-    const filesSection = relatedFiles.length > 0
-      ? relatedFiles.map(f => `  - ${f}`).join("\n")
-      : "  - No source files resolved (fiber not available — non-React or production build)";
-
-    const text = `
-### HoverSource Design Placement Metadata
-* **Component**: \`${info.componentName || tagName}\`
-* **Element**: \`${selector}\`
-* **File Path**: \`${info.fileName || "unknown"}\` (Line: ${info.lineNumber || 1}, Column: ${info.columnNumber || 1})
-* **Framework**: ${info.framework}
-* **Horizontal Anchor**:
-  - Selector: \`${selectorH}\`
-  - Boundary: \`${this.snapBoundaryH || "None"}\`
-  - Crosshair distance from boundary (NOT a CSS value): \`${offsetH >= 0 ? "+" : ""}${offsetH}px\` (${this.isSnappedH ? 'Snapped' : 'Free'})
-* **Vertical Anchor**:
-  - Selector: \`${selectorV}\`
-  - Boundary: \`${this.snapBoundaryV || "None"}\`
-  - Crosshair distance from boundary (NOT a CSS value): \`${offsetV >= 0 ? "+" : ""}${offsetV}px\` (${this.isSnappedV ? 'Snapped' : 'Free'})
-
-#### Layout Context (auto-resolved at runtime)
-* **Positioned Ancestor**: ${posAncLine}
-* **Anchor Element**: \`${getSelector(anchorForContext)}\` (display: ${anchorElementDisplay || "block"})
-${anchorDisplayNote ? `  - ${anchorDisplayNote}\n` : ""}\
-* **Direct Parent of Anchor**: ${directParentLine}
-${layoutWarning ? `* ${layoutWarning}\n` : ""}\
-* **USE THIS CSS** (do not use the distance values above as CSS — use this block):
-\`\`\`css
-${cssRules}
-\`\`\`
-* **Source Files to Examine**:
-${filesSection}
-
-#### For the AI Agent
-The CSS above assumes the new element will be a direct child of the Positioned Ancestor.
-You must determine the actual DOM insertion point by examining the source files above.
-The following is NOT resolved automatically and requires your judgment:
-- **DOM insertion point**: where in the JSX/template tree the new element belongs
-  (sibling of anchor, child of a wrapper, inside a portal, etc.)
-- **Whether \`position: absolute\` is appropriate**: if the anchor or its parent is a flex/grid
-  container, a flex/grid child approach may be more appropriate
-- **Whether the Positioned Ancestor has \`position: relative\` in source**: verify
-  it is not conditionally applied
-
-Suggested layout insertion (heuristic only):
-* Target DOM Parent: \`${isHAndVSame ? selectorH : parentSelector}\` (${isHAndVSame ? 'same as anchor' : 'common ancestor of H and V anchors'})
-`.trim();
+    const text = this.buildMetadataText({
+      component: info.componentName || this.targetElement.tagName.toLowerCase(),
+      selector,
+      filePath: info.fileName || "unknown",
+      line: info.lineNumber || 1,
+      column: info.columnNumber || 1,
+      framework: info.framework,
+      selectorH,
+      boundaryH: this.snapBoundaryH || "None",
+      signH,
+      offsetH,
+      isSnappedHText,
+      selectorV,
+      boundaryV: this.snapBoundaryV || "None",
+      signV,
+      offsetV,
+      isSnappedVText,
+      posAncLine: contextInfo.posAncLine,
+      anchorForContextSelector: getSelector(anchorForContext),
+      anchorElementDisplay: anchorElementDisplay || "block",
+      anchorNoteStr,
+      directParentLine: contextInfo.directParentLine,
+      warningStr,
+      cssRules,
+      filesSection: contextInfo.filesSection,
+      targetParentSelector,
+      targetParentType
+    });
 
     this.controller.copyToClipboard(text);
   }
@@ -862,16 +1037,39 @@ Suggested layout insertion (heuristic only):
 
 export interface SnapResult {
   horizontal: {
-    boundary: "Left-Edge" | "Right-Edge" | "Center-Axis";
+    boundary: SnapBoundaryH;
     offset: number;
     distance: number;
     value: number;
   };
   vertical: {
-    boundary: "Top-Edge" | "Bottom-Edge" | "Center-Axis";
+    boundary: SnapBoundaryV;
     offset: number;
     distance: number;
     value: number;
+  };
+}
+
+function findNearestBoundary<B extends string>(
+  targetVal: number,
+  candidates: { boundary: B; value: number }[]
+): { boundary: B; value: number; distance: number; offset: number } {
+  let nearest = candidates[0];
+  let minDist = Math.abs(targetVal - nearest.value);
+
+  for (let i = 1; i < candidates.length; i++) {
+    const dist = Math.abs(targetVal - candidates[i].value);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = candidates[i];
+    }
+  }
+
+  return {
+    boundary: nearest.boundary,
+    value: nearest.value,
+    distance: minDist,
+    offset: targetVal - nearest.value
   };
 }
 
@@ -880,63 +1078,21 @@ export function findNearestSnapPoint(
   y: number,
   rect: { left: number; top: number; width: number; height: number; right: number; bottom: number }
 ): SnapResult {
-  const leftVal = rect.left;
-  const rightVal = rect.right;
-  const hCenterVal = rect.left + rect.width / 2;
-
-  const topVal = rect.top;
-  const bottomVal = rect.bottom;
-  const vCenterVal = rect.top + rect.height / 2;
-
-  // Horizontal candidates
   const hCandidates = [
-    { boundary: "Left-Edge" as const, value: leftVal },
-    { boundary: "Right-Edge" as const, value: rightVal },
-    { boundary: "Center-Axis" as const, value: hCenterVal }
+    { boundary: "Left-Edge" as const, value: rect.left },
+    { boundary: "Right-Edge" as const, value: rect.right },
+    { boundary: "Center-Axis" as const, value: rect.left + rect.width / 2 }
   ];
 
-  let nearestH = hCandidates[0];
-  let minHDist = Math.abs(x - nearestH.value);
-
-  for (let i = 1; i < hCandidates.length; i++) {
-    const dist = Math.abs(x - hCandidates[i].value);
-    if (dist < minHDist) {
-      minHDist = dist;
-      nearestH = hCandidates[i];
-    }
-  }
-
-  // Vertical candidates
   const vCandidates = [
-    { boundary: "Top-Edge" as const, value: topVal },
-    { boundary: "Bottom-Edge" as const, value: bottomVal },
-    { boundary: "Center-Axis" as const, value: vCenterVal }
+    { boundary: "Top-Edge" as const, value: rect.top },
+    { boundary: "Bottom-Edge" as const, value: rect.bottom },
+    { boundary: "Center-Axis" as const, value: rect.top + rect.height / 2 }
   ];
-
-  let nearestV = vCandidates[0];
-  let minVDist = Math.abs(y - nearestV.value);
-
-  for (let i = 1; i < vCandidates.length; i++) {
-    const dist = Math.abs(y - vCandidates[i].value);
-    if (dist < minVDist) {
-      minVDist = dist;
-      nearestV = vCandidates[i];
-    }
-  }
 
   return {
-    horizontal: {
-      boundary: nearestH.boundary,
-      offset: x - nearestH.value,
-      distance: minHDist,
-      value: nearestH.value
-    },
-    vertical: {
-      boundary: nearestV.boundary,
-      offset: y - nearestV.value,
-      distance: minVDist,
-      value: nearestV.value
-    }
+    horizontal: findNearestBoundary(x, hCandidates),
+    vertical: findNearestBoundary(y, vCandidates)
   };
 }
 
@@ -975,17 +1131,12 @@ export function calculateNudge(
   return { dX, dY };
 }
 
-export function getLayoutRules(
+function getLayoutRulesH(
   boundaryH: "Left-Edge" | "Right-Edge" | "Center-Axis" | null,
-  boundaryV: "Top-Edge" | "Bottom-Edge" | "Center-Axis" | null,
   dX: number,
-  dY: number
+  rules: string[]
 ): string {
-  const rules = ["position: absolute;"];
   let transformX = "";
-  let transformY = "";
-
-  // Horizontal rules
   if (boundaryH === "Left-Edge") {
     if (dX >= 0) {
       rules.push(`left: ${dX}px;`);
@@ -1006,8 +1157,15 @@ export function getLayoutRules(
     }
     transformX = "translateX(-50%)";
   }
+  return transformX;
+}
 
-  // Vertical rules
+function getLayoutRulesV(
+  boundaryV: "Top-Edge" | "Bottom-Edge" | "Center-Axis" | null,
+  dY: number,
+  rules: string[]
+): string {
+  let transformY = "";
   if (boundaryV === "Top-Edge") {
     if (dY >= 0) {
       rules.push(`top: ${dY}px;`);
@@ -1028,8 +1186,19 @@ export function getLayoutRules(
     }
     transformY = "translateY(-50%)";
   }
+  return transformY;
+}
 
-  // Handle combined transform
+export function getLayoutRules(
+  boundaryH: "Left-Edge" | "Right-Edge" | "Center-Axis" | null,
+  boundaryV: "Top-Edge" | "Bottom-Edge" | "Center-Axis" | null,
+  dX: number,
+  dY: number
+): string {
+  const rules = ["position: absolute;"];
+  const transformX = getLayoutRulesH(boundaryH, dX, rules);
+  const transformY = getLayoutRulesV(boundaryV, dY, rules);
+
   if (transformX && transformY) {
     rules.push("transform: translate(-50%, -50%);");
   } else if (transformX) {
@@ -1042,7 +1211,7 @@ export function getLayoutRules(
 }
 
 export function findCommonAncestor(el1: HTMLElement | null, el2: HTMLElement | null): HTMLElement {
-  if (!el1 || !el2) return typeof document !== "undefined" ? document.body : (el1 || el2 || {}) as any;
+  if (!el1 || !el2) return typeof document === "undefined" ? (el1 || el2 || {}) as any : document.body;
   const path: HTMLElement[] = [];
   let curr: HTMLElement | null = el1;
   while (curr) {
@@ -1066,65 +1235,94 @@ export function getSelector(el: HTMLElement | null): string {
   return `${tag}${id}${classStr}`;
 }
 
-export function getSuggestedCSS(
-  boundaryH: "Left-Edge" | "Right-Edge" | "Center-Axis" | null,
-  boundaryV: "Top-Edge" | "Bottom-Edge" | "Center-Axis" | null,
+export interface SuggestedCSSParams {
+  boundaryH: SnapBoundaryH | null;
+  boundaryV: SnapBoundaryV | null;
+  offsetH: number;
+  offsetV: number;
+  parentContainer: HTMLElement;
+  activeX: number;
+  activeY: number;
+  anchorH: HTMLElement | null;
+  anchorV: HTMLElement | null;
+}
+
+function getHorizontalPositionRules(
+  boundaryH: SnapBoundaryH | null,
   offsetH: number,
-  offsetV: number,
-  parentContainer: HTMLElement,
-  activeX: number,
-  activeY: number,
-  anchorH: HTMLElement | null,
-  anchorV: HTMLElement | null
+  rules: string[]
 ): string {
-  const rules = ["position: absolute;"];
   let transformX = "";
+  if (boundaryH === "Left-Edge") {
+    if (offsetH >= 0) {
+      rules.push(`  left: ${offsetH}px;`);
+    } else {
+      rules.push(`  right: calc(100% + ${Math.abs(offsetH)}px);`);
+    }
+  } else if (boundaryH === "Right-Edge") {
+    if (offsetH >= 0) {
+      rules.push(`  left: calc(100% + ${offsetH}px);`);
+    } else {
+      rules.push(`  right: ${Math.abs(offsetH)}px;`);
+    }
+  } else if (boundaryH === "Center-Axis") {
+    if (offsetH === 0) {
+      rules.push(`  left: 50%;`);
+    } else {
+      rules.push(`  left: calc(50% + ${offsetH}px);`);
+    }
+    transformX = "translateX(-50%)";
+  }
+  return transformX;
+}
+
+function getVerticalPositionRules(
+  boundaryV: SnapBoundaryV | null,
+  offsetV: number,
+  rules: string[]
+): string {
   let transformY = "";
+  if (boundaryV === "Top-Edge") {
+    if (offsetV >= 0) {
+      rules.push(`  top: ${offsetV}px;`);
+    } else {
+      rules.push(`  bottom: calc(100% + ${Math.abs(offsetV)}px);`);
+    }
+  } else if (boundaryV === "Bottom-Edge") {
+    if (offsetV >= 0) {
+      rules.push(`  top: calc(100% + ${offsetV}px);`);
+    } else {
+      rules.push(`  bottom: ${Math.abs(offsetV)}px;`);
+    }
+  } else if (boundaryV === "Center-Axis") {
+    if (offsetV === 0) {
+      rules.push(`  top: 50%;`);
+    } else {
+      rules.push(`  top: calc(50% + ${offsetV}px);`);
+    }
+    transformY = "translateY(-50%)";
+  }
+  return transformY;
+}
+
+export function getSuggestedCSS(params: SuggestedCSSParams): string {
+  const {
+    boundaryH,
+    boundaryV,
+    offsetH,
+    offsetV,
+    parentContainer,
+    activeX,
+    activeY,
+    anchorH,
+    anchorV
+  } = params;
+
+  const rules = ["position: absolute;"];
 
   if (anchorH && anchorH === anchorV) {
-    // Horizontal positioning
-    if (boundaryH === "Left-Edge") {
-      if (offsetH >= 0) {
-        rules.push(`  left: ${offsetH}px;`);
-      } else {
-        rules.push(`  right: calc(100% + ${Math.abs(offsetH)}px);`);
-      }
-    } else if (boundaryH === "Right-Edge") {
-      if (offsetH >= 0) {
-        rules.push(`  left: calc(100% + ${offsetH}px);`);
-      } else {
-        rules.push(`  right: ${Math.abs(offsetH)}px;`);
-      }
-    } else if (boundaryH === "Center-Axis") {
-      if (offsetH === 0) {
-        rules.push(`  left: 50%;`);
-      } else {
-        rules.push(`  left: calc(50% + ${offsetH}px);`);
-      }
-      transformX = "translateX(-50%)";
-    }
-
-    // Vertical positioning
-    if (boundaryV === "Top-Edge") {
-      if (offsetV >= 0) {
-        rules.push(`  top: ${offsetV}px;`);
-      } else {
-        rules.push(`  bottom: calc(100% + ${Math.abs(offsetV)}px);`);
-      }
-    } else if (boundaryV === "Bottom-Edge") {
-      if (offsetV >= 0) {
-        rules.push(`  top: calc(100% + ${offsetV}px);`);
-      } else {
-        rules.push(`  bottom: ${Math.abs(offsetV)}px;`);
-      }
-    } else if (boundaryV === "Center-Axis") {
-      if (offsetV === 0) {
-        rules.push(`  top: 50%;`);
-      } else {
-        rules.push(`  top: calc(50% + ${offsetV}px);`);
-      }
-      transformY = "translateY(-50%)";
-    }
+    const transformX = getHorizontalPositionRules(boundaryH, offsetH, rules);
+    const transformY = getVerticalPositionRules(boundaryV, offsetV, rules);
 
     // Combined transform
     if (transformX && transformY) {
@@ -1144,9 +1342,11 @@ export function getSuggestedCSS(
     const pctX = Math.round((relX / parentRect.width) * 100);
     const pctY = Math.round((relY / parentRect.height) * 100);
 
-    rules.push(`  left: ${pctX}%;`);
-    rules.push(`  top: ${pctY}%;`);
-    rules.push(`  white-space: nowrap;`);
+    rules.push(
+      `  left: ${pctX}%;`,
+      `  top: ${pctY}%;`,
+      `  white-space: nowrap;`
+    );
   }
 
   return rules.join("\n");

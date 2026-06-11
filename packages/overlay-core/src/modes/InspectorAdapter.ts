@@ -3,14 +3,14 @@ import { SourceResolver, ParentVisualEffect } from "@hoversource/source-resolver
 import { inspectVisualContext } from "../inspector.js";
 
 function getCompanionPort(): number {
-  return (window as any).__HOVERSOURCE_PORT__ ?? 3000;
+  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 3000;
 }
 
 export class InspectorAdapter implements InteractionMode {
   public readonly id = "inspector";
   private controller!: OverlayController;
   
-  private resolver = new SourceResolver();
+  private readonly resolver = new SourceResolver();
   private isFrozen = false;
   private minimalMode = false;
   
@@ -172,7 +172,7 @@ export class InspectorAdapter implements InteractionMode {
           let line = info.lineNumber || 1;
           let col = info.columnNumber || 1;
 
-          if (data && data.corrected) {
+          if (data?.corrected) {
             line = data.corrected.line;
             col = data.corrected.column;
           }
@@ -414,7 +414,7 @@ export class InspectorAdapter implements InteractionMode {
     dbLabel: string,
     modeLabel: string
   ): string {
-    const computed = window.getComputedStyle(element);
+    const computed = globalThis.getComputedStyle(element);
     const shadow = computed.boxShadow;
     const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
 
@@ -562,7 +562,7 @@ export class InspectorAdapter implements InteractionMode {
     
     const element = this.currentElement;
     const info = this.currentSourceInfo;
-    const computed = window.getComputedStyle(element);
+    const computed = globalThis.getComputedStyle(element);
     
     const data = {
       framework: info.framework,

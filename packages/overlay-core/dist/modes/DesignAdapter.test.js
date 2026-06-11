@@ -88,7 +88,17 @@ describe("DesignAdapter - Relational Alignment and Offset (RAO) Helpers", () => 
             getBoundingClientRect: () => ({ left: 0, top: 0, width: 0, height: 0 })
         };
         // Case 1: Same anchor (Direct Snapping)
-        const rulesSame = getSuggestedCSS("Right-Edge", "Center-Axis", -25, 0, anchor, 100, 200, anchor, anchor);
+        const rulesSame = getSuggestedCSS({
+            boundaryH: "Right-Edge",
+            boundaryV: "Center-Axis",
+            offsetH: -25,
+            offsetV: 0,
+            parentContainer: anchor,
+            activeX: 100,
+            activeY: 200,
+            anchorH: anchor,
+            anchorV: anchor
+        });
         expect(rulesSame).toContain("position: absolute;");
         expect(rulesSame).toContain("right: 25px;");
         expect(rulesSame).toContain("top: 50%;");
@@ -107,7 +117,17 @@ describe("DesignAdapter - Relational Alignment and Offset (RAO) Helpers", () => 
         };
         const otherAnchor = {};
         // Mouse is at (300, 200) -> relX = 200, relY = 100 -> pctX = 50%, pctY = 25%
-        const rulesDiff = getSuggestedCSS("Left-Edge", "Top-Edge", 0, 0, parent, 300, 200, anchor, otherAnchor);
+        const rulesDiff = getSuggestedCSS({
+            boundaryH: "Left-Edge",
+            boundaryV: "Top-Edge",
+            offsetH: 0,
+            offsetV: 0,
+            parentContainer: parent,
+            activeX: 300,
+            activeY: 200,
+            anchorH: anchor,
+            anchorV: otherAnchor
+        });
         expect(rulesDiff).toContain("position: absolute;");
         expect(rulesDiff).toContain("left: 50%;");
         expect(rulesDiff).toContain("top: 25%;");

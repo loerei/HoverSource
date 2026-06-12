@@ -706,6 +706,22 @@ export class InspectorAdapter implements InteractionMode {
     return formatNode(clone, "");
   }
 
+  private getTargetHTMLToCopy(el: HTMLElement): HTMLElement {
+    const parent = el.parentElement;
+    if (parent && parent !== document.body && parent !== document.documentElement) {
+      const parentInfo = this.resolver.resolve(parent);
+      const isParentCustomComponent = !!parentInfo?.componentName && parentInfo.framework !== "Unknown";
+      
+      if (!isParentCustomComponent && parent.children.length <= 5) {
+        const leafTags = ["input", "button", "img", "svg", "span", "i", "a", "label"];
+        if (leafTags.includes(el.tagName.toLowerCase()) || el.children.length === 0) {
+          return parent;
+        }
+      }
+    }
+    return el;
+  }
+
   private copyAllLayers() {
     if (this.layerStack.length === 0) return;
     
@@ -737,10 +753,12 @@ export class InspectorAdapter implements InteractionMode {
       text += this.formatElementMetadata(el, info) + "\n\n";
     });
     
-    const leafEl = this.layerStack[0];
-    if (leafEl) {
-      text += `### Target Element HTML Structure (Layer 1)\n`;
-      text += `\`\`\`html\n${this.getMinifiedHTML(leafEl)}\n\`\`\`\n`;
+    const activeEl = this.layerStack[this.activeLayerIndex] || this.layerStack[0];
+    if (activeEl) {
+      const targetElToCopy = this.getTargetHTMLToCopy(activeEl);
+      const label = targetElToCopy === activeEl ? `Layer ${this.activeLayerIndex + 1}` : `Layer ${this.activeLayerIndex + 1} with siblings`;
+      text += `### Target Element HTML Structure (${label})\n`;
+      text += `\`\`\`html\n${this.getMinifiedHTML(targetElToCopy)}\n\`\`\`\n`;
     }
     
     this.controller.copyToClipboard(text.trim());

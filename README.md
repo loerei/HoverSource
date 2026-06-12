@@ -17,7 +17,7 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 - **Deep-linking (Click filename)**: Instantly opens the file in your preferred editor (VS Code or Cursor) at the exact line number.
 - **Source Line Correction**: Silently checks and corrects compiler-shifted line numbers in the background.
 - **Layered Element Navigation (`Alt + Shift + Scroll`)**: Cycle through overlapping DOM elements under the cursor using a scroll combination, showing a clean 2D overlapping layer stack in the tooltip to easily target parent/child elements. Customize shortcuts in the dashboard.
-- **Element Selector & CSS Source Location**: Captures the exact HTML tag and classes of the hovered element, along with the specific line and file of their CSS definition.
+- **Element Selector & CSS Source Location**: Captures the exact HTML tag and classes of the hovered element, along with the specific line and file of their CSS definition. This includes support for CSS Preprocessors (Sass, SCSS, Less) with nested selectors, and CSS Modules (auto-resolving hashed class names back to their source definitions).
 
 ## Modes of Operation
 
@@ -80,7 +80,7 @@ HoverSource walks the ancestor chain of the hovered element and collects any of 
 
 `mask-image` · `-webkit-mask-image` · `opacity` · `filter` · `backdrop-filter` · `overflow-x` · `overflow-y` · `position: sticky` · `position: fixed`
 
-When a class from an ancestor is found in the project's CSS/SCSS files, the output includes a direct link to the source file and line:
+When a class from an ancestor is found in the project's CSS/SCSS/Less files (including CSS Modules), the output includes a direct link to the source file and line:
 
 ```markdown
 * **Parent Styles**:

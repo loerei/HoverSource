@@ -1244,8 +1244,8 @@ ${attrList}`;
     drawHorizontalGuide(svgNS, dotViewportX, dotAbsX, dotAbsY) {
       const rectH = this.anchorHElement ? this.anchorHElement.getBoundingClientRect() : null;
       if (this.anchorHElement && rectH) {
-        const rectAbsLeft = rectH.left + globalThis.scrollX;
-        const rectAbsRight = rectH.right + globalThis.scrollX;
+        const rectAbsLeft = rectH.left;
+        const rectAbsRight = rectH.right;
         const rectAbsCenterX = rectAbsLeft + rectH.width / 2;
         let anchorX = rectAbsLeft;
         if (this.snapBoundaryH === "Right-Edge") {
@@ -1262,7 +1262,7 @@ ${attrList}`;
         lineH.setAttribute("stroke-dasharray", "4");
         lineH.setAttribute("stroke-width", "1.5");
         this.svgOverlay.appendChild(lineH);
-        const offsetH = Math.round(dotViewportX - (anchorX - globalThis.scrollX));
+        const offsetH = Math.round(dotViewportX - anchorX);
         const displayOffsetH = offsetH >= 0 ? `+${offsetH}` : `${offsetH}`;
         if (this.badgeElementH) {
           this.badgeElementH.textContent = `${displayOffsetH}px`;
@@ -1275,8 +1275,8 @@ ${attrList}`;
     drawVerticalGuide(svgNS, dotViewportY, dotAbsX, dotAbsY) {
       const rectV = this.anchorVElement ? this.anchorVElement.getBoundingClientRect() : null;
       if (this.anchorVElement && rectV) {
-        const rectAbsTop = rectV.top + globalThis.scrollY;
-        const rectAbsBottom = rectV.bottom + globalThis.scrollY;
+        const rectAbsTop = rectV.top;
+        const rectAbsBottom = rectV.bottom;
         const rectAbsCenterY = rectAbsTop + rectV.height / 2;
         let anchorY = rectAbsTop;
         if (this.snapBoundaryV === "Bottom-Edge") {
@@ -1293,7 +1293,7 @@ ${attrList}`;
         lineV.setAttribute("stroke-dasharray", "4");
         lineV.setAttribute("stroke-width", "1.5");
         this.svgOverlay.appendChild(lineV);
-        const offsetV = Math.round(dotViewportY - (anchorY - globalThis.scrollY));
+        const offsetV = Math.round(dotViewportY - anchorY);
         const displayOffsetV = offsetV >= 0 ? `+${offsetV}` : `${offsetV}`;
         if (this.badgeElementV) {
           this.badgeElementV.textContent = `${displayOffsetV}px`;
@@ -1351,14 +1351,14 @@ ${attrList}`;
       }
       const dotViewportX = (this.isSnappedH ? this.snapX : this.crosshairX) + this.dX;
       const dotViewportY = (this.isSnappedV ? this.snapY : this.crosshairY) + this.dY;
-      const dotAbsX = dotViewportX + globalThis.scrollX;
-      const dotAbsY = dotViewportY + globalThis.scrollY;
+      const dotAbsX = dotViewportX;
+      const dotAbsY = dotViewportY;
       const svgNS = "http://www.w3.org/2000/svg";
       const drawAnchorOutline = (el, color) => {
         const rect = el.getBoundingClientRect();
         const box = document.createElementNS(svgNS, "rect");
-        box.setAttribute("x", (rect.left + globalThis.scrollX).toString());
-        box.setAttribute("y", (rect.top + globalThis.scrollY).toString());
+        box.setAttribute("x", rect.left.toString());
+        box.setAttribute("y", rect.top.toString());
         box.setAttribute("width", rect.width.toString());
         box.setAttribute("height", rect.height.toString());
         box.setAttribute("fill", color);
@@ -2184,8 +2184,8 @@ Suggested layout insertion (heuristic only):
       const rect = target.getBoundingClientRect();
       this.outlineBox.style.width = `${rect.width}px`;
       this.outlineBox.style.height = `${rect.height}px`;
-      this.outlineBox.style.left = `${rect.left + globalThis.scrollX}px`;
-      this.outlineBox.style.top = `${rect.top + globalThis.scrollY}px`;
+      this.outlineBox.style.left = `${rect.left}px`;
+      this.outlineBox.style.top = `${rect.top}px`;
       this.outlineBox.style.display = "block";
       this.outlineBox.style.borderColor = isFrozen ? "#f59e0b" : "#3b82f6";
       this.outlineBox.style.backgroundColor = isFrozen ? "rgba(245, 158, 11, 0.15)" : "rgba(59, 130, 246, 0.1)";
@@ -2230,8 +2230,8 @@ Suggested layout insertion (heuristic only):
       const maxY = Math.max(0, window.innerHeight - boxRect.height);
       y = Math.max(0, Math.min(y, maxY));
       this.tooltipBox.classList.toggle("hs-tooltip-above", isAbove);
-      this.tooltipBox.style.left = `${x + globalThis.scrollX}px`;
-      this.tooltipBox.style.top = `${y + globalThis.scrollY}px`;
+      this.tooltipBox.style.left = `${x}px`;
+      this.tooltipBox.style.top = `${y}px`;
     }
     clear() {
       if (this.outlineBox)

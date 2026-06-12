@@ -348,8 +348,8 @@ class OverlayEngine {
         const rect = target.getBoundingClientRect();
         this.outlineBox.style.width = `${rect.width}px`;
         this.outlineBox.style.height = `${rect.height}px`;
-        this.outlineBox.style.left = `${rect.left + globalThis.scrollX}px`;
-        this.outlineBox.style.top = `${rect.top + globalThis.scrollY}px`;
+        this.outlineBox.style.left = `${rect.left}px`;
+        this.outlineBox.style.top = `${rect.top}px`;
         this.outlineBox.style.display = "block";
         this.outlineBox.style.borderColor = isFrozen ? "#f59e0b" : "#3b82f6";
         this.outlineBox.style.backgroundColor = isFrozen ? "rgba(245, 158, 11, 0.15)" : "rgba(59, 130, 246, 0.1)";
@@ -395,8 +395,8 @@ class OverlayEngine {
         const maxY = Math.max(0, window.innerHeight - boxRect.height);
         y = Math.max(0, Math.min(y, maxY));
         this.tooltipBox.classList.toggle('hs-tooltip-above', isAbove);
-        this.tooltipBox.style.left = `${x + globalThis.scrollX}px`;
-        this.tooltipBox.style.top = `${y + globalThis.scrollY}px`;
+        this.tooltipBox.style.left = `${x}px`;
+        this.tooltipBox.style.top = `${y}px`;
     }
     clear() {
         if (this.outlineBox)

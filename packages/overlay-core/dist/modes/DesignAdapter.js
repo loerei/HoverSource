@@ -369,8 +369,8 @@ export class DesignAdapter {
     drawHorizontalGuide(svgNS, dotViewportX, dotAbsX, dotAbsY) {
         const rectH = this.anchorHElement ? this.anchorHElement.getBoundingClientRect() : null;
         if (this.anchorHElement && rectH) {
-            const rectAbsLeft = rectH.left + globalThis.scrollX;
-            const rectAbsRight = rectH.right + globalThis.scrollX;
+            const rectAbsLeft = rectH.left;
+            const rectAbsRight = rectH.right;
             const rectAbsCenterX = rectAbsLeft + rectH.width / 2;
             let anchorX = rectAbsLeft;
             if (this.snapBoundaryH === "Right-Edge") {
@@ -388,7 +388,7 @@ export class DesignAdapter {
             lineH.setAttribute("stroke-dasharray", "4");
             lineH.setAttribute("stroke-width", "1.5");
             this.svgOverlay.appendChild(lineH);
-            const offsetH = Math.round(dotViewportX - (anchorX - globalThis.scrollX));
+            const offsetH = Math.round(dotViewportX - anchorX);
             const displayOffsetH = offsetH >= 0 ? `+${offsetH}` : `${offsetH}`;
             if (this.badgeElementH) {
                 this.badgeElementH.textContent = `${displayOffsetH}px`;
@@ -401,8 +401,8 @@ export class DesignAdapter {
     drawVerticalGuide(svgNS, dotViewportY, dotAbsX, dotAbsY) {
         const rectV = this.anchorVElement ? this.anchorVElement.getBoundingClientRect() : null;
         if (this.anchorVElement && rectV) {
-            const rectAbsTop = rectV.top + globalThis.scrollY;
-            const rectAbsBottom = rectV.bottom + globalThis.scrollY;
+            const rectAbsTop = rectV.top;
+            const rectAbsBottom = rectV.bottom;
             const rectAbsCenterY = rectAbsTop + rectV.height / 2;
             let anchorY = rectAbsTop;
             if (this.snapBoundaryV === "Bottom-Edge") {
@@ -420,7 +420,7 @@ export class DesignAdapter {
             lineV.setAttribute("stroke-dasharray", "4");
             lineV.setAttribute("stroke-width", "1.5");
             this.svgOverlay.appendChild(lineV);
-            const offsetV = Math.round(dotViewportY - (anchorY - globalThis.scrollY));
+            const offsetV = Math.round(dotViewportY - anchorY);
             const displayOffsetV = offsetV >= 0 ? `+${offsetV}` : `${offsetV}`;
             if (this.badgeElementV) {
                 this.badgeElementV.textContent = `${displayOffsetV}px`;
@@ -482,15 +482,15 @@ export class DesignAdapter {
         // Compute active placement dot coordinates
         const dotViewportX = (this.isSnappedH ? this.snapX : this.crosshairX) + this.dX;
         const dotViewportY = (this.isSnappedV ? this.snapY : this.crosshairY) + this.dY;
-        const dotAbsX = dotViewportX + globalThis.scrollX;
-        const dotAbsY = dotViewportY + globalThis.scrollY;
+        const dotAbsX = dotViewportX;
+        const dotAbsY = dotViewportY;
         const svgNS = "http://www.w3.org/2000/svg";
         // Highlight H-Anchor and V-Anchor elements via SVG dashed box
         const drawAnchorOutline = (el, color) => {
             const rect = el.getBoundingClientRect();
             const box = document.createElementNS(svgNS, "rect");
-            box.setAttribute("x", (rect.left + globalThis.scrollX).toString());
-            box.setAttribute("y", (rect.top + globalThis.scrollY).toString());
+            box.setAttribute("x", rect.left.toString());
+            box.setAttribute("y", rect.top.toString());
             box.setAttribute("width", rect.width.toString());
             box.setAttribute("height", rect.height.toString());
             box.setAttribute("fill", color);

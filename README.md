@@ -11,7 +11,7 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 - **Dual Interaction Modes**:
   - **Inspector Mode**: Hover over components to view layout boundaries, selector paths, and file deep-links. Copies `HoverSource Component Metadata` with `Alt + C`.
   - **Design Mode (`Alt + X` to toggle)**: Drag a targeting crosshair to snap against horizontal/vertical edges and measure pixel-perfect offsets. Copies `HoverSource Design Placement Metadata` with `Alt + C`.
-- **Copy AI-Ready Metadata (`Alt + C`)**: Copies a structured Markdown block to your clipboard — component name, exact file path with line/column, computed styles, parent visual effects with CSS source locations, layout constraints, JSDoc comments, and raw JSX attributes (or snapping offsets and absolute CSS anchors in Design Mode).
+- **Copy AI-Ready Metadata (`Alt + C` / `Alt + Shift + C`)**: Copies a structured Markdown block to your clipboard — component name, exact file path with line/column, computed styles, parent visual effects with CSS source locations, layout constraints, JSDoc comments, and raw JSX attributes (or snapping offsets and absolute CSS anchors in Design Mode). Pressing **`Alt + Shift + C`** copies the metadata of all ancestor layers under the cursor plus a minified structural HTML skeleton of the target element, providing the AI with layout and nesting context.
 - **Freeze State (`Alt + P`)**: Locks dynamic elements (like tooltips, popovers, or dropdowns) in place so you can hover and capture them without them disappearing.
 - **Toggle Overlay (`Alt + H`)**: Show or hide the developer overlay bounding box and floating spec card.
 - **Deep-linking (Click filename)**: Instantly opens the file in your preferred editor (VS Code or Cursor) at the exact line number.
@@ -143,6 +143,49 @@ This lets an AI agent patch the exact CSS rule in one step, without grepping the
   - `Renders the scrollable message list for the active chat thread.`
 * **Source Attributes**:
   - `data-testid="chat-thread-body"`
+```
+
+### Multi-Layer Output (`Alt + Shift + C`)
+
+Pressing **`Alt + Shift + C`** generates a combined Markdown document listing all resolved component layers under the cursor (ordered from leaf to root), ending with a minified structural HTML tree of the target leaf element:
+
+```markdown
+### HoverSource Component Metadata
+Found 3 layer(s), ordered from leaf (Layer 1) to root:
+
+#### Layer 1/3: `div` (div)
+* **Component**: `div`
+* **Element**: `div.game-card.favorited`
+* **File Path**: `src/components/GameCard.tsx` (Line: 12, Column: 4)
+* **Framework**: React
+* **Dimensions**: 213x252
+* **Key Styles**:
+  - Color: `rgb(255, 255, 255)`
+  - Background: `rgb(42, 42, 42)`
+  - Box Shadow: `rgba(255, 215, 0, 0.15) 0px 6px 25px 0px`
+  - Margin: `0px` | Padding: `20px`
+  - Display: `flex` (direction: column)
+* **Layout Constraints**:
+  - `position: relative`
+  - `display: flex`
+
+#### Layer 2/3: `div` (div)
+...
+
+#### Layer 3/3: `div` (div)
+...
+
+### Target Element HTML Structure (Layer 1)
+```html
+<div class="game-card favorited">
+  <div class="game-icon">
+    <svg></svg>
+  </div>
+  <div class="game-status">
+    ...
+  </div>
+</div>
+```
 ```
 
 ### Design Placement Metadata (Design Mode)

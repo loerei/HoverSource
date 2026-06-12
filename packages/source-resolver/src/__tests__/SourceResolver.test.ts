@@ -67,6 +67,7 @@ describe("VueAdapter", () => {
       classList: {
         [Symbol.iterator]: function* () {}
       },
+      hasAttribute: () => false,
       __vueParentComponent: {
         type: {
           __file: "/src/components/VueButton.vue",
@@ -80,6 +81,53 @@ describe("VueAdapter", () => {
     expect(result).not.toBeNull();
     expect(result?.fileName).toBe("/src/components/VueButton.vue");
     expect(result?.componentName).toBe("VueButton");
+    expect(result?.framework).toBe("Vue");
+  });
+
+  it("should resolve Vue component metadata from data-v-inspector attribute in invasive mode", () => {
+    const adapter = new VueAdapter();
+    const mockElement = {
+      tagName: "BUTTON",
+      classList: {
+        [Symbol.iterator]: function* () {}
+      },
+      hasAttribute: (name: string) => name === "data-v-inspector",
+      getAttribute: (name: string) => name === "data-v-inspector" ? "/src/components/MyButton.vue:24:8" : null
+    } as any;
+
+    expect(adapter.canResolve(mockElement)).toBe(true);
+    const result = adapter.resolve(mockElement);
+    expect(result).not.toBeNull();
+    expect(result?.fileName).toBe("/src/components/MyButton.vue");
+    expect(result?.lineNumber).toBe(24);
+    expect(result?.columnNumber).toBe(8);
+    expect(result?.componentName).toBe("MyButton");
+    expect(result?.framework).toBe("Vue");
+  });
+
+  it("should resolve Vue component metadata from individual data-v-inspector-* attributes", () => {
+    const adapter = new VueAdapter();
+    const mockElement = {
+      tagName: "BUTTON",
+      classList: {
+        [Symbol.iterator]: function* () {}
+      },
+      hasAttribute: (name: string) => name === "data-v-inspector-file",
+      getAttribute: (name: string) => {
+        if (name === "data-v-inspector-file") return "/src/components/Header.vue";
+        if (name === "data-v-inspector-line") return "42";
+        if (name === "data-v-inspector-column") return "12";
+        return null;
+      }
+    } as any;
+
+    expect(adapter.canResolve(mockElement)).toBe(true);
+    const result = adapter.resolve(mockElement);
+    expect(result).not.toBeNull();
+    expect(result?.fileName).toBe("/src/components/Header.vue");
+    expect(result?.lineNumber).toBe(42);
+    expect(result?.columnNumber).toBe(12);
+    expect(result?.componentName).toBe("Header");
     expect(result?.framework).toBe("Vue");
   });
 });

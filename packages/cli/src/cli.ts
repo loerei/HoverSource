@@ -3,7 +3,7 @@
 import { startCompanionServer, loadMergedConfig } from "@hoversource/companion-server";
 import { injectOverlayScript } from "@hoversource/client-injector";
 import { startProxy } from "./proxy.js";
-import { exec, spawn } from "node:child_process";
+import { exec, spawn, execFile } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
 import net from "node:net";
@@ -621,12 +621,161 @@ async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string)
   setInterval(pollAndInject, 2500);
 }
 
+function runNpmCommand(args: string[], cwd: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const nodeDir = path.dirname(process.execPath);
+    const winNpmCli = path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js");
+    const unixNpmCli = path.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js");
+
+    let npmCliJs = "";
+    if (fs.existsSync(winNpmCli)) {
+      npmCliJs = winNpmCli;
+    } else if (fs.existsSync(unixNpmCli)) {
+      npmCliJs = unixNpmCli;
+    }
+
+    if (npmCliJs) {
+      execFile(process.execPath, [npmCliJs, ...args], { cwd }, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    } else {
+      const isWin = process.platform === "win32";
+      const npmBinName = isWin ? "npm.cmd" : "npm";
+      const candidate = path.join(nodeDir, npmBinName);
+      const npmBin = fs.existsSync(candidate) ? candidate : "npm";
+      exec(`"${npmBin}" ${args.join(" ")}`, { cwd }, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    }
+  });
+}
+
+async function installVueInvasive(projectRoot: string) {
+  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE VUE SETUP <<<\x1b[0m`);
+  console.log(`Invasive mode works by adding \x1b[32mvite-plugin-vue-inspector\x1b[0m to your project.`);
+  console.log(`This plugin injects 'data-v-inspector' HTML attributes (file paths, line numbers, column numbers)`);
+  console.log(`directly into DOM elements during compilation, enabling pixel-perfect template resolution in Vue.`);
+  console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
+  console.log(`  1. Install 'vite-plugin-vue-inspector' as a devDependency in your package.json.`);
+  console.log(`  2. Modify your vite.config.ts / vite.config.js to register the plugin.\x1b[0m`);
+  
+  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
+  if (answer.trim().toLowerCase() !== "y") {
+    console.log(`[HoverSource] Installation aborted.`);
+    return;
+  }
+
+  console.log(`[HoverSource] Setting up Vue invasive mode...`);
+
+  // 1. Install vite-plugin-vue-inspector
+  console.log(`[HoverSource] Installing vite-plugin-vue-inspector...`);
+  const pkgPath = path.join(projectRoot, "package.json");
+  if (!fs.existsSync(pkgPath)) {
+    console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
+    return;
+  }
+
+  try {
+    await runNpmCommand(["install", "-D", "vite-plugin-vue-inspector"], projectRoot);
+    console.log(`[HoverSource] Successfully installed vite-plugin-vue-inspector.`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to install package:`, err);
+    throw err;
+  }
+
+  // 2. Modify vite config
+  let configPath = path.join(projectRoot, "vite.config.ts");
+  if (!fs.existsSync(configPath)) {
+    configPath = path.join(projectRoot, "vite.config.js");
+  }
+
+  if (!fs.existsSync(configPath)) {
+    console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
+    console.log(`Please register 'vite-plugin-vue-inspector' manually in your Vite config.`);
+    return;
+  }
+
+  console.log(`[HoverSource] Registering plugin in ${path.basename(configPath)}...`);
+  let configContent = fs.readFileSync(configPath, "utf-8");
+
+  // Check if already registered
+  if (configContent.includes("vite-plugin-vue-inspector")) {
+    console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
+    return;
+  }
+
+  // Insert import
+  const importStatement = 'import Inspector from "vite-plugin-vue-inspector";\n';
+  configContent = importStatement + configContent;
+
+  // Insert plugin call inside plugins array
+  if (configContent.includes("plugins:")) {
+    configContent = configContent.replace(/plugins:\s*\[/, "plugins: [\n    Inspector(),");
+    fs.writeFileSync(configPath, configContent, "utf-8");
+    console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
+  } else {
+    fs.writeFileSync(configPath, configContent, "utf-8");
+    console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
+    console.log(`Please manually add 'Inspector()' to your plugins array.`);
+  }
+}
+
+async function uninstallInvasive(projectRoot: string) {
+  console.log(`\n\x1b[36m[HoverSource] >>> UNINSTALL INVASIVE PLUGINS <<<\x1b[0m`);
+  
+  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to uninstall HoverSource invasive plugins? (y/N): \x1b[0m`);
+  if (answer.trim().toLowerCase() !== "y") {
+    console.log(`[HoverSource] Aborted.`);
+    return;
+  }
+
+  // 1. Remove from package.json
+  console.log(`[HoverSource] Uninstalling vite-plugin-vue-inspector...`);
+  try {
+    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector"], projectRoot);
+    console.log(`[HoverSource] Package uninstalled.`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to uninstall package:`, err);
+  }
+
+  // 2. Remove from Vite config
+  let configPath = path.join(projectRoot, "vite.config.ts");
+  if (!fs.existsSync(configPath)) {
+    configPath = path.join(projectRoot, "vite.config.js");
+  }
+
+  if (fs.existsSync(configPath)) {
+    console.log(`[HoverSource] Cleaning ${path.basename(configPath)}...`);
+    let configContent = fs.readFileSync(configPath, "utf-8");
+    
+    // Remove import
+    configContent = configContent.replace(/import Inspector from\s*['"]vite-plugin-vue-inspector['"];?\n?/, "");
+    // Remove plugin call
+    configContent = configContent.replace(/Inspector\(\),?\n?\s*/, "");
+    
+    fs.writeFileSync(configPath, configContent, "utf-8");
+    console.log(`[HoverSource] Cleared plugin registration.`);
+  }
+  console.log(`[HoverSource] Uninstallation complete.`);
+}
+
 async function main() {
   // Self-heal any leftover patches from previous crashed/force-killed runs
   restoreLeftoverPatches();
 
   const { args, subcommand } = getArgs();
   const projectRoot = path.resolve((args.root as string) || process.cwd());
+
+  if (subcommand === "install" && args.vue) {
+    await installVueInvasive(projectRoot);
+    process.exit(0);
+  }
+  if (subcommand === "uninstall") {
+    await uninstallInvasive(projectRoot);
+    process.exit(0);
+  }
   const config = loadMergedConfig(projectRoot);
   const autoResolve = config.autoResolvePortConflicts === true;
   

@@ -42,16 +42,16 @@ Ideal for positioning new UI elements (cards, badges, modals, tooltips) relative
 
 HoverSource supports resolving metadata for multiple frontend frameworks at different levels of depth depending on what information is exposed by the framework's development mode:
 
-| Metadata Field | React | Vue | Svelte | Vanilla / Fallback |
+| Metadata Field | React | Vue (Non-Invasive / Invasive) | Svelte | Vanilla / Fallback |
 | :--- | :--- | :--- | :--- | :--- |
 | **Framework Label** | `React` | `Vue` | `Svelte` | `Vanilla` or `Unknown` |
-| **Component Name** | Resolved (walks fiber owners) | Resolved (from component type `name` or `__name`) | Resolved (inferred from Svelte filename) | Fallback (defaults to HTML tag) |
-| **File Path** | Resolved (from fiber `_debugSource.fileName`) | Resolved (from component `__file` attribute) | Resolved (from `__svelte_meta.loc.file`) | None |
-| **Line Number** | Resolved (from fiber `_debugSource.lineNumber`) | None (Unresolved)* | Resolved (from `__svelte_meta.loc.line` + 1) | None |
-| **Column Number** | Resolved (from fiber `_debugSource.columnNumber`) | None (Unresolved)* | Resolved (from `__svelte_meta.loc.column` + 1) | None |
+| **Component Name** | Resolved (walks fiber owners) | Resolved (from component type `name` or `__name` / `data-v-inspector`) | Resolved (inferred from Svelte filename) | Fallback (defaults to HTML tag) |
+| **File Path** | Resolved (from fiber `_debugSource.fileName`) | Resolved (from component `__file` attribute / `data-v-inspector`) | Resolved (from `__svelte_meta.loc.file`) | None |
+| **Line Number** | Resolved (from fiber `_debugSource.lineNumber`) | None (Unresolved) / **Resolved** (from `data-v-inspector`)* | Resolved (from `__svelte_meta.loc.line` + 1) | None |
+| **Column Number** | Resolved (from fiber `_debugSource.columnNumber`) | None (Unresolved) / **Resolved** (from `data-v-inspector`)* | Resolved (from `__svelte_meta.loc.column` + 1) | None |
 | **Tag Name & Classes** | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) |
 
-\* *Note: Vue component instances in development mode do not expose line and column locations directly on DOM instances by default. Tooltip links and copied metadata will hide these fields when they are unresolved, defaulting to opening the file at line 1.*
+\* *Note: Vue component instances in development mode do not expose line and column locations directly on DOM instances by default. Run `hs install --vue` to enable compile-time template line/column injection (Invasive mode). Without it, HoverSource defaults to Non-Invasive mode, hiding line/column coordinates and opening the file at line 1.*
 
 ## Clipboard Output
 

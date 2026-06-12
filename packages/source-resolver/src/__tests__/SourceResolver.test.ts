@@ -3,6 +3,10 @@ import { SourceResolver } from "../index.js";
 import { ReactFiberAdapter } from "../adapters/ReactFiberAdapter.js";
 import { VueAdapter } from "../adapters/VueAdapter.js";
 import { SvelteAdapter } from "../adapters/SvelteAdapter.js";
+import { PreactAdapter } from "../adapters/PreactAdapter.js";
+import { SolidAdapter } from "../adapters/SolidAdapter.js";
+import { AstroAdapter } from "../adapters/AstroAdapter.js";
+import { AngularAdapter } from "../adapters/AngularAdapter.js";
 
 // Mock global getComputedStyle for Node environment test execution
 beforeAll(() => {
@@ -160,6 +164,144 @@ describe("SvelteAdapter", () => {
   });
 });
 
+describe("PreactAdapter", () => {
+  it("should resolve Preact component metadata from VNode", () => {
+    const adapter = new PreactAdapter();
+    const mockElement = {
+      tagName: "DIV",
+      classList: {
+        [Symbol.iterator]: function* () {}
+      },
+      __v: {
+        __source: {
+          fileName: "/src/components/PreactCard.tsx",
+          lineNumber: 15,
+          columnNumber: 4
+        },
+        __: {
+          type: (() => {
+            function PreactCard() {}
+            return PreactCard;
+          })()
+        }
+      }
+    } as any;
+
+    expect(adapter.canResolve(mockElement)).toBe(true);
+    const result = adapter.resolve(mockElement);
+    expect(result).not.toBeNull();
+    expect(result?.fileName).toBe("/src/components/PreactCard.tsx");
+    expect(result?.lineNumber).toBe(15);
+    expect(result?.columnNumber).toBe(4);
+    expect(result?.componentName).toBe("PreactCard");
+    expect(result?.framework).toBe("Preact");
+  });
+});
+
+describe("SolidAdapter", () => {
+  it("should resolve SolidJS component metadata from data-source-loc", () => {
+    const adapter = new SolidAdapter();
+    const mockElement = {
+      tagName: "DIV",
+      classList: {
+        [Symbol.iterator]: function* () {}
+      },
+      hasAttribute: (name: string) => name === "data-source-loc",
+      getAttribute: (name: string) => name === "data-source-loc" ? "/src/components/SolidCounter.tsx:25:8" : null
+    } as any;
+
+    expect(adapter.canResolve(mockElement)).toBe(true);
+    const result = adapter.resolve(mockElement);
+    expect(result).not.toBeNull();
+    expect(result?.fileName).toBe("/src/components/SolidCounter.tsx");
+    expect(result?.lineNumber).toBe(25);
+    expect(result?.columnNumber).toBe(8);
+    expect(result?.componentName).toBe("SolidCounter");
+    expect(result?.framework).toBe("SolidJS");
+  });
+});
+
+describe("AstroAdapter", () => {
+  it("should resolve Astro component metadata from data-astro-source attributes", () => {
+    const adapter = new AstroAdapter();
+    const mockElement = {
+      tagName: "MAIN",
+      classList: {
+        [Symbol.iterator]: function* () {}
+      },
+      hasAttribute: (name: string) => name === "data-astro-source-file",
+      getAttribute: (name: string) => {
+        if (name === "data-astro-source-file") return "/src/pages/index.astro";
+        if (name === "data-astro-source-loc") return "12:5";
+        return null;
+      }
+    } as any;
+
+    expect(adapter.canResolve(mockElement)).toBe(true);
+    const result = adapter.resolve(mockElement);
+    expect(result).not.toBeNull();
+    expect(result?.fileName).toBe("/src/pages/index.astro");
+    expect(result?.lineNumber).toBe(12);
+    expect(result?.columnNumber).toBe(5);
+    expect(result?.componentName).toBe("index");
+    expect(result?.framework).toBe("Astro");
+  });
+});
+
+describe("AngularAdapter", () => {
+  it("should resolve Angular component name non-invasively", () => {
+    const adapter = new AngularAdapter();
+    (globalThis as any).ng = {
+      getOwningComponent: () => ({
+        constructor: {
+          name: "AngularComponent"
+        }
+      })
+    };
+    const mockElement = {
+      tagName: "APP-ROOT",
+      classList: {
+        [Symbol.iterator]: function* () {}
+      },
+      __ngContext__: {}
+    } as any;
+
+    expect(adapter.canResolve(mockElement)).toBe(true);
+    const result = adapter.resolve(mockElement);
+    expect(result).not.toBeNull();
+    expect(result?.componentName).toBe("AngularComponent");
+    expect(result?.framework).toBe("Angular");
+    delete (globalThis as any).ng;
+  });
+
+  it("should resolve Angular component details in invasive mode", () => {
+    const adapter = new AngularAdapter();
+    const mockElement = {
+      tagName: "DIV",
+      classList: {
+        [Symbol.iterator]: function* () {}
+      },
+      hasAttribute: (name: string) => name === "data-ng-source-file",
+      getAttribute: (name: string) => {
+        if (name === "data-ng-source-file") return "/src/app/app.component.ts";
+        if (name === "data-ng-source-line") return "10";
+        if (name === "data-ng-source-column") return "2";
+        if (name === "data-ng-component") return "AppComponent";
+        return null;
+      }
+    } as any;
+
+    expect(adapter.canResolve(mockElement)).toBe(true);
+    const result = adapter.resolve(mockElement);
+    expect(result).not.toBeNull();
+    expect(result?.fileName).toBe("/src/app/app.component.ts");
+    expect(result?.lineNumber).toBe(10);
+    expect(result?.columnNumber).toBe(2);
+    expect(result?.componentName).toBe("AppComponent");
+    expect(result?.framework).toBe("Angular");
+  });
+});
+
 describe("SourceResolver", () => {
   it("should route resolution to the correct adapter", () => {
     const resolver = new SourceResolver();
@@ -177,6 +319,35 @@ describe("SourceResolver", () => {
         type: { __file: "VueFile.vue", __name: "VueComp" }
       }
     } as any;
+    const mockPreact = {
+      tagName: "DIV",
+      classList: { [Symbol.iterator]: function* () {} },
+      __v: {
+        __source: { fileName: "PreactFile.tsx", lineNumber: 12 }
+      }
+    } as any;
+    const mockSolid = {
+      tagName: "DIV",
+      classList: { [Symbol.iterator]: function* () {} },
+      hasAttribute: (name: string) => name === "data-source-loc",
+      getAttribute: (name: string) => name === "data-source-loc" ? "SolidFile.tsx:15:2" : null
+    } as any;
+    const mockAstro = {
+      tagName: "DIV",
+      classList: { [Symbol.iterator]: function* () {} },
+      hasAttribute: (name: string) => name === "data-astro-source-file",
+      getAttribute: (name: string) => {
+        if (name === "data-astro-source-file") return "AstroFile.astro";
+        if (name === "data-astro-source-loc") return "20:4";
+        return null;
+      }
+    } as any;
+    const mockAngular = {
+      tagName: "DIV",
+      classList: { [Symbol.iterator]: function* () {} },
+      hasAttribute: (name: string) => name === "data-ng-source-file",
+      getAttribute: (name: string) => name === "data-ng-source-file" ? "AngularFile.ts" : null
+    } as any;
 
     const reactResult = resolver.resolve(mockReact);
     expect(reactResult?.framework).toBe("React");
@@ -185,6 +356,22 @@ describe("SourceResolver", () => {
     const vueResult = resolver.resolve(mockVue);
     expect(vueResult?.framework).toBe("Vue");
     expect(vueResult?.fileName).toBe("VueFile.vue");
+
+    const preactResult = resolver.resolve(mockPreact);
+    expect(preactResult?.framework).toBe("Preact");
+    expect(preactResult?.fileName).toBe("PreactFile.tsx");
+
+    const solidResult = resolver.resolve(mockSolid);
+    expect(solidResult?.framework).toBe("SolidJS");
+    expect(solidResult?.fileName).toBe("SolidFile.tsx");
+
+    const astroResult = resolver.resolve(mockAstro);
+    expect(astroResult?.framework).toBe("Astro");
+    expect(astroResult?.fileName).toBe("AstroFile.astro");
+
+    const angularResult = resolver.resolve(mockAngular);
+    expect(angularResult?.framework).toBe("Angular");
+    expect(angularResult?.fileName).toBe("AngularFile.ts");
   });
 
   it("should resolve ancestors layout and framework metadata", () => {

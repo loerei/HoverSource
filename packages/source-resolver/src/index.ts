@@ -2,11 +2,19 @@ import { SourceAdapter, SourceInfo, AncestorInfo } from "./adapters/types.js";
 import { ReactFiberAdapter } from "./adapters/ReactFiberAdapter.js";
 import { VueAdapter } from "./adapters/VueAdapter.js";
 import { SvelteAdapter } from "./adapters/SvelteAdapter.js";
+import { PreactAdapter } from "./adapters/PreactAdapter.js";
+import { SolidAdapter } from "./adapters/SolidAdapter.js";
+import { AstroAdapter } from "./adapters/AstroAdapter.js";
+import { AngularAdapter } from "./adapters/AngularAdapter.js";
 
 export * from "./adapters/types.js";
 export * from "./adapters/ReactFiberAdapter.js";
 export * from "./adapters/VueAdapter.js";
 export * from "./adapters/SvelteAdapter.js";
+export * from "./adapters/PreactAdapter.js";
+export * from "./adapters/SolidAdapter.js";
+export * from "./adapters/AstroAdapter.js";
+export * from "./adapters/AngularAdapter.js";
 
 export class SourceResolver {
   private readonly adapters: SourceAdapter[] = [];
@@ -18,6 +26,10 @@ export class SourceResolver {
     this.adapters.push(this.fiberAdapter);
     this.adapters.push(new VueAdapter());
     this.adapters.push(new SvelteAdapter());
+    this.adapters.push(new PreactAdapter());
+    this.adapters.push(new SolidAdapter());
+    this.adapters.push(new AstroAdapter());
+    this.adapters.push(new AngularAdapter());
   }
 
   registerAdapter(adapter: SourceAdapter) {

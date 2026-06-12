@@ -896,6 +896,48 @@ ${attrList}`;
 ` + this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
       this.controller.copyToClipboard(text);
     }
+    getMinifiedHTML(el) {
+      const clone = el.cloneNode(true);
+      const hsEls = clone.querySelectorAll('.hoversource-container, [class^="hs-"]');
+      hsEls.forEach((e) => e.remove());
+      const formatNode = (node, indent) => {
+        if (node.nodeType === 3) {
+          const text = node.nodeValue?.trim();
+          return text ? `${indent}...` : "";
+        }
+        if (node.nodeType === 1) {
+          const elNode = node;
+          const tagName = elNode.tagName.toLowerCase();
+          const attrs = [];
+          if (elNode.id) {
+            attrs.push(`id="${elNode.id}"`);
+          }
+          if (elNode.className && typeof elNode.className === "string") {
+            const classes = Array.from(elNode.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+            if (classes.length > 0) {
+              attrs.push(`class="${classes.join(" ")}"`);
+            }
+          }
+          if (elNode.getAttribute("href")) {
+            attrs.push(`href="${elNode.getAttribute("href")}"`);
+          }
+          const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
+          const children = Array.from(elNode.childNodes);
+          if (children.length === 0) {
+            return `${indent}<${tagName}${attrStr}></${tagName}>`;
+          }
+          const childStrings = children.map((c) => formatNode(c, indent + "  ")).filter((s) => s !== "");
+          if (childStrings.length === 0) {
+            return `${indent}<${tagName}${attrStr}></${tagName}>`;
+          }
+          return `${indent}<${tagName}${attrStr}>
+${childStrings.join("\n")}
+${indent}</${tagName}>`;
+        }
+        return "";
+      };
+      return formatNode(clone, "");
+    }
     copyAllLayers() {
       if (this.layerStack.length === 0)
         return;
@@ -928,6 +970,15 @@ ${attrList}`;
 `;
         text += this.formatElementMetadata(el, info) + "\n\n";
       });
+      const leafEl = this.layerStack[0];
+      if (leafEl) {
+        text += `### Target Element HTML Structure (Layer 1)
+`;
+        text += `\`\`\`html
+${this.getMinifiedHTML(leafEl)}
+\`\`\`
+`;
+      }
       this.controller.copyToClipboard(text.trim());
     }
   };

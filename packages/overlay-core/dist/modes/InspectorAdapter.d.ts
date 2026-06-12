@@ -36,5 +36,6 @@ export declare class InspectorAdapter implements InteractionMode {
     private formatSourceAttributes;
     private formatElementMetadata;
     private copyMetadata;
+    private getMinifiedHTML;
     private copyAllLayers;
 }

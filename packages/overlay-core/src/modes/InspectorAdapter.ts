@@ -649,6 +649,63 @@ export class InspectorAdapter implements InteractionMode {
     this.controller.copyToClipboard(text);
   }
 
+  private getMinifiedHTML(el: HTMLElement): string {
+    const clone = el.cloneNode(true) as HTMLElement;
+    
+    // Remove HoverSource containers or elements if any inside the clone
+    const hsEls = clone.querySelectorAll('.hoversource-container, [class^="hs-"]');
+    hsEls.forEach(e => e.remove());
+
+    const formatNode = (node: Node, indent: string): string => {
+      if (node.nodeType === 3) { // Text node
+        const text = node.nodeValue?.trim();
+        return text ? `${indent}...` : "";
+      }
+      
+      if (node.nodeType === 1) { // Element node
+        const elNode = node as HTMLElement;
+        const tagName = elNode.tagName.toLowerCase();
+        
+        // Gather attributes
+        const attrs: string[] = [];
+        if (elNode.id) {
+          attrs.push(`id="${elNode.id}"`);
+        }
+        if (elNode.className && typeof elNode.className === 'string') {
+          const classes = Array.from(elNode.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+          if (classes.length > 0) {
+            attrs.push(`class="${classes.join(' ')}"`);
+          }
+        }
+        
+        if (elNode.getAttribute("href")) {
+          attrs.push(`href="${elNode.getAttribute("href")}"`);
+        }
+        
+        const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
+        const children = Array.from(elNode.childNodes);
+        
+        if (children.length === 0) {
+          return `${indent}<${tagName}${attrStr}></${tagName}>`;
+        }
+        
+        const childStrings = children
+          .map(c => formatNode(c, indent + "  "))
+          .filter(s => s !== "");
+          
+        if (childStrings.length === 0) {
+          return `${indent}<${tagName}${attrStr}></${tagName}>`;
+        }
+        
+        return `${indent}<${tagName}${attrStr}>\n${childStrings.join("\n")}\n${indent}</${tagName}>`;
+      }
+      
+      return "";
+    };
+
+    return formatNode(clone, "");
+  }
+
   private copyAllLayers() {
     if (this.layerStack.length === 0) return;
     
@@ -679,6 +736,12 @@ export class InspectorAdapter implements InteractionMode {
       text += `#### Layer ${layerNum}/${totalLayers}: \`${info.componentName || el.tagName.toLowerCase()}\` (${el.tagName.toLowerCase()})\n`;
       text += this.formatElementMetadata(el, info) + "\n\n";
     });
+    
+    const leafEl = this.layerStack[0];
+    if (leafEl) {
+      text += `### Target Element HTML Structure (Layer 1)\n`;
+      text += `\`\`\`html\n${this.getMinifiedHTML(leafEl)}\n\`\`\`\n`;
+    }
     
     this.controller.copyToClipboard(text.trim());
   }

@@ -1,4 +1,5 @@
 import { SourceAdapter, SourceInfo } from "./types.js";
+import { getElementMetadata, getComponentNameFromFile } from "./utils.js";
 
 export class AstroAdapter implements SourceAdapter {
   name = "astro";
@@ -25,20 +26,13 @@ export class AstroAdapter implements SourceAdapter {
       }
     }
 
-    let componentName: string | undefined = undefined;
-    const baseName = file.split(/[/\\\\]/).pop();
-    if (baseName && baseName.endsWith(".astro")) {
-      componentName = baseName.slice(0, -6);
-    }
-
     return {
       fileName: file,
       lineNumber: line,
       columnNumber: column,
-      componentName,
+      componentName: getComponentNameFromFile(file),
       framework: "Astro",
-      tagName: element.tagName.toLowerCase(),
-      classList: Array.from(element.classList)
+      ...getElementMetadata(element)
     };
   }
 }

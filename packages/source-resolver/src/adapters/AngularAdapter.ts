@@ -1,4 +1,5 @@
 import { SourceAdapter, SourceInfo } from "./types.js";
+import { getElementMetadata } from "./utils.js";
 
 export class AngularAdapter implements SourceAdapter {
   name = "angular";
@@ -29,8 +30,7 @@ export class AngularAdapter implements SourceAdapter {
           columnNumber: !Number.isNaN(column) ? column : undefined,
           componentName: compName || undefined,
           framework: "Angular",
-          tagName: element.tagName.toLowerCase(),
-          classList: element.classList ? Array.from(element.classList) : []
+          ...getElementMetadata(element)
         };
       }
     }
@@ -55,8 +55,7 @@ export class AngularAdapter implements SourceAdapter {
         fileName: "", // Not resolvable at runtime in non-invasive mode
         componentName,
         framework: "Angular",
-        tagName: element.tagName.toLowerCase(),
-        classList: element.classList ? Array.from(element.classList) : []
+        ...getElementMetadata(element)
       };
     }
 

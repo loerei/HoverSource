@@ -1,5 +1,48 @@
 "use strict";
 (() => {
+  // ../source-resolver/dist/adapters/utils.js
+  function getElementMetadata(element) {
+    return {
+      tagName: element.tagName.toLowerCase(),
+      classList: element.classList ? Array.from(element.classList) : []
+    };
+  }
+  function getComponentNameFromFile(file, extensions = [".vue", ".svelte", ".astro", ".tsx", ".jsx", ".ts", ".js"]) {
+    if (!file)
+      return void 0;
+    const baseName = file.split(/[/\\\\]/).pop();
+    if (!baseName)
+      return void 0;
+    for (const ext of extensions) {
+      if (baseName.endsWith(ext)) {
+        return baseName.slice(0, -ext.length);
+      }
+    }
+    const dotIdx = baseName.lastIndexOf(".");
+    if (dotIdx !== -1) {
+      return baseName.slice(0, dotIdx);
+    }
+    return baseName;
+  }
+  function parseColonLocation(loc) {
+    if (!loc)
+      return null;
+    const parts = loc.split(":");
+    if (parts.length >= 3) {
+      const columnStr = parts.pop() || "";
+      const lineStr = parts.pop() || "";
+      const file = parts.join(":");
+      const line = Number.parseInt(lineStr, 10);
+      const column = Number.parseInt(columnStr, 10);
+      return {
+        fileName: file,
+        lineNumber: !Number.isNaN(line) ? line : void 0,
+        columnNumber: !Number.isNaN(column) ? column : void 0
+      };
+    }
+    return null;
+  }
+
   // ../source-resolver/dist/adapters/ReactFiberAdapter.js
   var ReactFiberAdapter = class {
     name = "react-fiber";
@@ -40,8 +83,7 @@
             columnNumber: source.columnNumber,
             componentName: componentName || (typeof fiber.type === "function" ? fiber.type.name : void 0),
             framework: "React",
-            tagName: element.tagName.toLowerCase(),
-            classList: Array.from(element.classList)
+            ...getElementMetadata(element)
           };
         }
         fiber = fiber.return;
@@ -67,47 +109,28 @@
           const columnStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-column") : null;
           const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
           const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
-          let componentName = void 0;
-          const baseName = file.split(/[/\\]/).pop();
-          if (baseName && baseName.endsWith(".vue")) {
-            componentName = baseName.slice(0, -4);
-          }
           return {
             fileName: file,
             lineNumber: !Number.isNaN(line) ? line : void 0,
             columnNumber: !Number.isNaN(column) ? column : void 0,
-            componentName,
+            componentName: getComponentNameFromFile(file),
             framework: "Vue",
-            tagName: element.tagName.toLowerCase(),
-            classList: element.classList ? Array.from(element.classList) : []
+            ...getElementMetadata(element)
           };
         }
       }
       if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
         const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
         if (value) {
-          const parts = value.split(":");
-          if (parts.length >= 3) {
-            const columnStr = parts.pop() || "";
-            const lineStr = parts.pop() || "";
-            const file = parts.join(":");
-            const line = Number.parseInt(lineStr, 10);
-            const column = Number.parseInt(columnStr, 10);
-            let componentName = void 0;
-            if (file) {
-              const baseName = file.split(/[/\\]/).pop();
-              if (baseName && baseName.endsWith(".vue")) {
-                componentName = baseName.slice(0, -4);
-              }
-            }
+          const parsed = parseColonLocation(value);
+          if (parsed) {
             return {
-              fileName: file,
-              lineNumber: !Number.isNaN(line) ? line : void 0,
-              columnNumber: !Number.isNaN(column) ? column : void 0,
-              componentName,
+              fileName: parsed.fileName,
+              lineNumber: parsed.lineNumber,
+              columnNumber: parsed.columnNumber,
+              componentName: getComponentNameFromFile(parsed.fileName),
               framework: "Vue",
-              tagName: element.tagName.toLowerCase(),
-              classList: element.classList ? Array.from(element.classList) : []
+              ...getElementMetadata(element)
             };
           }
         }
@@ -121,8 +144,7 @@
             fileName: type.__file || "",
             componentName: componentName || void 0,
             framework: "Vue",
-            tagName: element.tagName.toLowerCase(),
-            classList: Array.from(element.classList)
+            ...getElementMetadata(element)
           };
         }
         instance = instance.parent;
@@ -142,21 +164,13 @@
       if (!meta || !meta.loc)
         return null;
       const { file, line, column } = meta.loc;
-      let componentName = void 0;
-      if (file) {
-        const baseName = file.split(/[/\\]/).pop();
-        if (baseName && baseName.endsWith(".svelte")) {
-          componentName = baseName.slice(0, -7);
-        }
-      }
       return {
         fileName: file || "",
         lineNumber: typeof line === "number" ? line + 1 : void 0,
         columnNumber: typeof column === "number" ? column + 1 : void 0,
-        componentName,
+        componentName: getComponentNameFromFile(file),
         framework: "Svelte",
-        tagName: element.tagName.toLowerCase(),
-        classList: Array.from(element.classList)
+        ...getElementMetadata(element)
       };
     }
   };
@@ -196,8 +210,7 @@
             columnNumber: source.columnNumber,
             componentName: componentName || (typeof vnode.type === "function" ? vnode.type.name : void 0),
             framework: "Preact",
-            tagName: element.tagName.toLowerCase(),
-            classList: Array.from(element.classList)
+            ...getElementMetadata(element)
           };
         }
         vnode = vnode.__;
@@ -216,33 +229,15 @@
       const loc = element.getAttribute("data-source-loc");
       if (!loc)
         return null;
-      const parts = loc.split(":");
-      if (parts.length >= 3) {
-        const columnStr = parts.pop() || "";
-        const lineStr = parts.pop() || "";
-        const file = parts.join(":");
-        const line = Number.parseInt(lineStr, 10);
-        const column = Number.parseInt(columnStr, 10);
-        let componentName = void 0;
-        if (file) {
-          const baseName = file.split(/[/\\\\]/).pop();
-          if (baseName) {
-            const dotIdx = baseName.lastIndexOf(".");
-            if (dotIdx !== -1) {
-              componentName = baseName.slice(0, dotIdx);
-            } else {
-              componentName = baseName;
-            }
-          }
-        }
+      const parsed = parseColonLocation(loc);
+      if (parsed) {
         return {
-          fileName: file,
-          lineNumber: !Number.isNaN(line) ? line : void 0,
-          columnNumber: !Number.isNaN(column) ? column : void 0,
-          componentName,
+          fileName: parsed.fileName,
+          lineNumber: parsed.lineNumber,
+          columnNumber: parsed.columnNumber,
+          componentName: getComponentNameFromFile(parsed.fileName),
           framework: "SolidJS",
-          tagName: element.tagName.toLowerCase(),
-          classList: Array.from(element.classList)
+          ...getElementMetadata(element)
         };
       }
       return null;
@@ -273,19 +268,13 @@
             column = c;
         }
       }
-      let componentName = void 0;
-      const baseName = file.split(/[/\\\\]/).pop();
-      if (baseName && baseName.endsWith(".astro")) {
-        componentName = baseName.slice(0, -6);
-      }
       return {
         fileName: file,
         lineNumber: line,
         columnNumber: column,
-        componentName,
+        componentName: getComponentNameFromFile(file),
         framework: "Astro",
-        tagName: element.tagName.toLowerCase(),
-        classList: Array.from(element.classList)
+        ...getElementMetadata(element)
       };
     }
   };
@@ -314,8 +303,7 @@
             columnNumber: !Number.isNaN(column) ? column : void 0,
             componentName: compName || void 0,
             framework: "Angular",
-            tagName: element.tagName.toLowerCase(),
-            classList: element.classList ? Array.from(element.classList) : []
+            ...getElementMetadata(element)
           };
         }
       }
@@ -337,8 +325,7 @@
           // Not resolvable at runtime in non-invasive mode
           componentName,
           framework: "Angular",
-          tagName: element.tagName.toLowerCase(),
-          classList: element.classList ? Array.from(element.classList) : []
+          ...getElementMetadata(element)
         };
       }
       return null;

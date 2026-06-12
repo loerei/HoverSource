@@ -1,4 +1,5 @@
 import { SourceAdapter, SourceInfo } from "./types.js";
+import { getElementMetadata, getComponentNameFromFile, parseColonLocation } from "./utils.js";
 
 export class VueAdapter implements SourceAdapter {
   name = "vue";
@@ -25,20 +26,13 @@ export class VueAdapter implements SourceAdapter {
         const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
         const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
 
-        let componentName: string | undefined = undefined;
-        const baseName = file.split(/[/\\]/).pop();
-        if (baseName && baseName.endsWith(".vue")) {
-          componentName = baseName.slice(0, -4);
-        }
-
         return {
           fileName: file,
           lineNumber: !Number.isNaN(line) ? line : undefined,
           columnNumber: !Number.isNaN(column) ? column : undefined,
-          componentName,
+          componentName: getComponentNameFromFile(file),
           framework: "Vue",
-          tagName: element.tagName.toLowerCase(),
-          classList: element.classList ? Array.from(element.classList) : []
+          ...getElementMetadata(element)
         };
       }
     }
@@ -47,32 +41,15 @@ export class VueAdapter implements SourceAdapter {
     if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
       const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
       if (value) {
-        // Format of data-v-inspector is file:line:column
-        const parts = value.split(":");
-        if (parts.length >= 3) {
-          const columnStr = parts.pop() || "";
-          const lineStr = parts.pop() || "";
-          const file = parts.join(":");
-          
-          const line = Number.parseInt(lineStr, 10);
-          const column = Number.parseInt(columnStr, 10);
-
-          let componentName: string | undefined = undefined;
-          if (file) {
-            const baseName = file.split(/[/\\]/).pop();
-            if (baseName && baseName.endsWith(".vue")) {
-              componentName = baseName.slice(0, -4);
-            }
-          }
-
+        const parsed = parseColonLocation(value);
+        if (parsed) {
           return {
-            fileName: file,
-            lineNumber: !Number.isNaN(line) ? line : undefined,
-            columnNumber: !Number.isNaN(column) ? column : undefined,
-            componentName,
+            fileName: parsed.fileName,
+            lineNumber: parsed.lineNumber,
+            columnNumber: parsed.columnNumber,
+            componentName: getComponentNameFromFile(parsed.fileName),
             framework: "Vue",
-            tagName: element.tagName.toLowerCase(),
-            classList: element.classList ? Array.from(element.classList) : []
+            ...getElementMetadata(element)
           };
         }
       }
@@ -91,8 +68,7 @@ export class VueAdapter implements SourceAdapter {
           fileName: type.__file || "",
           componentName: componentName || undefined,
           framework: "Vue",
-          tagName: element.tagName.toLowerCase(),
-          classList: Array.from(element.classList)
+          ...getElementMetadata(element)
         };
       }
       instance = instance.parent;

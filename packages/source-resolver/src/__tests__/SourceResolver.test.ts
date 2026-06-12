@@ -30,13 +30,7 @@ describe("ReactFiberAdapter", () => {
     const adapter = new ReactFiberAdapter();
     const mockElement = {
       tagName: "DIV",
-      classList: {
-        value: "btn btn-primary",
-        [Symbol.iterator]: function* () {
-          yield "btn";
-          yield "btn-primary";
-        }
-      },
+      classList: ["btn", "btn-primary"],
       __reactFiber$: {
         _debugSource: {
           fileName: "/src/components/Button.tsx",
@@ -68,9 +62,7 @@ describe("VueAdapter", () => {
     const adapter = new VueAdapter();
     const mockElement = {
       tagName: "BUTTON",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       hasAttribute: () => false,
       __vueParentComponent: {
         type: {
@@ -92,9 +84,7 @@ describe("VueAdapter", () => {
     const adapter = new VueAdapter();
     const mockElement = {
       tagName: "BUTTON",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       hasAttribute: (name: string) => name === "data-v-inspector",
       getAttribute: (name: string) => name === "data-v-inspector" ? "/src/components/MyButton.vue:24:8" : null
     } as any;
@@ -113,9 +103,7 @@ describe("VueAdapter", () => {
     const adapter = new VueAdapter();
     const mockElement = {
       tagName: "BUTTON",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       hasAttribute: (name: string) => name === "data-v-inspector-file",
       getAttribute: (name: string) => {
         if (name === "data-v-inspector-file") return "/src/components/Header.vue";
@@ -141,9 +129,7 @@ describe("SvelteAdapter", () => {
     const adapter = new SvelteAdapter();
     const mockElement = {
       tagName: "SPAN",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       __svelte_meta: {
         loc: {
           file: "/src/components/SvelteBadge.svelte",
@@ -169,9 +155,7 @@ describe("PreactAdapter", () => {
     const adapter = new PreactAdapter();
     const mockElement = {
       tagName: "DIV",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       __v: {
         __source: {
           fileName: "/src/components/PreactCard.tsx",
@@ -203,9 +187,7 @@ describe("SolidAdapter", () => {
     const adapter = new SolidAdapter();
     const mockElement = {
       tagName: "DIV",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       hasAttribute: (name: string) => name === "data-source-loc",
       getAttribute: (name: string) => name === "data-source-loc" ? "/src/components/SolidCounter.tsx:25:8" : null
     } as any;
@@ -226,9 +208,7 @@ describe("AstroAdapter", () => {
     const adapter = new AstroAdapter();
     const mockElement = {
       tagName: "MAIN",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       hasAttribute: (name: string) => name === "data-astro-source-file",
       getAttribute: (name: string) => {
         if (name === "data-astro-source-file") return "/src/pages/index.astro";
@@ -260,9 +240,7 @@ describe("AngularAdapter", () => {
     };
     const mockElement = {
       tagName: "APP-ROOT",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       __ngContext__: {}
     } as any;
 
@@ -278,9 +256,7 @@ describe("AngularAdapter", () => {
     const adapter = new AngularAdapter();
     const mockElement = {
       tagName: "DIV",
-      classList: {
-        [Symbol.iterator]: function* () {}
-      },
+      classList: [],
       hasAttribute: (name: string) => name === "data-ng-source-file",
       getAttribute: (name: string) => {
         if (name === "data-ng-source-file") return "/src/app/app.component.ts";
@@ -307,34 +283,34 @@ describe("SourceResolver", () => {
     const resolver = new SourceResolver();
     const mockReact = {
       tagName: "DIV",
-      classList: { [Symbol.iterator]: function* () {} },
+      classList: [],
       __reactFiber$: {
         _debugSource: { fileName: "ReactFile.tsx", lineNumber: 10 }
       }
     } as any;
     const mockVue = {
       tagName: "DIV",
-      classList: { [Symbol.iterator]: function* () {} },
+      classList: [],
       __vueParentComponent: {
         type: { __file: "VueFile.vue", __name: "VueComp" }
       }
     } as any;
     const mockPreact = {
       tagName: "DIV",
-      classList: { [Symbol.iterator]: function* () {} },
+      classList: [],
       __v: {
         __source: { fileName: "PreactFile.tsx", lineNumber: 12 }
       }
     } as any;
     const mockSolid = {
       tagName: "DIV",
-      classList: { [Symbol.iterator]: function* () {} },
+      classList: [],
       hasAttribute: (name: string) => name === "data-source-loc",
       getAttribute: (name: string) => name === "data-source-loc" ? "SolidFile.tsx:15:2" : null
     } as any;
     const mockAstro = {
       tagName: "DIV",
-      classList: { [Symbol.iterator]: function* () {} },
+      classList: [],
       hasAttribute: (name: string) => name === "data-astro-source-file",
       getAttribute: (name: string) => {
         if (name === "data-astro-source-file") return "AstroFile.astro";
@@ -344,7 +320,7 @@ describe("SourceResolver", () => {
     } as any;
     const mockAngular = {
       tagName: "DIV",
-      classList: { [Symbol.iterator]: function* () {} },
+      classList: [],
       hasAttribute: (name: string) => name === "data-ng-source-file",
       getAttribute: (name: string) => name === "data-ng-source-file" ? "AngularFile.ts" : null
     } as any;
@@ -381,7 +357,7 @@ describe("SourceResolver", () => {
     const rootEl = {
       tagName: "DIV",
       id: "root",
-      classList: { [Symbol.iterator]: function* () {} },
+      classList: [],
       parentElement: null,
       _mockComputedStyle: { display: "block", position: "relative" },
       __reactFiber$: {
@@ -397,9 +373,7 @@ describe("SourceResolver", () => {
 
     const parentEl = {
       tagName: "SECTION",
-      classList: {
-        [Symbol.iterator]: function* () { yield "flex-container"; }
-      },
+      classList: ["flex-container"],
       parentElement: rootEl,
       _mockComputedStyle: {
         display: "flex",
@@ -414,7 +388,7 @@ describe("SourceResolver", () => {
 
     const childEl = {
       tagName: "BUTTON",
-      classList: { [Symbol.iterator]: function* () {} },
+      classList: [],
       parentElement: parentEl
     } as any;
 

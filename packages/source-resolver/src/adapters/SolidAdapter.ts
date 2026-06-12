@@ -1,4 +1,5 @@
 import { SourceAdapter, SourceInfo } from "./types.js";
+import { getElementMetadata, getComponentNameFromFile, parseColonLocation } from "./utils.js";
 
 export class SolidAdapter implements SourceAdapter {
   name = "solid";
@@ -11,36 +12,15 @@ export class SolidAdapter implements SourceAdapter {
     const loc = element.getAttribute("data-source-loc");
     if (!loc) return null;
 
-    const parts = loc.split(":");
-    if (parts.length >= 3) {
-      const columnStr = parts.pop() || "";
-      const lineStr = parts.pop() || "";
-      const file = parts.join(":");
-
-      const line = Number.parseInt(lineStr, 10);
-      const column = Number.parseInt(columnStr, 10);
-
-      let componentName: string | undefined = undefined;
-      if (file) {
-        const baseName = file.split(/[/\\\\]/).pop();
-        if (baseName) {
-          const dotIdx = baseName.lastIndexOf(".");
-          if (dotIdx !== -1) {
-            componentName = baseName.slice(0, dotIdx);
-          } else {
-            componentName = baseName;
-          }
-        }
-      }
-
+    const parsed = parseColonLocation(loc);
+    if (parsed) {
       return {
-        fileName: file,
-        lineNumber: !Number.isNaN(line) ? line : undefined,
-        columnNumber: !Number.isNaN(column) ? column : undefined,
-        componentName,
+        fileName: parsed.fileName,
+        lineNumber: parsed.lineNumber,
+        columnNumber: parsed.columnNumber,
+        componentName: getComponentNameFromFile(parsed.fileName),
         framework: "SolidJS",
-        tagName: element.tagName.toLowerCase(),
-        classList: Array.from(element.classList)
+        ...getElementMetadata(element)
       };
     }
 

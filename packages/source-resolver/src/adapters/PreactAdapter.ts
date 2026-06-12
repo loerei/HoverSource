@@ -1,4 +1,5 @@
 import { SourceAdapter, SourceInfo } from "./types.js";
+import { getElementMetadata } from "./utils.js";
 
 export class PreactAdapter implements SourceAdapter {
   name = "preact";
@@ -41,8 +42,7 @@ export class PreactAdapter implements SourceAdapter {
           columnNumber: source.columnNumber,
           componentName: componentName || (typeof vnode.type === "function" ? vnode.type.name : undefined),
           framework: "Preact",
-          tagName: element.tagName.toLowerCase(),
-          classList: Array.from(element.classList)
+          ...getElementMetadata(element)
         };
       }
       vnode = vnode.__;

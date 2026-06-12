@@ -38,6 +38,21 @@ Ideal for positioning new UI elements (cards, badges, modals, tooltips) relative
   - Pre-computed absolute position CSS block (`top`, `left`, `white-space`).
   - Structural guidance for AI agents to decide on DOM insertion and flex/grid adjustments.
 
+## Framework Support Matrix
+
+HoverSource supports resolving metadata for multiple frontend frameworks at different levels of depth depending on what information is exposed by the framework's development mode:
+
+| Metadata Field | React | Vue | Svelte | Vanilla / Fallback |
+| :--- | :--- | :--- | :--- | :--- |
+| **Framework Label** | `React` | `Vue` | `Svelte` | `Vanilla` or `Unknown` |
+| **Component Name** | Resolved (walks fiber owners) | Resolved (from component type `name` or `__name`) | Resolved (inferred from Svelte filename) | Fallback (defaults to HTML tag) |
+| **File Path** | Resolved (from fiber `_debugSource.fileName`) | Resolved (from component `__file` attribute) | Resolved (from `__svelte_meta.loc.file`) | None |
+| **Line Number** | Resolved (from fiber `_debugSource.lineNumber`) | None (Unresolved)* | Resolved (from `__svelte_meta.loc.line` + 1) | None |
+| **Column Number** | Resolved (from fiber `_debugSource.columnNumber`) | None (Unresolved)* | Resolved (from `__svelte_meta.loc.column` + 1) | None |
+| **Tag Name & Classes** | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) |
+
+\* *Note: Vue component instances in development mode do not expose line and column locations directly on DOM instances by default. Tooltip links and copied metadata will hide these fields when they are unresolved, defaulting to opening the file at line 1.*
+
 ## Clipboard Output
 
 When you press `Alt + C` on any hovered element, HoverSource copies a Markdown block to your clipboard. All sections below the first five fields are conditional — they appear only when the relevant data exists.

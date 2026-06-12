@@ -683,7 +683,7 @@ export class DesignAdapter implements InteractionMode {
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Anchor File: </span>
-        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}:${info.lineNumber || 1}</span>
+        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
       </div>
       <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
         <span class="hoversource-label">H-Anchor: </span>
@@ -823,8 +823,8 @@ export class DesignAdapter implements InteractionMode {
     component: string;
     selector: string;
     filePath: string;
-    line: number;
-    column: number;
+    line?: number;
+    column?: number;
     framework: string;
     selectorH: string;
     boundaryH: string;
@@ -851,7 +851,7 @@ export class DesignAdapter implements InteractionMode {
 ### HoverSource Design Placement Metadata
 * **Component**: \`${p.component}\`
 * **Element**: \`${p.selector}\`
-* **File Path**: \`${p.filePath}\` (Line: ${p.line}, Column: ${p.column})
+* **File Path**: \`${p.filePath}\`${p.line ? ` (Line: ${p.line}, Column: ${p.column})` : ""}
 * **Framework**: ${p.framework}
 * **Horizontal Anchor**:
   - Selector: \`${p.selectorH}\`
@@ -990,8 +990,8 @@ Suggested layout insertion (heuristic only):
       component: info.componentName || this.targetElement.tagName.toLowerCase(),
       selector,
       filePath: info.fileName || "unknown",
-      line: info.lineNumber || 1,
-      column: info.columnNumber || 1,
+      line: info.lineNumber,
+      column: info.columnNumber,
       framework: info.framework,
       selectorH,
       boundaryH: this.snapBoundaryH || "None",

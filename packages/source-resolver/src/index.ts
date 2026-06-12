@@ -1,8 +1,12 @@
 import { SourceAdapter, SourceInfo, AncestorInfo } from "./adapters/types.js";
 import { ReactFiberAdapter } from "./adapters/ReactFiberAdapter.js";
+import { VueAdapter } from "./adapters/VueAdapter.js";
+import { SvelteAdapter } from "./adapters/SvelteAdapter.js";
 
 export * from "./adapters/types.js";
 export * from "./adapters/ReactFiberAdapter.js";
+export * from "./adapters/VueAdapter.js";
+export * from "./adapters/SvelteAdapter.js";
 
 export class SourceResolver {
   private readonly adapters: SourceAdapter[] = [];
@@ -12,6 +16,8 @@ export class SourceResolver {
     // Register default adapters
     this.fiberAdapter = new ReactFiberAdapter();
     this.adapters.push(this.fiberAdapter);
+    this.adapters.push(new VueAdapter());
+    this.adapters.push(new SvelteAdapter());
   }
 
   registerAdapter(adapter: SourceAdapter) {
@@ -35,11 +41,71 @@ export class SourceResolver {
 
   /**
    * Walks up the DOM from `element` and returns layout + source info for
-   * each ancestor (up to `maxDepth` levels). Delegates to the React fiber
-   * adapter for source resolution; display/position are always resolved via
-   * getComputedStyle regardless of framework.
+   * each ancestor (up to `maxDepth` levels).
+   *
+   * Always resolves: selector, display, position.
+   * Resolves conditionally: layoutProps (flex/grid only), fileName/lineNumber/componentName (via adapters).
    */
   resolveAncestors(element: HTMLElement, maxDepth = 8): AncestorInfo[] {
-    return this.fiberAdapter.resolveAncestors(element, maxDepth);
+    const results: AncestorInfo[] = [];
+    let current: HTMLElement | null = element.parentElement;
+    let depth = 0;
+
+    while (current && current !== document.documentElement && depth < maxDepth) {
+      try {
+        const comp = globalThis.getComputedStyle(current);
+        const display = comp.display || "block";
+        const position = comp.position || "static";
+
+        const info: AncestorInfo = {
+          selector: this.buildSelector(current),
+          display,
+          position,
+        };
+
+        // Collect flex/grid layout props
+        if (display === "flex" || display === "inline-flex") {
+          info.layoutProps = {
+            "flex-direction": comp.flexDirection,
+            "justify-content": comp.justifyContent,
+            "align-items": comp.alignItems,
+            "gap": comp.gap,
+            "flex-wrap": comp.flexWrap,
+          };
+        } else if (display === "grid" || display === "inline-grid") {
+          info.layoutProps = {
+            "grid-template-columns": comp.gridTemplateColumns,
+            "grid-template-rows": comp.gridTemplateRows,
+            "gap": comp.gap,
+          };
+        }
+
+        // Attempt source resolution via registered adapters
+        const sourceInfo = this.resolve(current);
+        if (sourceInfo) {
+          info.fileName = sourceInfo.fileName;
+          info.lineNumber = sourceInfo.lineNumber;
+          info.componentName = sourceInfo.componentName;
+        }
+
+        results.push(info);
+      } catch {
+        // Skip elements where getComputedStyle throws (e.g. detached)
+      }
+
+      current = current.parentElement;
+      depth++;
+    }
+
+    return results;
+  }
+
+  private buildSelector(el: HTMLElement): string {
+    const tag = el.tagName.toLowerCase();
+    const id = el.id ? `#${el.id}` : "";
+    const classes = Array.from(el.classList)
+      .filter(c => c && !c.startsWith("hoversource") && !c.startsWith("hs-"))
+      .join(".");
+    return `${tag}${id}${classes ? "." + classes : ""}`;
   }
 }

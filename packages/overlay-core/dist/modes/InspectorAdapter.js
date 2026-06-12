@@ -212,7 +212,7 @@ export class InspectorAdapter {
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
         <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-          ${info.fileName.split('/').pop().split('\\').pop()}:${info.lineNumber || 1}
+          ${info.fileName.split('/').pop().split('\\').pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
       <div class="hoversource-shortcut-hint">
@@ -255,7 +255,7 @@ export class InspectorAdapter {
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
         <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-          ${info.fileName.split('/').pop().split('\\').pop()}:${info.lineNumber || 1}
+          ${info.fileName.split('/').pop().split('\\').pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
       <div class="hoversource-section">
@@ -510,8 +510,8 @@ export class InspectorAdapter {
             framework: info.framework,
             component: info.componentName || element.tagName.toLowerCase(),
             file: info.fileName,
-            line: info.lineNumber || 1,
-            column: info.columnNumber || 1,
+            line: info.lineNumber,
+            column: info.columnNumber,
             dimensions: `${element.offsetWidth}x${element.offsetHeight}`,
             styles: {
                 color: computed.color,
@@ -530,7 +530,7 @@ export class InspectorAdapter {
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
 * **Element**: ${selectorLabel}
-* **File Path**: \`${data.file}\` (Line: ${data.line}, Column: ${data.column})
+* **File Path**: \`${data.file}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
 * **Framework**: ${data.framework}
 * **Dimensions**: ${data.dimensions}
 * **Key Styles**:

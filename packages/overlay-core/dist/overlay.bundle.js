@@ -48,13 +48,100 @@
       }
       return null;
     }
+  };
+
+  // ../source-resolver/dist/adapters/VueAdapter.js
+  var VueAdapter = class {
+    name = "vue";
+    getVueInstance(element) {
+      return element.__vueParentComponent;
+    }
+    canResolve(element) {
+      return !!this.getVueInstance(element);
+    }
+    resolve(element) {
+      let instance = this.getVueInstance(element);
+      while (instance) {
+        const type = instance.type;
+        if (type && (type.__file || type.name || type.__name)) {
+          const componentName = type.name || type.__name;
+          return {
+            fileName: type.__file || "",
+            componentName: componentName || void 0,
+            framework: "Vue",
+            tagName: element.tagName.toLowerCase(),
+            classList: Array.from(element.classList)
+          };
+        }
+        instance = instance.parent;
+      }
+      return null;
+    }
+  };
+
+  // ../source-resolver/dist/adapters/SvelteAdapter.js
+  var SvelteAdapter = class {
+    name = "svelte";
+    canResolve(element) {
+      return !!element.__svelte_meta;
+    }
+    resolve(element) {
+      const meta = element.__svelte_meta;
+      if (!meta || !meta.loc)
+        return null;
+      const { file, line, column } = meta.loc;
+      let componentName = void 0;
+      if (file) {
+        const baseName = file.split(/[/\\]/).pop();
+        if (baseName && baseName.endsWith(".svelte")) {
+          componentName = baseName.slice(0, -7);
+        }
+      }
+      return {
+        fileName: file || "",
+        lineNumber: typeof line === "number" ? line + 1 : void 0,
+        columnNumber: typeof column === "number" ? column + 1 : void 0,
+        componentName,
+        framework: "Svelte",
+        tagName: element.tagName.toLowerCase(),
+        classList: Array.from(element.classList)
+      };
+    }
+  };
+
+  // ../source-resolver/dist/index.js
+  var SourceResolver = class {
+    adapters = [];
+    fiberAdapter;
+    constructor() {
+      this.fiberAdapter = new ReactFiberAdapter();
+      this.adapters.push(this.fiberAdapter);
+      this.adapters.push(new VueAdapter());
+      this.adapters.push(new SvelteAdapter());
+    }
+    registerAdapter(adapter) {
+      this.adapters.push(adapter);
+    }
+    resolve(element) {
+      for (const adapter of this.adapters) {
+        if (adapter.canResolve(element)) {
+          try {
+            const info = adapter.resolve(element);
+            if (info)
+              return info;
+          } catch (e) {
+            console.warn(`[HoverSource] Adapter ${adapter.name} failed resolving element`, e);
+          }
+        }
+      }
+      return null;
+    }
     /**
-     * Walks up the DOM from `element`, collecting layout and source info for
-     * each ancestor up to `maxDepth` levels. Returns ancestors ordered from
-     * closest (index 0) to furthest.
+     * Walks up the DOM from `element` and returns layout + source info for
+     * each ancestor (up to `maxDepth` levels).
      *
      * Always resolves: selector, display, position.
-     * Resolves conditionally: layoutProps (flex/grid only), fileName/lineNumber/componentName (fiber only).
+     * Resolves conditionally: layoutProps (flex/grid only), fileName/lineNumber/componentName (via adapters).
      */
     resolveAncestors(element, maxDepth = 8) {
       const results = [];
@@ -104,42 +191,6 @@
       const id = el.id ? `#${el.id}` : "";
       const classes = Array.from(el.classList).filter((c) => c && !c.startsWith("hoversource") && !c.startsWith("hs-")).join(".");
       return `${tag}${id}${classes ? "." + classes : ""}`;
-    }
-  };
-
-  // ../source-resolver/dist/index.js
-  var SourceResolver = class {
-    adapters = [];
-    fiberAdapter;
-    constructor() {
-      this.fiberAdapter = new ReactFiberAdapter();
-      this.adapters.push(this.fiberAdapter);
-    }
-    registerAdapter(adapter) {
-      this.adapters.push(adapter);
-    }
-    resolve(element) {
-      for (const adapter of this.adapters) {
-        if (adapter.canResolve(element)) {
-          try {
-            const info = adapter.resolve(element);
-            if (info)
-              return info;
-          } catch (e) {
-            console.warn(`[HoverSource] Adapter ${adapter.name} failed resolving element`, e);
-          }
-        }
-      }
-      return null;
-    }
-    /**
-     * Walks up the DOM from `element` and returns layout + source info for
-     * each ancestor (up to `maxDepth` levels). Delegates to the React fiber
-     * adapter for source resolution; display/position are always resolved via
-     * getComputedStyle regardless of framework.
-     */
-    resolveAncestors(element, maxDepth = 8) {
-      return this.fiberAdapter.resolveAncestors(element, maxDepth);
     }
   };
 
@@ -438,7 +489,7 @@
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
         <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-          ${info.fileName.split("/").pop().split("\\").pop()}:${info.lineNumber || 1}
+          ${info.fileName.split("/").pop().split("\\").pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
       <div class="hoversource-shortcut-hint">
@@ -481,7 +532,7 @@
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
         <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-          ${info.fileName.split("/").pop().split("\\").pop()}:${info.lineNumber || 1}
+          ${info.fileName.split("/").pop().split("\\").pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
       <div class="hoversource-section">
@@ -714,8 +765,8 @@
         framework: info.framework,
         component: info.componentName || element.tagName.toLowerCase(),
         file: info.fileName,
-        line: info.lineNumber || 1,
-        column: info.columnNumber || 1,
+        line: info.lineNumber,
+        column: info.columnNumber,
         dimensions: `${element.offsetWidth}x${element.offsetHeight}`,
         styles: {
           color: computed.color,
@@ -734,7 +785,7 @@
 ### HoverSource Component Metadata
 * **Component**: \`${data.component}\`
 * **Element**: ${selectorLabel}
-* **File Path**: \`${data.file}\` (Line: ${data.line}, Column: ${data.column})
+* **File Path**: \`${data.file}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
 * **Framework**: ${data.framework}
 * **Dimensions**: ${data.dimensions}
 * **Key Styles**:
@@ -1325,7 +1376,7 @@ ${attrList}`;
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Anchor File: </span>
-        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}:${info.lineNumber || 1}</span>
+        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
       </div>
       <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
         <span class="hoversource-label">H-Anchor: </span>
@@ -1442,7 +1493,7 @@ ${attrList}`;
 ### HoverSource Design Placement Metadata
 * **Component**: \`${p.component}\`
 * **Element**: \`${p.selector}\`
-* **File Path**: \`${p.filePath}\` (Line: ${p.line}, Column: ${p.column})
+* **File Path**: \`${p.filePath}\`${p.line ? ` (Line: ${p.line}, Column: ${p.column})` : ""}
 * **Framework**: ${p.framework}
 * **Horizontal Anchor**:
   - Selector: \`${p.selectorH}\`
@@ -1546,8 +1597,8 @@ Suggested layout insertion (heuristic only):
         component: info.componentName || this.targetElement.tagName.toLowerCase(),
         selector,
         filePath: info.fileName || "unknown",
-        line: info.lineNumber || 1,
-        column: info.columnNumber || 1,
+        line: info.lineNumber,
+        column: info.columnNumber,
         framework: info.framework,
         selectorH,
         boundaryH: this.snapBoundaryH || "None",

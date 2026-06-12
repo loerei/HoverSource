@@ -3,7 +3,7 @@
 import { startCompanionServer, loadMergedConfig } from "@hoversource/companion-server";
 import { injectOverlayScript } from "@hoversource/client-injector";
 import { startProxy } from "./proxy.js";
-import { exec, spawn } from "node:child_process";
+import { exec, spawn, execFile } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
 import net from "node:net";
@@ -621,6 +621,37 @@ async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string)
   setInterval(pollAndInject, 2500);
 }
 
+function runNpmCommand(args: string[], cwd: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const nodeDir = path.dirname(process.execPath);
+    const winNpmCli = path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js");
+    const unixNpmCli = path.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js");
+
+    let npmCliJs = "";
+    if (fs.existsSync(winNpmCli)) {
+      npmCliJs = winNpmCli;
+    } else if (fs.existsSync(unixNpmCli)) {
+      npmCliJs = unixNpmCli;
+    }
+
+    if (npmCliJs) {
+      execFile(process.execPath, [npmCliJs, ...args], { cwd }, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    } else {
+      const isWin = process.platform === "win32";
+      const npmBinName = isWin ? "npm.cmd" : "npm";
+      const candidate = path.join(nodeDir, npmBinName);
+      const npmBin = fs.existsSync(candidate) ? candidate : "npm";
+      exec(`"${npmBin}" ${args.join(" ")}`, { cwd }, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    }
+  });
+}
+
 async function installVueInvasive(projectRoot: string) {
   console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE VUE SETUP <<<\x1b[0m`);
   console.log(`Invasive mode works by adding \x1b[32mvite-plugin-vue-inspector\x1b[0m to your project.`);
@@ -646,17 +677,13 @@ async function installVueInvasive(projectRoot: string) {
     return;
   }
 
-  await new Promise<void>((resolve, reject) => {
-    exec("npm install -D vite-plugin-vue-inspector", { cwd: projectRoot }, (err) => {
-      if (err) {
-        console.error(`[HoverSource] Failed to install package:`, err);
-        reject(err);
-      } else {
-        console.log(`[HoverSource] Successfully installed vite-plugin-vue-inspector.`);
-        resolve();
-      }
-    });
-  });
+  try {
+    await runNpmCommand(["install", "-D", "vite-plugin-vue-inspector"], projectRoot);
+    console.log(`[HoverSource] Successfully installed vite-plugin-vue-inspector.`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to install package:`, err);
+    throw err;
+  }
 
   // 2. Modify vite config
   let configPath = path.join(projectRoot, "vite.config.ts");
@@ -706,12 +733,12 @@ async function uninstallInvasive(projectRoot: string) {
 
   // 1. Remove from package.json
   console.log(`[HoverSource] Uninstalling vite-plugin-vue-inspector...`);
-  await new Promise<void>((resolve) => {
-    exec("npm uninstall vite-plugin-vue-inspector", { cwd: projectRoot }, () => {
-      console.log(`[HoverSource] Package uninstalled.`);
-      resolve();
-    });
-  });
+  try {
+    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector"], projectRoot);
+    console.log(`[HoverSource] Package uninstalled.`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to uninstall package:`, err);
+  }
 
   // 2. Remove from Vite config
   let configPath = path.join(projectRoot, "vite.config.ts");

@@ -34,5 +34,7 @@ export declare class InspectorAdapter implements InteractionMode {
     private formatLayoutConstraints;
     private formatSourceComments;
     private formatSourceAttributes;
+    private formatElementMetadata;
     private copyMetadata;
+    private copyAllLayers;
 }

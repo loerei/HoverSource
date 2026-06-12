@@ -27,6 +27,7 @@ export interface HoverSourceConfig {
     toggleMinimal: ShortcutKey;
     toggleFreeze: ShortcutKey;
     copyMetadata: ShortcutKey;
+    copyAllLayers: ShortcutKey;
     openDashboard: ShortcutKey;
     toggleMode: ShortcutKey;
   };
@@ -49,6 +50,7 @@ const DEFAULT_CONFIG: HoverSourceConfig = {
     toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
     toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
     copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
+    copyAllLayers: { key: "c", altKey: true, ctrlKey: false, shiftKey: true },
     openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
     toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
   }

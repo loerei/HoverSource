@@ -292,6 +292,9 @@ class OverlayEngine implements OverlayController {
     } else if (this.matchShortcut(e, shortcuts.copyMetadata)) {
       e.preventDefault();
       this.activeMode.onShortcut('copyMetadata');
+    } else if (this.matchShortcut(e, shortcuts.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
+      e.preventDefault();
+      this.activeMode.onShortcut('copyAllLayers');
     }
   };
 

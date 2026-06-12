@@ -87,6 +87,9 @@ export class InspectorAdapter {
         else if (command === 'copyMetadata') {
             this.copyMetadata();
         }
+        else if (command === 'copyAllLayers') {
+            this.copyAllLayers();
+        }
     }
     onConfigUpdate(newConfig) {
         this.minimalMode = !!newConfig.minimalModeByDefault;
@@ -201,8 +204,8 @@ export class InspectorAdapter {
         parts.push(shortcut.key.toUpperCase());
         return parts.join("+");
     }
-    renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
-        const hintText = `Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
+    renderMinimalTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
+        const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
         const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
         let vueHint = "";
         if (info.framework === "Vue" && !info.lineNumber) {
@@ -376,7 +379,7 @@ export class InspectorAdapter {
         }
         return html;
     }
-    renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
+    renderDetailedTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
         const computed = globalThis.getComputedStyle(element);
         const shadow = computed.boxShadow;
         const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
@@ -397,7 +400,7 @@ export class InspectorAdapter {
         html += this.renderVisualDetails(shadow, animation, info);
         html += this.renderParentEffects(info);
         html += this.renderStaticMetadata(info);
-        const hintText = `Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
+        const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
         const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
         let vueHint = "";
         if (info.framework === "Vue" && !info.lineNumber) {
@@ -429,6 +432,7 @@ export class InspectorAdapter {
         const config = this.controller.getConfig();
         const shortcuts = config?.shortcuts;
         const copyLabel = this.getShortcutLabel(shortcuts?.copyMetadata) || "[C]";
+        const copyAllLabel = this.getShortcutLabel(shortcuts?.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true }) || "[Alt+Shift+C]";
         const minimalLabel = this.getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
         const freezeLabel = this.getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
         const dbLabel = this.getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
@@ -462,8 +466,8 @@ export class InspectorAdapter {
         const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
         const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
         const innerHtml = this.minimalMode
-            ? this.renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel, modeLabel)
-            : this.renderDetailedTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel, modeLabel);
+            ? this.renderMinimalTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel)
+            : this.renderDetailedTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel);
         const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
         this.controller.drawTooltip(html, e);
     }
@@ -518,11 +522,7 @@ export class InspectorAdapter {
             .map(([k, v]) => `  - \`${k}="${v}"\``)
             .join("\n");
     }
-    copyMetadata() {
-        if (!this.currentSourceInfo || !this.currentElement)
-            return;
-        const element = this.currentElement;
-        const info = this.currentSourceInfo;
+    formatElementMetadata(element, info) {
         const computed = globalThis.getComputedStyle(element);
         const data = {
             framework: info.framework,
@@ -544,11 +544,9 @@ export class InspectorAdapter {
         const tagName = element.tagName.toLowerCase();
         const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
         const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
-        let text = `
-### HoverSource Component Metadata
-* **Component**: \`${data.component}\`
+        let text = `* **Component**: \`${data.component}\`
 * **Element**: ${selectorLabel}
-* **File Path**: \`${data.file}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
+* **File Path**: \`${data.file || "Unknown"}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
 * **Framework**: ${data.framework}
 * **Dimensions**: ${data.dimensions}
 * **Key Styles**:
@@ -556,8 +554,7 @@ export class InspectorAdapter {
   - Background: \`${data.styles.backgroundColor}\`
   - Box Shadow: \`${data.styles.boxShadow}\`
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
-  - Display: \`${data.styles.display}\` ${data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : ""}
-    `.trim();
+  - Display: \`${data.styles.display}\` ${data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : ""}`;
         if (info.visualContext && info.visualContext.parentEffects.length > 0) {
             const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
             text += `\n* **Parent Styles**:\n${parentList}`;
@@ -576,6 +573,43 @@ export class InspectorAdapter {
                 text += `\n* **Source Attributes**:\n${attrList}`;
             }
         }
+        return text;
+    }
+    copyMetadata() {
+        if (!this.currentSourceInfo || !this.currentElement)
+            return;
+        const text = `### HoverSource Component Metadata\n` + this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
         this.controller.copyToClipboard(text);
+    }
+    copyAllLayers() {
+        if (this.layerStack.length === 0)
+            return;
+        let text = `### HoverSource Component Metadata\n`;
+        text += `Found ${this.layerStack.length} layer(s), ordered from leaf (Layer 1) to root:\n\n`;
+        this.layerStack.forEach((el, index) => {
+            let info;
+            if (el === this.currentElement && this.currentSourceInfo) {
+                info = this.currentSourceInfo;
+            }
+            else {
+                info = this.resolver.resolve(el) || {
+                    componentName: el.tagName.toLowerCase(),
+                    tagName: el.tagName.toLowerCase(),
+                    framework: "Unknown",
+                    fileName: "",
+                    lineNumber: 0,
+                    columnNumber: 0,
+                    classList: Array.from(el.classList),
+                    visualContext: null,
+                    staticMetadata: null
+                };
+                info.visualContext = inspectVisualContext(el);
+            }
+            const layerNum = index + 1;
+            const totalLayers = this.layerStack.length;
+            text += `#### Layer ${layerNum}/${totalLayers}: \`${info.componentName || el.tagName.toLowerCase()}\` (${el.tagName.toLowerCase()})\n`;
+            text += this.formatElementMetadata(el, info) + "\n\n";
+        });
+        this.controller.copyToClipboard(text.trim());
     }
 }

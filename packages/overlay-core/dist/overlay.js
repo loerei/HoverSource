@@ -273,6 +273,10 @@ class OverlayEngine {
             e.preventDefault();
             this.activeMode.onShortcut('copyMetadata');
         }
+        else if (this.matchShortcut(e, shortcuts.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
+            e.preventDefault();
+            this.activeMode.onShortcut('copyAllLayers');
+        }
     };
     switchMode() {
         this.activeMode.deactivate();

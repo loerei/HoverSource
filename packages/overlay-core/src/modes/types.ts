@@ -1,4 +1,4 @@
-export type SemanticShortcut = 'copyMetadata' | 'toggleFreeze' | 'toggleMinimal';
+export type SemanticShortcut = 'copyMetadata' | 'toggleFreeze' | 'toggleMinimal' | 'copyAllLayers';
 
 export interface OverlayController {
   /** Renders a highlighted box over a specific element */

@@ -434,13 +434,23 @@ hs --exec="npm run start"
 
 For `HoverSource` to inject the overlay into an Electron application, you **must** enable the Chrome DevTools Protocol (CDP) debugging interface in your application's main process.
 
-Add the following to your main process (e.g., `src/main.ts`) **before** the `app.whenReady()` or `app.on('ready')` event is fired:
+Add the following to your main process (e.g., `src/main.ts`) **before** the `app.whenReady()` or `app.on('ready')` event is fired. This implementation respects HoverSource's automatic port conflict resolution and ensures debugging is disabled in production:
 
 ```typescript
 import { app } from 'electron';
 
-// Enable remote debugging port for HoverSource injection
-app.commandLine.appendSwitch('remote-debugging-port', '9222');
+// Enable remote debugging port for HoverSource injection in development
+if (!app.isPackaged) {
+  let port = '9222';
+  const extraArgs = process.env.ELECTRON_EXTRA_LAUNCH_ARGS;
+  if (extraArgs) {
+    const match = extraArgs.match(/--remote-debugging-port=(\d+)/);
+    if (match) port = match[1];
+  }
+  if (!app.commandLine.hasSwitch('remote-debugging-port')) {
+    app.commandLine.appendSwitch('remote-debugging-port', port);
+  }
+}
 
 app.whenReady().then(() => {
   // ... your app setup

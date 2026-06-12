@@ -9,10 +9,46 @@ export class VueAdapter implements SourceAdapter {
   }
 
   canResolve(element: HTMLElement): boolean {
-    return !!this.getVueInstance(element);
+    return !!this.getVueInstance(element) || (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector"));
   }
 
   resolve(element: HTMLElement): SourceInfo | null {
+    // 1. Check if invasive inspector attribute is present
+    if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
+      const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
+      if (value) {
+        // Format of data-v-inspector is file:line:column
+        const parts = value.split(":");
+        if (parts.length >= 3) {
+          const columnStr = parts.pop() || "";
+          const lineStr = parts.pop() || "";
+          const file = parts.join(":");
+          
+          const line = Number.parseInt(lineStr, 10);
+          const column = Number.parseInt(columnStr, 10);
+
+          let componentName: string | undefined = undefined;
+          if (file) {
+            const baseName = file.split(/[/\\]/).pop();
+            if (baseName && baseName.endsWith(".vue")) {
+              componentName = baseName.slice(0, -4);
+            }
+          }
+
+          return {
+            fileName: file,
+            lineNumber: !Number.isNaN(line) ? line : undefined,
+            columnNumber: !Number.isNaN(column) ? column : undefined,
+            componentName,
+            framework: "Vue",
+            tagName: element.tagName.toLowerCase(),
+            classList: Array.from(element.classList)
+          };
+        }
+      }
+    }
+
+    // 2. Fallback to non-invasive runtime lookup
     let instance = this.getVueInstance(element);
 
     // Walk up the component hierarchy if needed to find file information

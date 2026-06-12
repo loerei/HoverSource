@@ -574,6 +574,14 @@ export class DesignAdapter {
             : "unknown";
         const hintText = `Drag the Crosshair to position | Press ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze & Nudge"} | ${copyLabel} to Copy Design Metadata | ${modeLabel} to Switch Mode`;
         const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+        let vueHint = "";
+        if (info.framework === "Vue" && !info.lineNumber) {
+            vueHint = `
+        <div class="hoversource-section" style="font-style: italic; color: #10b981; font-size: 9px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+          Tip: Run 'hs install --vue' to enable line/column targeting.
+        </div>
+      `;
+        }
         const html = `
       <div class="hoversource-title" style="color: #10b981;">
         <span>Design Mode ${this.isFrozen ? "[FROZEN]" : ""}</span>
@@ -599,6 +607,7 @@ export class DesignAdapter {
         <span class="hoversource-label">Nudge Offsets (dX, dY): </span>
         <span class="hoversource-value">${this.dX}px, ${this.dY}px</span>
       </div>
+      ${vueHint}
       <div class="hoversource-shortcut-hint" style="margin-top: 8px;">
         ${hintHtml}
       </div>

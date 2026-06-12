@@ -57,9 +57,38 @@
       return element.__vueParentComponent;
     }
     canResolve(element) {
-      return !!this.getVueInstance(element);
+      return !!this.getVueInstance(element) || typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector");
     }
     resolve(element) {
+      if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
+        const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
+        if (value) {
+          const parts = value.split(":");
+          if (parts.length >= 3) {
+            const columnStr = parts.pop() || "";
+            const lineStr = parts.pop() || "";
+            const file = parts.join(":");
+            const line = Number.parseInt(lineStr, 10);
+            const column = Number.parseInt(columnStr, 10);
+            let componentName = void 0;
+            if (file) {
+              const baseName = file.split(/[/\\]/).pop();
+              if (baseName && baseName.endsWith(".vue")) {
+                componentName = baseName.slice(0, -4);
+              }
+            }
+            return {
+              fileName: file,
+              lineNumber: !Number.isNaN(line) ? line : void 0,
+              columnNumber: !Number.isNaN(column) ? column : void 0,
+              componentName,
+              framework: "Vue",
+              tagName: element.tagName.toLowerCase(),
+              classList: Array.from(element.classList)
+            };
+          }
+        }
+      }
       let instance = this.getVueInstance(element);
       while (instance) {
         const type = instance.type;
@@ -481,6 +510,14 @@
     renderMinimalTooltip(element, info, copyLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
       const hintText = `Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
       const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+      let vueHint = "";
+      if (info.framework === "Vue" && !info.lineNumber) {
+        vueHint = `
+        <div class="hoversource-section" style="font-style: italic; color: #10b981; font-size: 9px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+          Tip: Run 'hs install --vue' to enable line/column targeting.
+        </div>
+      `;
+      }
       return `
       <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
         <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
@@ -492,6 +529,7 @@
           ${info.fileName.split("/").pop().split("\\").pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
+      ${vueHint}
       <div class="hoversource-shortcut-hint">
         ${hintHtml}
       </div>
@@ -658,6 +696,14 @@
       html += this.renderStaticMetadata(info);
       const hintText = `Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
       const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+      let vueHint = "";
+      if (info.framework === "Vue" && !info.lineNumber) {
+        vueHint = `
+        <div class="hoversource-section" style="font-style: italic; color: #10b981; font-size: 9px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+          Tip: Run 'hs install --vue' to enable line/column targeting.
+        </div>
+      `;
+      }
       html += `
       <div class="hoversource-section">
         <span class="hoversource-label">Stack: </span>
@@ -665,6 +711,7 @@
           ${stack.map((item) => `<div class="hoversource-stack-item">${item}</div>`).join("")}
         </div>
       </div>
+      ${vueHint}
       <div class="hoversource-shortcut-hint">
         ${hintHtml}
       </div>
@@ -1365,6 +1412,14 @@ ${attrList}`;
       const fileBase = info.fileName ? info.fileName.split("/").pop()?.split("\\").pop() || "unknown" : "unknown";
       const hintText = `Drag the Crosshair to position | Press ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze & Nudge"} | ${copyLabel} to Copy Design Metadata | ${modeLabel} to Switch Mode`;
       const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+      let vueHint = "";
+      if (info.framework === "Vue" && !info.lineNumber) {
+        vueHint = `
+        <div class="hoversource-section" style="font-style: italic; color: #10b981; font-size: 9px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+          Tip: Run 'hs install --vue' to enable line/column targeting.
+        </div>
+      `;
+      }
       const html = `
       <div class="hoversource-title" style="color: #10b981;">
         <span>Design Mode ${this.isFrozen ? "[FROZEN]" : ""}</span>
@@ -1390,6 +1445,7 @@ ${attrList}`;
         <span class="hoversource-label">Nudge Offsets (dX, dY): </span>
         <span class="hoversource-value">${this.dX}px, ${this.dY}px</span>
       </div>
+      ${vueHint}
       <div class="hoversource-shortcut-hint" style="margin-top: 8px;">
         ${hintHtml}
       </div>

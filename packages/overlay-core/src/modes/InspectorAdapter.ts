@@ -232,6 +232,15 @@ export class InspectorAdapter implements InteractionMode {
     const hintText = `Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
     const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
 
+    let vueHint = "";
+    if (info.framework === "Vue" && !info.lineNumber) {
+      vueHint = `
+        <div class="hoversource-section" style="font-style: italic; color: #10b981; font-size: 9px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+          Tip: Run 'hs install --vue' to enable line/column targeting.
+        </div>
+      `;
+    }
+
     return `
       <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
         <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
@@ -243,6 +252,7 @@ export class InspectorAdapter implements InteractionMode {
           ${info.fileName.split('/').pop().split('\\').pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
+      ${vueHint}
       <div class="hoversource-shortcut-hint">
         ${hintHtml}
       </div>
@@ -439,6 +449,15 @@ export class InspectorAdapter implements InteractionMode {
     const hintText = `Press ${copyLabel} to copy | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
     const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
 
+    let vueHint = "";
+    if (info.framework === "Vue" && !info.lineNumber) {
+      vueHint = `
+        <div class="hoversource-section" style="font-style: italic; color: #10b981; font-size: 9px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;">
+          Tip: Run 'hs install --vue' to enable line/column targeting.
+        </div>
+      `;
+    }
+
     html += `
       <div class="hoversource-section">
         <span class="hoversource-label">Stack: </span>
@@ -446,6 +465,7 @@ export class InspectorAdapter implements InteractionMode {
           ${stack.map(item => `<div class="hoversource-stack-item">${item}</div>`).join('')}
         </div>
       </div>
+      ${vueHint}
       <div class="hoversource-shortcut-hint">
         ${hintHtml}
       </div>

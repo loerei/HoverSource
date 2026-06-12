@@ -57,9 +57,32 @@
       return element.__vueParentComponent;
     }
     canResolve(element) {
-      return !!this.getVueInstance(element) || typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector");
+      return !!this.getVueInstance(element) || typeof element.hasAttribute === "function" && (element.hasAttribute("data-v-inspector") || element.hasAttribute("data-v-inspector-file"));
     }
     resolve(element) {
+      if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector-file")) {
+        const file = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-file") : null;
+        if (file) {
+          const lineStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-line") : null;
+          const columnStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-column") : null;
+          const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
+          const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
+          let componentName = void 0;
+          const baseName = file.split(/[/\\]/).pop();
+          if (baseName && baseName.endsWith(".vue")) {
+            componentName = baseName.slice(0, -4);
+          }
+          return {
+            fileName: file,
+            lineNumber: !Number.isNaN(line) ? line : void 0,
+            columnNumber: !Number.isNaN(column) ? column : void 0,
+            componentName,
+            framework: "Vue",
+            tagName: element.tagName.toLowerCase(),
+            classList: element.classList ? Array.from(element.classList) : []
+          };
+        }
+      }
       if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
         const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
         if (value) {
@@ -84,7 +107,7 @@
               componentName,
               framework: "Vue",
               tagName: element.tagName.toLowerCase(),
-              classList: Array.from(element.classList)
+              classList: element.classList ? Array.from(element.classList) : []
             };
           }
         }

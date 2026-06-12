@@ -9,11 +9,41 @@ export class VueAdapter implements SourceAdapter {
   }
 
   canResolve(element: HTMLElement): boolean {
-    return !!this.getVueInstance(element) || (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector"));
+    return !!this.getVueInstance(element) || 
+      (typeof element.hasAttribute === "function" && 
+        (element.hasAttribute("data-v-inspector") || element.hasAttribute("data-v-inspector-file"))
+      );
   }
 
   resolve(element: HTMLElement): SourceInfo | null {
-    // 1. Check if invasive inspector attribute is present
+    // 1. Check if individual invasive inspector attributes are present
+    if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector-file")) {
+      const file = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-file") : null;
+      if (file) {
+        const lineStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-line") : null;
+        const columnStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-column") : null;
+        const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
+        const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
+
+        let componentName: string | undefined = undefined;
+        const baseName = file.split(/[/\\]/).pop();
+        if (baseName && baseName.endsWith(".vue")) {
+          componentName = baseName.slice(0, -4);
+        }
+
+        return {
+          fileName: file,
+          lineNumber: !Number.isNaN(line) ? line : undefined,
+          columnNumber: !Number.isNaN(column) ? column : undefined,
+          componentName,
+          framework: "Vue",
+          tagName: element.tagName.toLowerCase(),
+          classList: element.classList ? Array.from(element.classList) : []
+        };
+      }
+    }
+
+    // 2. Check if single combined invasive inspector attribute is present
     if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
       const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
       if (value) {
@@ -42,7 +72,7 @@ export class VueAdapter implements SourceAdapter {
             componentName,
             framework: "Vue",
             tagName: element.tagName.toLowerCase(),
-            classList: Array.from(element.classList)
+            classList: element.classList ? Array.from(element.classList) : []
           };
         }
       }

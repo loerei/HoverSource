@@ -104,6 +104,32 @@ describe("VueAdapter", () => {
     expect(result?.componentName).toBe("MyButton");
     expect(result?.framework).toBe("Vue");
   });
+
+  it("should resolve Vue component metadata from individual data-v-inspector-* attributes", () => {
+    const adapter = new VueAdapter();
+    const mockElement = {
+      tagName: "BUTTON",
+      classList: {
+        [Symbol.iterator]: function* () {}
+      },
+      hasAttribute: (name: string) => name === "data-v-inspector-file",
+      getAttribute: (name: string) => {
+        if (name === "data-v-inspector-file") return "/src/components/Header.vue";
+        if (name === "data-v-inspector-line") return "42";
+        if (name === "data-v-inspector-column") return "12";
+        return null;
+      }
+    } as any;
+
+    expect(adapter.canResolve(mockElement)).toBe(true);
+    const result = adapter.resolve(mockElement);
+    expect(result).not.toBeNull();
+    expect(result?.fileName).toBe("/src/components/Header.vue");
+    expect(result?.lineNumber).toBe(42);
+    expect(result?.columnNumber).toBe(12);
+    expect(result?.componentName).toBe("Header");
+    expect(result?.framework).toBe("Vue");
+  });
 });
 
 describe("SvelteAdapter", () => {

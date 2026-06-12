@@ -6,6 +6,10 @@
   "types": "./dist/server.d.ts",
   "scripts": {
     "build": "tsc -b",
-    "clean": "tsc -b --clean"
+    "clean": "tsc -b --clean",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.8"
   }
 }

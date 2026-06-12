@@ -42,34 +42,302 @@ function getAllCssFiles(dir: string, fileList: string[] = []): string[] {
         ) {
           getAllCssFiles(filePath, fileList);
         }
-      } else if (file.endsWith(".css")) {
-        fileList.push(filePath);
+      } else {
+        const ext = path.extname(file).toLowerCase();
+        if (ext === ".css" || ext === ".scss" || ext === ".sass" || ext === ".less") {
+          fileList.push(filePath);
+        }
       }
     }
   } catch {}
   return fileList;
 }
 
-function findClassOrigins(projectRoot: string, classNames: string[]): Record<string, { file: string; line: number; column: number }> {
+function sortCssFiles(cssFiles: string[], componentFilePath?: string): string[] {
+  if (!componentFilePath) return cssFiles;
+  const componentDir = path.dirname(componentFilePath);
+  const componentBase = path.basename(componentFilePath, path.extname(componentFilePath));
+  
+  return [...cssFiles].sort((a, b) => {
+    const dirA = path.dirname(a);
+    const dirB = path.dirname(b);
+    const baseA = path.basename(a, path.extname(a));
+    const baseB = path.basename(b, path.extname(b));
+    
+    const inSameDirA = dirA === componentDir;
+    const inSameDirB = dirB === componentDir;
+    
+    const baseMatchA = baseA.startsWith(componentBase) || componentBase.startsWith(baseA);
+    const baseMatchB = baseB.startsWith(componentBase) || componentBase.startsWith(baseB);
+    
+    if ((inSameDirA && baseMatchA) && !(inSameDirB && baseMatchB)) return -1;
+    if (!(inSameDirA && baseMatchA) && (inSameDirB && baseMatchB)) return 1;
+    
+    if (inSameDirA && !inSameDirB) return -1;
+    if (!inSameDirA && inSameDirB) return 1;
+    
+    if (baseMatchA && !baseMatchB) return -1;
+    if (!baseMatchA && baseMatchB) return 1;
+    
+    return 0;
+  });
+}
+
+function getCandidateClassNames(className: string): string[] {
+  const candidates = new Set<string>([className]);
+  
+  if (className.includes("__")) {
+    const parts = className.split("__");
+    const prefix = parts[0];
+    candidates.add(prefix);
+    
+    const subParts = prefix.split("_");
+    for (const part of subParts) {
+      if (part) candidates.add(part);
+    }
+    if (subParts.length > 1) {
+      candidates.add(subParts[subParts.length - 1]);
+    }
+  } else if (className.startsWith("_")) {
+    const parts = className.split("_").filter(Boolean);
+    for (const part of parts) {
+      candidates.add(part);
+    }
+    if (parts.length > 1) {
+      candidates.add(parts[parts.length - 2]);
+    }
+  }
+  
+  return Array.from(candidates);
+}
+
+function splitSelectorList(selectorListStr: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let parenDepth = 0;
+  
+  for (let i = 0; i < selectorListStr.length; i++) {
+    const char = selectorListStr[i];
+    if (char === "(") {
+      parenDepth++;
+      current += char;
+    } else if (char === ")") {
+      parenDepth--;
+      current += char;
+    } else if (char === "," && parenDepth === 0) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current) {
+    parts.push(current);
+  }
+  return parts;
+}
+
+function extractClassNamesFromSelector(selector: string): string[] {
+  const classNames: string[] = [];
+  const classPattern = /\.([a-zA-Z_][a-zA-Z0-9_-]*)/g;
+  let match;
+  while ((match = classPattern.exec(selector)) !== null) {
+    classNames.push(match[1]);
+  }
+  return classNames;
+}
+
+interface SelectorOrigin {
+  selector: string;
+  line: number;
+  column: number;
+}
+
+function parseSelectors(content: string): SelectorOrigin[] {
+  const origins: SelectorOrigin[] = [];
+  
+  let line = 1;
+  let column = 1;
+  
+  let inString: string | null = null;
+  let inComment: "line" | "block" | null = null;
+  
+  const braceStack: string[][] = [];
+  
+  let currentSelector = "";
+  let selectorStartLine = 1;
+  let selectorStartCol = 1;
+  let inSelectorState = true;
+  
+  const advancePos = (c: string) => {
+    if (c === "\n") {
+      line++;
+      column = 1;
+    } else {
+      column++;
+    }
+  };
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    const nextChar = content[i + 1] || "";
+    
+    if (inComment === "line") {
+      if (char === "\n") {
+        inComment = null;
+      }
+      advancePos(char);
+      continue;
+    }
+    
+    if (inComment === "block") {
+      if (char === "*" && nextChar === "/") {
+        inComment = null;
+        i++;
+        column += 2;
+        continue;
+      }
+      advancePos(char);
+      continue;
+    }
+    
+    if (inString !== null) {
+      if (char === "\\" && i + 1 < content.length) {
+        const next = content[i + 1];
+        advancePos(char);
+        advancePos(next);
+        i++;
+        continue;
+      }
+      if (char === inString) {
+        inString = null;
+      }
+      advancePos(char);
+      continue;
+    }
+    
+    if (char === "/" && nextChar === "/") {
+      inComment = "line";
+      i++;
+      column += 2;
+      continue;
+    }
+    if (char === "/" && nextChar === "*") {
+      inComment = "block";
+      i++;
+      column += 2;
+      continue;
+    }
+    
+    if (char === '"' || char === "'" || char === "`") {
+      inString = char;
+      advancePos(char);
+      continue;
+    }
+    
+    if (char === "{") {
+      const rawSel = currentSelector.trim();
+      const newSelectors: string[] = [];
+      
+      if (rawSel) {
+        const splitSels = splitSelectorList(rawSel);
+        const parentList = braceStack.length > 0 ? braceStack[braceStack.length - 1] : [];
+        const activeParentSelectors = parentList.filter(p => !p.trim().startsWith("@"));
+        
+        for (const sel of splitSels) {
+          const trimmedSel = sel.trim();
+          if (!trimmedSel) continue;
+          
+          if (activeParentSelectors.length > 0) {
+            for (const parentSel of activeParentSelectors) {
+              let resolved = "";
+              if (trimmedSel.includes("&")) {
+                resolved = trimmedSel.replaceAll("&", parentSel);
+              } else {
+                resolved = `${parentSel} ${trimmedSel}`;
+              }
+              newSelectors.push(resolved);
+              origins.push({
+                selector: resolved,
+                line: selectorStartLine,
+                column: selectorStartCol
+              });
+            }
+          } else {
+            newSelectors.push(trimmedSel);
+            origins.push({
+              selector: trimmedSel,
+              line: selectorStartLine,
+              column: selectorStartCol
+            });
+          }
+        }
+      }
+      
+      braceStack.push(newSelectors.length > 0 ? newSelectors : (rawSel ? [rawSel] : []));
+      currentSelector = "";
+      inSelectorState = true;
+      advancePos(char);
+      continue;
+    }
+    
+    if (char === "}") {
+      braceStack.pop();
+      currentSelector = "";
+      inSelectorState = true;
+      advancePos(char);
+      continue;
+    }
+    
+    if (char === ";") {
+      currentSelector = "";
+      inSelectorState = true;
+      advancePos(char);
+      continue;
+    }
+    
+    if (inSelectorState) {
+      if (currentSelector.trim() === "") {
+        selectorStartLine = line;
+        selectorStartCol = column;
+      }
+      currentSelector += char;
+    }
+    
+    advancePos(char);
+  }
+  
+  return origins;
+}
+
+function findClassOrigins(
+  projectRoot: string,
+  classNames: string[],
+  componentFilePath?: string
+): Record<string, { file: string; line: number; column: number }> {
   const origins: Record<string, { file: string; line: number; column: number }> = {};
   const cssFiles = getAllCssFiles(projectRoot);
-
-  for (const file of cssFiles) {
+  const sortedCssFiles = sortCssFiles(cssFiles, componentFilePath);
+  
+  for (const file of sortedCssFiles) {
     try {
       const content = fs.readFileSync(file, "utf-8");
-      const lines = content.split(/\r?\n/);
+      const selectorOrigins = parseSelectors(content);
       
       for (const className of classNames) {
         if (origins[className]) continue;
-
-        const pattern = new RegExp(String.raw`\.${className}\b`);
-        for (let i = 0; i < lines.length; i++) {
-          const match = pattern.exec(lines[i]);
-          if (match?.index !== undefined) {
+        
+        const candidates = getCandidateClassNames(className);
+        
+        for (const origin of selectorOrigins) {
+          const selectorClasses = extractClassNamesFromSelector(origin.selector);
+          const hasMatch = candidates.some(c => selectorClasses.includes(c));
+          
+          if (hasMatch) {
             origins[className] = {
               file: file.replaceAll("\\", "/"),
-              line: i + 1,
-              column: match.index + 1
+              line: origin.line,
+              column: origin.column
             };
             break;
           }
@@ -77,6 +345,7 @@ function findClassOrigins(projectRoot: string, classNames: string[]): Record<str
       }
     } catch {}
   }
+  
   return origins;
 }
 
@@ -274,7 +543,7 @@ export class StaticContextResolver {
       result.comments = this.parsePrecedingComments(lines, tagLineIdx);
 
       if (classList && classList.length > 0) {
-        result.classOrigins = findClassOrigins(projectRoot, classList);
+        result.classOrigins = findClassOrigins(projectRoot, classList, filePath);
       }
 
     } catch (e) {

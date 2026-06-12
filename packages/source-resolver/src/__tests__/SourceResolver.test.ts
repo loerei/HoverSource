@@ -25,6 +25,35 @@ beforeAll(() => {
   }
 });
 
+function verifyResolution(
+  adapter: any,
+  element: any,
+  expected: {
+    fileName?: string;
+    lineNumber?: number;
+    columnNumber?: number;
+    componentName?: string;
+    framework: string;
+  }
+) {
+  expect(adapter.canResolve(element)).toBe(true);
+  const result = adapter.resolve(element);
+  expect(result).not.toBeNull();
+  if (expected.fileName !== undefined) {
+    expect(result?.fileName).toBe(expected.fileName);
+  }
+  if (expected.lineNumber !== undefined) {
+    expect(result?.lineNumber).toBe(expected.lineNumber);
+  }
+  if (expected.columnNumber !== undefined) {
+    expect(result?.columnNumber).toBe(expected.columnNumber);
+  }
+  if (expected.componentName !== undefined) {
+    expect(result?.componentName).toBe(expected.componentName);
+  }
+  expect(result?.framework).toBe(expected.framework);
+}
+
 describe("ReactFiberAdapter", () => {
   it("should resolve React component metadata from fiber", () => {
     const adapter = new ReactFiberAdapter();
@@ -46,14 +75,13 @@ describe("ReactFiberAdapter", () => {
       }
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/components/Button.tsx");
-    expect(result?.lineNumber).toBe(42);
-    expect(result?.columnNumber).toBe(5);
-    expect(result?.componentName).toBe("Button");
-    expect(result?.framework).toBe("React");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/components/Button.tsx",
+      lineNumber: 42,
+      columnNumber: 5,
+      componentName: "Button",
+      framework: "React"
+    });
   });
 });
 
@@ -72,12 +100,11 @@ describe("VueAdapter", () => {
       }
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/components/VueButton.vue");
-    expect(result?.componentName).toBe("VueButton");
-    expect(result?.framework).toBe("Vue");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/components/VueButton.vue",
+      componentName: "VueButton",
+      framework: "Vue"
+    });
   });
 
   it("should resolve Vue component metadata from data-v-inspector attribute in invasive mode", () => {
@@ -89,14 +116,13 @@ describe("VueAdapter", () => {
       getAttribute: (name: string) => name === "data-v-inspector" ? "/src/components/MyButton.vue:24:8" : null
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/components/MyButton.vue");
-    expect(result?.lineNumber).toBe(24);
-    expect(result?.columnNumber).toBe(8);
-    expect(result?.componentName).toBe("MyButton");
-    expect(result?.framework).toBe("Vue");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/components/MyButton.vue",
+      lineNumber: 24,
+      columnNumber: 8,
+      componentName: "MyButton",
+      framework: "Vue"
+    });
   });
 
   it("should resolve Vue component metadata from individual data-v-inspector-* attributes", () => {
@@ -113,14 +139,13 @@ describe("VueAdapter", () => {
       }
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/components/Header.vue");
-    expect(result?.lineNumber).toBe(42);
-    expect(result?.columnNumber).toBe(12);
-    expect(result?.componentName).toBe("Header");
-    expect(result?.framework).toBe("Vue");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/components/Header.vue",
+      lineNumber: 42,
+      columnNumber: 12,
+      componentName: "Header",
+      framework: "Vue"
+    });
   });
 });
 
@@ -139,14 +164,13 @@ describe("SvelteAdapter", () => {
       }
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/components/SvelteBadge.svelte");
-    expect(result?.lineNumber).toBe(10); // 1-indexed
-    expect(result?.columnNumber).toBe(3); // 1-indexed
-    expect(result?.componentName).toBe("SvelteBadge");
-    expect(result?.framework).toBe("Svelte");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/components/SvelteBadge.svelte",
+      lineNumber: 10,
+      columnNumber: 3,
+      componentName: "SvelteBadge",
+      framework: "Svelte"
+    });
   });
 });
 
@@ -171,14 +195,13 @@ describe("PreactAdapter", () => {
       }
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/components/PreactCard.tsx");
-    expect(result?.lineNumber).toBe(15);
-    expect(result?.columnNumber).toBe(4);
-    expect(result?.componentName).toBe("PreactCard");
-    expect(result?.framework).toBe("Preact");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/components/PreactCard.tsx",
+      lineNumber: 15,
+      columnNumber: 4,
+      componentName: "PreactCard",
+      framework: "Preact"
+    });
   });
 });
 
@@ -192,14 +215,13 @@ describe("SolidAdapter", () => {
       getAttribute: (name: string) => name === "data-source-loc" ? "/src/components/SolidCounter.tsx:25:8" : null
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/components/SolidCounter.tsx");
-    expect(result?.lineNumber).toBe(25);
-    expect(result?.columnNumber).toBe(8);
-    expect(result?.componentName).toBe("SolidCounter");
-    expect(result?.framework).toBe("SolidJS");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/components/SolidCounter.tsx",
+      lineNumber: 25,
+      columnNumber: 8,
+      componentName: "SolidCounter",
+      framework: "SolidJS"
+    });
   });
 });
 
@@ -217,14 +239,13 @@ describe("AstroAdapter", () => {
       }
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/pages/index.astro");
-    expect(result?.lineNumber).toBe(12);
-    expect(result?.columnNumber).toBe(5);
-    expect(result?.componentName).toBe("index");
-    expect(result?.framework).toBe("Astro");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/pages/index.astro",
+      lineNumber: 12,
+      columnNumber: 5,
+      componentName: "index",
+      framework: "Astro"
+    });
   });
 });
 
@@ -267,14 +288,13 @@ describe("AngularAdapter", () => {
       }
     } as any;
 
-    expect(adapter.canResolve(mockElement)).toBe(true);
-    const result = adapter.resolve(mockElement);
-    expect(result).not.toBeNull();
-    expect(result?.fileName).toBe("/src/app/app.component.ts");
-    expect(result?.lineNumber).toBe(10);
-    expect(result?.columnNumber).toBe(2);
-    expect(result?.componentName).toBe("AppComponent");
-    expect(result?.framework).toBe("Angular");
+    verifyResolution(adapter, mockElement, {
+      fileName: "/src/app/app.component.ts",
+      lineNumber: 10,
+      columnNumber: 2,
+      componentName: "AppComponent",
+      framework: "Angular"
+    });
   });
 });
 

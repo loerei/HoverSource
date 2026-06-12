@@ -652,13 +652,22 @@ function runNpmCommand(args: string[], cwd: string): Promise<void> {
   });
 }
 
-async function installVueInvasive(projectRoot: string) {
-  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE VUE SETUP <<<\x1b[0m`);
-  console.log(`Invasive mode works by adding \x1b[32mvite-plugin-vue-inspector\x1b[0m to your project.`);
-  console.log(`This plugin injects 'data-v-inspector' HTML attributes (file paths, line numbers, column numbers)`);
-  console.log(`directly into DOM elements during compilation, enabling pixel-perfect template resolution in Vue.`);
+async function installVitePluginInvasive(
+  projectRoot: string,
+  config: {
+    framework: string;
+    pluginName: string;
+    attributeName: string;
+    importStatement: string;
+    pluginCall: string;
+  }
+) {
+  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE ${config.framework.toUpperCase()} SETUP <<<\x1b[0m`);
+  console.log(`Invasive mode works by adding \x1b[32m${config.pluginName}\x1b[0m to your project.`);
+  console.log(`This plugin injects '${config.attributeName}' HTML attributes (file paths, line numbers, column numbers)`);
+  console.log(`directly into DOM elements during compilation, enabling pixel-perfect template resolution in ${config.framework}.`);
   console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
-  console.log(`  1. Install 'vite-plugin-vue-inspector' as a devDependency in your package.json.`);
+  console.log(`  1. Install '${config.pluginName}' as a devDependency in your package.json.`);
   console.log(`  2. Modify your vite.config.ts / vite.config.js to register the plugin.\x1b[0m`);
   
   const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
@@ -667,10 +676,10 @@ async function installVueInvasive(projectRoot: string) {
     return;
   }
 
-  console.log(`[HoverSource] Setting up Vue invasive mode...`);
+  console.log(`[HoverSource] Setting up ${config.framework} invasive mode...`);
 
-  // 1. Install vite-plugin-vue-inspector
-  console.log(`[HoverSource] Installing vite-plugin-vue-inspector...`);
+  // 1. Install devDependency
+  console.log(`[HoverSource] Installing ${config.pluginName}...`);
   const pkgPath = path.join(projectRoot, "package.json");
   if (!fs.existsSync(pkgPath)) {
     console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
@@ -678,8 +687,8 @@ async function installVueInvasive(projectRoot: string) {
   }
 
   try {
-    await runNpmCommand(["install", "-D", "vite-plugin-vue-inspector"], projectRoot);
-    console.log(`[HoverSource] Successfully installed vite-plugin-vue-inspector.`);
+    await runNpmCommand(["install", "-D", config.pluginName], projectRoot);
+    console.log(`[HoverSource] Successfully installed ${config.pluginName}.`);
   } catch (err) {
     console.error(`[HoverSource] Failed to install package:`, err);
     throw err;
@@ -693,7 +702,7 @@ async function installVueInvasive(projectRoot: string) {
 
   if (!fs.existsSync(configPath)) {
     console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
-    console.log(`Please register 'vite-plugin-vue-inspector' manually in your Vite config.`);
+    console.log(`Please register '${config.pluginName}' manually in your Vite config.`);
     return;
   }
 
@@ -701,95 +710,44 @@ async function installVueInvasive(projectRoot: string) {
   let configContent = fs.readFileSync(configPath, "utf-8");
 
   // Check if already registered
-  if (configContent.includes("vite-plugin-vue-inspector")) {
+  if (configContent.includes(config.pluginName)) {
     console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
     return;
   }
 
   // Insert import
-  const importStatement = 'import Inspector from "vite-plugin-vue-inspector";\n';
-  configContent = importStatement + configContent;
+  configContent = config.importStatement + configContent;
 
   // Insert plugin call inside plugins array
   if (configContent.includes("plugins:")) {
-    configContent = configContent.replace(/plugins:\s*\[/, "plugins: [\n    Inspector(),");
+    configContent = configContent.replace(/plugins:\s*\[/, `plugins: [\n    ${config.pluginCall},`);
     fs.writeFileSync(configPath, configContent, "utf-8");
     console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
   } else {
     fs.writeFileSync(configPath, configContent, "utf-8");
     console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
-    console.log(`Please manually add 'Inspector()' to your plugins array.`);
+    console.log(`Please manually add '${config.pluginCall}' to your plugins array.`);
   }
 }
 
+async function installVueInvasive(projectRoot: string) {
+  await installVitePluginInvasive(projectRoot, {
+    framework: "Vue",
+    pluginName: "vite-plugin-vue-inspector",
+    attributeName: "data-v-inspector",
+    importStatement: 'import Inspector from "vite-plugin-vue-inspector";\n',
+    pluginCall: "Inspector()"
+  });
+}
+
 async function installSolidInvasive(projectRoot: string) {
-  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE SOLID SETUP <<<\x1b[0m`);
-  console.log(`Invasive mode works by adding \x1b[32msolid-devtools\x1b[0m plugin to your project.`);
-  console.log(`This plugin injects 'data-source-loc' HTML attributes (file paths, line numbers, column numbers)`);
-  console.log(`directly into DOM elements during compilation, enabling pixel-perfect template resolution in SolidJS.`);
-  console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
-  console.log(`  1. Install 'solid-devtools' as a devDependency in your package.json.`);
-  console.log(`  2. Modify your vite.config.ts / vite.config.js to register the plugin.\x1b[0m`);
-  
-  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
-  if (answer.trim().toLowerCase() !== "y") {
-    console.log(`[HoverSource] Installation aborted.`);
-    return;
-  }
-
-  console.log(`[HoverSource] Setting up SolidJS invasive mode...`);
-
-  // 1. Install solid-devtools
-  console.log(`[HoverSource] Installing solid-devtools...`);
-  const pkgPath = path.join(projectRoot, "package.json");
-  if (!fs.existsSync(pkgPath)) {
-    console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
-    return;
-  }
-
-  try {
-    await runNpmCommand(["install", "-D", "solid-devtools"], projectRoot);
-    console.log(`[HoverSource] Successfully installed solid-devtools.`);
-  } catch (err) {
-    console.error(`[HoverSource] Failed to install package:`, err);
-    throw err;
-  }
-
-  // 2. Modify vite config
-  let configPath = path.join(projectRoot, "vite.config.ts");
-  if (!fs.existsSync(configPath)) {
-    configPath = path.join(projectRoot, "vite.config.js");
-  }
-
-  if (!fs.existsSync(configPath)) {
-    console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
-    console.log(`Please register 'solid-devtools/vite' manually in your Vite config.`);
-    return;
-  }
-
-  console.log(`[HoverSource] Registering plugin in ${path.basename(configPath)}...`);
-  let configContent = fs.readFileSync(configPath, "utf-8");
-
-  // Check if already registered
-  if (configContent.includes("solid-devtools")) {
-    console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
-    return;
-  }
-
-  // Insert import
-  const importStatement = 'import devtools from "solid-devtools/vite";\n';
-  configContent = importStatement + configContent;
-
-  // Insert plugin call inside plugins array
-  if (configContent.includes("plugins:")) {
-    configContent = configContent.replace(/plugins:\s*\[/, "plugins: [\n    devtools(),");
-    fs.writeFileSync(configPath, configContent, "utf-8");
-    console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
-  } else {
-    fs.writeFileSync(configPath, configContent, "utf-8");
-    console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
-    console.log(`Please manually add 'devtools()' to your plugins array.`);
-  }
+  await installVitePluginInvasive(projectRoot, {
+    framework: "SolidJS",
+    pluginName: "solid-devtools",
+    attributeName: "data-source-loc",
+    importStatement: 'import devtools from "solid-devtools/vite";\n',
+    pluginCall: "devtools()"
+  });
 }
 
 async function installAngularInvasive(projectRoot: string) {

@@ -1,5 +1,48 @@
 "use strict";
 (() => {
+  // ../source-resolver/dist/adapters/utils.js
+  function getElementMetadata(element) {
+    return {
+      tagName: element.tagName.toLowerCase(),
+      classList: element.classList ? Array.from(element.classList) : []
+    };
+  }
+  function getComponentNameFromFile(file, extensions = [".vue", ".svelte", ".astro", ".tsx", ".jsx", ".ts", ".js"]) {
+    if (!file)
+      return void 0;
+    const baseName = file.split(/[/\\\\]/).pop();
+    if (!baseName)
+      return void 0;
+    for (const ext of extensions) {
+      if (baseName.endsWith(ext)) {
+        return baseName.slice(0, -ext.length);
+      }
+    }
+    const dotIdx = baseName.lastIndexOf(".");
+    if (dotIdx !== -1) {
+      return baseName.slice(0, dotIdx);
+    }
+    return baseName;
+  }
+  function parseColonLocation(loc) {
+    if (!loc)
+      return null;
+    const parts = loc.split(":");
+    if (parts.length >= 3) {
+      const columnStr = parts.pop() || "";
+      const lineStr = parts.pop() || "";
+      const file = parts.join(":");
+      const line = Number.parseInt(lineStr, 10);
+      const column = Number.parseInt(columnStr, 10);
+      return {
+        fileName: file,
+        lineNumber: !Number.isNaN(line) ? line : void 0,
+        columnNumber: !Number.isNaN(column) ? column : void 0
+      };
+    }
+    return null;
+  }
+
   // ../source-resolver/dist/adapters/ReactFiberAdapter.js
   var ReactFiberAdapter = class {
     name = "react-fiber";
@@ -40,8 +83,7 @@
             columnNumber: source.columnNumber,
             componentName: componentName || (typeof fiber.type === "function" ? fiber.type.name : void 0),
             framework: "React",
-            tagName: element.tagName.toLowerCase(),
-            classList: Array.from(element.classList)
+            ...getElementMetadata(element)
           };
         }
         fiber = fiber.return;
@@ -67,47 +109,28 @@
           const columnStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-column") : null;
           const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
           const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
-          let componentName = void 0;
-          const baseName = file.split(/[/\\]/).pop();
-          if (baseName && baseName.endsWith(".vue")) {
-            componentName = baseName.slice(0, -4);
-          }
           return {
             fileName: file,
             lineNumber: !Number.isNaN(line) ? line : void 0,
             columnNumber: !Number.isNaN(column) ? column : void 0,
-            componentName,
+            componentName: getComponentNameFromFile(file),
             framework: "Vue",
-            tagName: element.tagName.toLowerCase(),
-            classList: element.classList ? Array.from(element.classList) : []
+            ...getElementMetadata(element)
           };
         }
       }
       if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
         const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
         if (value) {
-          const parts = value.split(":");
-          if (parts.length >= 3) {
-            const columnStr = parts.pop() || "";
-            const lineStr = parts.pop() || "";
-            const file = parts.join(":");
-            const line = Number.parseInt(lineStr, 10);
-            const column = Number.parseInt(columnStr, 10);
-            let componentName = void 0;
-            if (file) {
-              const baseName = file.split(/[/\\]/).pop();
-              if (baseName && baseName.endsWith(".vue")) {
-                componentName = baseName.slice(0, -4);
-              }
-            }
+          const parsed = parseColonLocation(value);
+          if (parsed) {
             return {
-              fileName: file,
-              lineNumber: !Number.isNaN(line) ? line : void 0,
-              columnNumber: !Number.isNaN(column) ? column : void 0,
-              componentName,
+              fileName: parsed.fileName,
+              lineNumber: parsed.lineNumber,
+              columnNumber: parsed.columnNumber,
+              componentName: getComponentNameFromFile(parsed.fileName),
               framework: "Vue",
-              tagName: element.tagName.toLowerCase(),
-              classList: element.classList ? Array.from(element.classList) : []
+              ...getElementMetadata(element)
             };
           }
         }
@@ -121,8 +144,7 @@
             fileName: type.__file || "",
             componentName: componentName || void 0,
             framework: "Vue",
-            tagName: element.tagName.toLowerCase(),
-            classList: Array.from(element.classList)
+            ...getElementMetadata(element)
           };
         }
         instance = instance.parent;
@@ -142,22 +164,171 @@
       if (!meta || !meta.loc)
         return null;
       const { file, line, column } = meta.loc;
-      let componentName = void 0;
-      if (file) {
-        const baseName = file.split(/[/\\]/).pop();
-        if (baseName && baseName.endsWith(".svelte")) {
-          componentName = baseName.slice(0, -7);
-        }
-      }
       return {
         fileName: file || "",
         lineNumber: typeof line === "number" ? line + 1 : void 0,
         columnNumber: typeof column === "number" ? column + 1 : void 0,
-        componentName,
+        componentName: getComponentNameFromFile(file),
         framework: "Svelte",
-        tagName: element.tagName.toLowerCase(),
-        classList: Array.from(element.classList)
+        ...getElementMetadata(element)
       };
+    }
+  };
+
+  // ../source-resolver/dist/adapters/PreactAdapter.js
+  var PreactAdapter = class {
+    name = "preact";
+    getVNode(element) {
+      const keys = Object.keys(element);
+      const vnodeKey = keys.find((key) => key.startsWith("__v") || key.startsWith("__preact"));
+      if (!vnodeKey)
+        return null;
+      return element[vnodeKey];
+    }
+    canResolve(element) {
+      return !!this.getVNode(element);
+    }
+    findComponentNameFromVNode(vnode) {
+      let parent = vnode.__;
+      while (parent) {
+        if (parent.type && typeof parent.type === "function") {
+          return parent.type.name || parent.type.displayName;
+        }
+        parent = parent.__;
+      }
+      return void 0;
+    }
+    resolve(element) {
+      let vnode = this.getVNode(element);
+      while (vnode) {
+        const source = vnode.__source || vnode.props && vnode.props.__source;
+        if (source) {
+          const componentName = this.findComponentNameFromVNode(vnode);
+          return {
+            fileName: source.fileName || "",
+            lineNumber: source.lineNumber,
+            columnNumber: source.columnNumber,
+            componentName: componentName || (typeof vnode.type === "function" ? vnode.type.name : void 0),
+            framework: "Preact",
+            ...getElementMetadata(element)
+          };
+        }
+        vnode = vnode.__;
+      }
+      return null;
+    }
+  };
+
+  // ../source-resolver/dist/adapters/SolidAdapter.js
+  var SolidAdapter = class {
+    name = "solid";
+    canResolve(element) {
+      return typeof element.hasAttribute === "function" && element.hasAttribute("data-source-loc");
+    }
+    resolve(element) {
+      const loc = element.getAttribute("data-source-loc");
+      if (!loc)
+        return null;
+      const parsed = parseColonLocation(loc);
+      if (parsed) {
+        return {
+          fileName: parsed.fileName,
+          lineNumber: parsed.lineNumber,
+          columnNumber: parsed.columnNumber,
+          componentName: getComponentNameFromFile(parsed.fileName),
+          framework: "SolidJS",
+          ...getElementMetadata(element)
+        };
+      }
+      return null;
+    }
+  };
+
+  // ../source-resolver/dist/adapters/AstroAdapter.js
+  var AstroAdapter = class {
+    name = "astro";
+    canResolve(element) {
+      return typeof element.hasAttribute === "function" && element.hasAttribute("data-astro-source-file");
+    }
+    resolve(element) {
+      const file = element.getAttribute("data-astro-source-file");
+      if (!file)
+        return null;
+      const loc = element.getAttribute("data-astro-source-loc");
+      let line = void 0;
+      let column = void 0;
+      if (loc) {
+        const parts = loc.split(":");
+        if (parts.length === 2) {
+          const l = Number.parseInt(parts[0], 10);
+          const c = Number.parseInt(parts[1], 10);
+          if (!Number.isNaN(l))
+            line = l;
+          if (!Number.isNaN(c))
+            column = c;
+        }
+      }
+      return {
+        fileName: file,
+        lineNumber: line,
+        columnNumber: column,
+        componentName: getComponentNameFromFile(file),
+        framework: "Astro",
+        ...getElementMetadata(element)
+      };
+    }
+  };
+
+  // ../source-resolver/dist/adapters/AngularAdapter.js
+  var AngularAdapter = class {
+    name = "angular";
+    getNgContext(element) {
+      return element.__ngContext__;
+    }
+    canResolve(element) {
+      return !!this.getNgContext(element) || typeof element.hasAttribute === "function" && element.hasAttribute("data-ng-source-file");
+    }
+    resolve(element) {
+      if (typeof element.hasAttribute === "function" && element.hasAttribute("data-ng-source-file")) {
+        const file = element.getAttribute("data-ng-source-file");
+        if (file) {
+          const lineStr = element.getAttribute("data-ng-source-line");
+          const columnStr = element.getAttribute("data-ng-source-column");
+          const compName = element.getAttribute("data-ng-component");
+          const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
+          const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
+          return {
+            fileName: file,
+            lineNumber: !Number.isNaN(line) ? line : void 0,
+            columnNumber: !Number.isNaN(column) ? column : void 0,
+            componentName: compName || void 0,
+            framework: "Angular",
+            ...getElementMetadata(element)
+          };
+        }
+      }
+      const context = this.getNgContext(element);
+      if (context) {
+        let componentName = void 0;
+        const ng = globalThis.ng;
+        if (ng && typeof ng.getOwningComponent === "function") {
+          try {
+            const compInstance = ng.getOwningComponent(element);
+            if (compInstance && compInstance.constructor) {
+              componentName = compInstance.constructor.name;
+            }
+          } catch {
+          }
+        }
+        return {
+          fileName: "",
+          // Not resolvable at runtime in non-invasive mode
+          componentName,
+          framework: "Angular",
+          ...getElementMetadata(element)
+        };
+      }
+      return null;
     }
   };
 
@@ -170,6 +341,10 @@
       this.adapters.push(this.fiberAdapter);
       this.adapters.push(new VueAdapter());
       this.adapters.push(new SvelteAdapter());
+      this.adapters.push(new PreactAdapter());
+      this.adapters.push(new SolidAdapter());
+      this.adapters.push(new AstroAdapter());
+      this.adapters.push(new AngularAdapter());
     }
     registerAdapter(adapter) {
       this.adapters.push(adapter);

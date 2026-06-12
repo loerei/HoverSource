@@ -652,13 +652,22 @@ function runNpmCommand(args: string[], cwd: string): Promise<void> {
   });
 }
 
-async function installVueInvasive(projectRoot: string) {
-  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE VUE SETUP <<<\x1b[0m`);
-  console.log(`Invasive mode works by adding \x1b[32mvite-plugin-vue-inspector\x1b[0m to your project.`);
-  console.log(`This plugin injects 'data-v-inspector' HTML attributes (file paths, line numbers, column numbers)`);
-  console.log(`directly into DOM elements during compilation, enabling pixel-perfect template resolution in Vue.`);
+async function installVitePluginInvasive(
+  projectRoot: string,
+  config: {
+    framework: string;
+    pluginName: string;
+    attributeName: string;
+    importStatement: string;
+    pluginCall: string;
+  }
+) {
+  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE ${config.framework.toUpperCase()} SETUP <<<\x1b[0m`);
+  console.log(`Invasive mode works by adding \x1b[32m${config.pluginName}\x1b[0m to your project.`);
+  console.log(`This plugin injects '${config.attributeName}' HTML attributes (file paths, line numbers, column numbers)`);
+  console.log(`directly into DOM elements during compilation, enabling pixel-perfect template resolution in ${config.framework}.`);
   console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
-  console.log(`  1. Install 'vite-plugin-vue-inspector' as a devDependency in your package.json.`);
+  console.log(`  1. Install '${config.pluginName}' as a devDependency in your package.json.`);
   console.log(`  2. Modify your vite.config.ts / vite.config.js to register the plugin.\x1b[0m`);
   
   const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
@@ -667,10 +676,10 @@ async function installVueInvasive(projectRoot: string) {
     return;
   }
 
-  console.log(`[HoverSource] Setting up Vue invasive mode...`);
+  console.log(`[HoverSource] Setting up ${config.framework} invasive mode...`);
 
-  // 1. Install vite-plugin-vue-inspector
-  console.log(`[HoverSource] Installing vite-plugin-vue-inspector...`);
+  // 1. Install devDependency
+  console.log(`[HoverSource] Installing ${config.pluginName}...`);
   const pkgPath = path.join(projectRoot, "package.json");
   if (!fs.existsSync(pkgPath)) {
     console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
@@ -678,8 +687,8 @@ async function installVueInvasive(projectRoot: string) {
   }
 
   try {
-    await runNpmCommand(["install", "-D", "vite-plugin-vue-inspector"], projectRoot);
-    console.log(`[HoverSource] Successfully installed vite-plugin-vue-inspector.`);
+    await runNpmCommand(["install", "-D", config.pluginName], projectRoot);
+    console.log(`[HoverSource] Successfully installed ${config.pluginName}.`);
   } catch (err) {
     console.error(`[HoverSource] Failed to install package:`, err);
     throw err;
@@ -693,7 +702,7 @@ async function installVueInvasive(projectRoot: string) {
 
   if (!fs.existsSync(configPath)) {
     console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
-    console.log(`Please register 'vite-plugin-vue-inspector' manually in your Vite config.`);
+    console.log(`Please register '${config.pluginName}' manually in your Vite config.`);
     return;
   }
 
@@ -701,25 +710,118 @@ async function installVueInvasive(projectRoot: string) {
   let configContent = fs.readFileSync(configPath, "utf-8");
 
   // Check if already registered
-  if (configContent.includes("vite-plugin-vue-inspector")) {
+  if (configContent.includes(config.pluginName)) {
     console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
     return;
   }
 
   // Insert import
-  const importStatement = 'import Inspector from "vite-plugin-vue-inspector";\n';
-  configContent = importStatement + configContent;
+  configContent = config.importStatement + configContent;
 
   // Insert plugin call inside plugins array
   if (configContent.includes("plugins:")) {
-    configContent = configContent.replace(/plugins:\s*\[/, "plugins: [\n    Inspector(),");
+    configContent = configContent.replace(/plugins:\s*\[/, `plugins: [\n    ${config.pluginCall},`);
     fs.writeFileSync(configPath, configContent, "utf-8");
     console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
   } else {
     fs.writeFileSync(configPath, configContent, "utf-8");
     console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
-    console.log(`Please manually add 'Inspector()' to your plugins array.`);
+    console.log(`Please manually add '${config.pluginCall}' to your plugins array.`);
   }
+}
+
+async function installVueInvasive(projectRoot: string) {
+  await installVitePluginInvasive(projectRoot, {
+    framework: "Vue",
+    pluginName: "vite-plugin-vue-inspector",
+    attributeName: "data-v-inspector",
+    importStatement: 'import Inspector from "vite-plugin-vue-inspector";\n',
+    pluginCall: "Inspector()"
+  });
+}
+
+async function installSolidInvasive(projectRoot: string) {
+  await installVitePluginInvasive(projectRoot, {
+    framework: "SolidJS",
+    pluginName: "solid-devtools",
+    attributeName: "data-source-loc",
+    importStatement: 'import devtools from "solid-devtools/vite";\n',
+    pluginCall: "devtools()"
+  });
+}
+
+async function installAngularInvasive(projectRoot: string) {
+  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE ANGULAR SETUP <<<\x1b[0m`);
+  console.log(`Invasive mode works by adding \x1b[32mngx-locatorjs\x1b[0m to your project.`);
+  console.log(`This utility sets up a runtime hook and proxy to map components to source code.`);
+  console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
+  console.log(`  1. Install 'ngx-locatorjs' as a devDependency in your package.json.`);
+  console.log(`  2. Generate configuration files (npx locatorjs-config).`);
+  console.log(`  3. Modify your main.ts to import and initialize the locator.\x1b[0m`);
+  
+  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
+  if (answer.trim().toLowerCase() !== "y") {
+    console.log(`[HoverSource] Installation aborted.`);
+    return;
+  }
+
+  console.log(`[HoverSource] Setting up Angular invasive mode...`);
+
+  // 1. Install ngx-locatorjs
+  console.log(`[HoverSource] Installing ngx-locatorjs...`);
+  const pkgPath = path.join(projectRoot, "package.json");
+  if (!fs.existsSync(pkgPath)) {
+    console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
+    return;
+  }
+
+  try {
+    await runNpmCommand(["install", "-D", "ngx-locatorjs"], projectRoot);
+    console.log(`[HoverSource] Successfully installed ngx-locatorjs.`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to install package:`, err);
+    throw err;
+  }
+
+  // 2. Generate config
+  console.log(`[HoverSource] Running locatorjs-config...`);
+  try {
+    const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
+    await new Promise<void>((resolve, reject) => {
+      exec(`${npxCmd} locatorjs-config`, { cwd: projectRoot }, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    console.log(`[HoverSource] Generated locatorjs configuration.`);
+  } catch (err) {
+    console.warn(`[HoverSource] Warning: Failed to run locatorjs-config. You may need to run 'npx locatorjs-config' manually.`);
+  }
+
+  // 3. Modify main.ts
+  let mainPath = path.join(projectRoot, "src", "main.ts");
+  if (!fs.existsSync(mainPath)) {
+    mainPath = path.join(projectRoot, "main.ts");
+  }
+
+  if (!fs.existsSync(mainPath)) {
+    console.warn(`[HoverSource] Warning: Could not find main.ts.`);
+    console.log(`Please manually import and initialize 'ngx-locatorjs' in your application entry file.`);
+    return;
+  }
+
+  console.log(`[HoverSource] Appending locator hook to ${path.basename(mainPath)}...`);
+  let mainContent = fs.readFileSync(mainPath, "utf-8");
+
+  if (mainContent.includes("ngx-locatorjs")) {
+    console.log(`[HoverSource] ngx-locatorjs already imported in ${path.basename(mainPath)}.`);
+    return;
+  }
+
+  const locatorHook = `\n\n// HoverSource/ngx-locatorjs integration\nimport("ngx-locatorjs").then(m => {\n  try {\n    m.installAngularLocator({ enableNetwork: true });\n  } catch (e) {\n    console.warn("[HoverSource] Failed to load Angular locator", e);\n  }\n});\n`;
+  mainContent += locatorHook;
+  fs.writeFileSync(mainPath, mainContent, "utf-8");
+  console.log(`[HoverSource] Successfully appended locator hook to ${path.basename(mainPath)}.`);
 }
 
 async function uninstallInvasive(projectRoot: string) {
@@ -732,12 +834,12 @@ async function uninstallInvasive(projectRoot: string) {
   }
 
   // 1. Remove from package.json
-  console.log(`[HoverSource] Uninstalling vite-plugin-vue-inspector...`);
+  console.log(`[HoverSource] Uninstalling packages...`);
   try {
-    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector"], projectRoot);
-    console.log(`[HoverSource] Package uninstalled.`);
+    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector", "solid-devtools", "ngx-locatorjs"], projectRoot);
+    console.log(`[HoverSource] Packages uninstalled.`);
   } catch (err) {
-    console.error(`[HoverSource] Failed to uninstall package:`, err);
+    console.error(`[HoverSource] Failed to uninstall packages:`, err);
   }
 
   // 2. Remove from Vite config
@@ -750,14 +852,32 @@ async function uninstallInvasive(projectRoot: string) {
     console.log(`[HoverSource] Cleaning ${path.basename(configPath)}...`);
     let configContent = fs.readFileSync(configPath, "utf-8");
     
-    // Remove import
+    // Remove imports
     configContent = configContent.replace(/import Inspector from\s*['"]vite-plugin-vue-inspector['"];?\n?/, "");
-    // Remove plugin call
-    configContent = configContent.replace(/Inspector\(\),?\n?\s*/, "");
+    configContent = configContent.replace(/import devtools from\s*['"]solid-devtools\/vite['"];?\n?/, "");
+    // Remove plugin calls
+    configContent = configContent.replace(/Inspector\(\),?\\n?\\s*/, "");
+    configContent = configContent.replace(/devtools\(\),?\\n?\\s*/, "");
     
     fs.writeFileSync(configPath, configContent, "utf-8");
-    console.log(`[HoverSource] Cleared plugin registration.`);
+    console.log(`[HoverSource] Cleared Vite plugin registrations.`);
   }
+
+  // 3. Remove from main.ts
+  let mainPath = path.join(projectRoot, "src", "main.ts");
+  if (!fs.existsSync(mainPath)) {
+    mainPath = path.join(projectRoot, "main.ts");
+  }
+
+  if (fs.existsSync(mainPath)) {
+    console.log(`[HoverSource] Cleaning ${path.basename(mainPath)}...`);
+    let mainContent = fs.readFileSync(mainPath, "utf-8");
+    // Remove our integration block
+    mainContent = mainContent.replace(/\n\n\/\/ HoverSource\/ngx-locatorjs integration[\s\S]*installAngularLocator[\s\S]*\}\);\n/, "");
+    fs.writeFileSync(mainPath, mainContent, "utf-8");
+    console.log(`[HoverSource] Cleared Angular main.ts hooks.`);
+  }
+
   console.log(`[HoverSource] Uninstallation complete.`);
 }
 
@@ -768,9 +888,20 @@ async function main() {
   const { args, subcommand } = getArgs();
   const projectRoot = path.resolve((args.root as string) || process.cwd());
 
-  if (subcommand === "install" && args.vue) {
-    await installVueInvasive(projectRoot);
-    process.exit(0);
+  if (subcommand === "install") {
+    if (args.vue) {
+      await installVueInvasive(projectRoot);
+      process.exit(0);
+    } else if (args.solid) {
+      await installSolidInvasive(projectRoot);
+      process.exit(0);
+    } else if (args.angular) {
+      await installAngularInvasive(projectRoot);
+      process.exit(0);
+    } else {
+      console.log("[HoverSource] Please specify a framework to install, e.g. hs install --vue, --solid, --angular");
+      process.exit(1);
+    }
   }
   if (subcommand === "uninstall") {
     await uninstallInvasive(projectRoot);
@@ -835,13 +966,13 @@ async function main() {
     openBrowser(dashboardUrl);
   }
 
-  // ── MODE A: Proxy injection (web/browser apps) ──────────────────────────
+  // ─── MODE A: Proxy injection (web/browser apps) ──────────────────────────
   if (targetUrl) {
     await runProxyMode(targetUrl, serverPort, args);
     return;
   }
 
-  // ── MODE B: Exec wrapper (Electron apps) ────────────────────────────────
+  // ─── MODE B: Exec wrapper (Electron apps) ────────────────────────────────
   if (execCommand) {
     runExecMode(execCommand, projectRoot, debugPort);
   }
@@ -872,7 +1003,7 @@ async function main() {
   const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
   const scriptWithPort = portBootstrap + scriptContent;
 
-  // ── MODE C: Manual CDP (backward compat) ─ user opens their app with debug port
+  // ─── MODE C: Manual CDP (backward compat) ─ user opens their app with debug port
   await startCdpInjectionWatch(debugPort, scriptWithPort);
 }
 

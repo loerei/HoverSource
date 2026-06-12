@@ -1,4 +1,5 @@
 import { SourceAdapter, SourceInfo } from "./types.js";
+import { getElementMetadata, getComponentNameFromFile } from "./utils.js";
 
 export class SvelteAdapter implements SourceAdapter {
   name = "svelte";
@@ -12,24 +13,14 @@ export class SvelteAdapter implements SourceAdapter {
     if (!meta || !meta.loc) return null;
 
     const { file, line, column } = meta.loc;
-    
-    // Infer component name from the filename (e.g. "MyButton.svelte" -> "MyButton")
-    let componentName: string | undefined = undefined;
-    if (file) {
-      const baseName = file.split(/[/\\]/).pop();
-      if (baseName && baseName.endsWith(".svelte")) {
-        componentName = baseName.slice(0, -7);
-      }
-    }
 
     return {
       fileName: file || "",
       lineNumber: typeof line === "number" ? line + 1 : undefined,
       columnNumber: typeof column === "number" ? column + 1 : undefined,
-      componentName,
+      componentName: getComponentNameFromFile(file),
       framework: "Svelte",
-      tagName: element.tagName.toLowerCase(),
-      classList: Array.from(element.classList)
+      ...getElementMetadata(element)
     };
   }
 }

@@ -1,4 +1,5 @@
 import { SourceAdapter, SourceInfo } from "./types.js";
+import { getElementMetadata } from "./utils.js";
 
 export class ReactFiberAdapter implements SourceAdapter {
   name = "react-fiber";
@@ -50,8 +51,7 @@ export class ReactFiberAdapter implements SourceAdapter {
           columnNumber: source.columnNumber,
           componentName: componentName || (typeof fiber.type === "function" ? fiber.type.name : undefined),
           framework: "React",
-          tagName: element.tagName.toLowerCase(),
-          classList: Array.from(element.classList)
+          ...getElementMetadata(element)
         };
       }
       fiber = fiber.return;

@@ -210,8 +210,11 @@ export class DesignAdapter implements InteractionMode {
 
     this.updateTargetAtPosition(newX, newY);
 
+    const HSconfig = this.controller.getConfig();
+    const deSnapThreshold = HSconfig?.desnappingThreshold !== undefined ? HSconfig.desnappingThreshold : 15;
+
     if (this.isSnappedH || this.isSnappedV) {
-      if (shouldReleaseSnap(newX, newY, this.snapMouseX, this.snapMouseY, 15)) {
+      if (shouldReleaseSnap(newX, newY, this.snapMouseX, this.snapMouseY, deSnapThreshold)) {
         this.isSnappedH = false;
         this.isSnappedV = false;
         this.checkSnapping(newX, newY);
@@ -349,10 +352,13 @@ export class DesignAdapter implements InteractionMode {
     bestH: { element: HTMLElement; rect: DOMRect; boundary: SnapBoundaryH; value: number; distance: number } | null,
     mouseX: number
   ): void {
+    const HSconfig = this.controller.getConfig();
+    const snapThreshold = HSconfig?.snappingThreshold !== undefined ? HSconfig.snappingThreshold : 15;
+
     if (bestH) {
       this.anchorHElement = bestH.element;
       this.snapBoundaryH = bestH.boundary;
-      if (bestH.distance < 15) {
+      if (bestH.distance < snapThreshold) {
         if (!this.isSnappedH) {
           this.isSnappedH = true;
           this.snapX = bestH.value;
@@ -374,10 +380,13 @@ export class DesignAdapter implements InteractionMode {
     bestV: { element: HTMLElement; rect: DOMRect; boundary: SnapBoundaryV; value: number; distance: number } | null,
     mouseY: number
   ): void {
+    const HSconfig = this.controller.getConfig();
+    const snapThreshold = HSconfig?.snappingThreshold !== undefined ? HSconfig.snappingThreshold : 15;
+
     if (bestV) {
       this.anchorVElement = bestV.element;
       this.snapBoundaryV = bestV.boundary;
-      if (bestV.distance < 15) {
+      if (bestV.distance < snapThreshold) {
         if (!this.isSnappedV) {
           this.isSnappedV = true;
           this.snapY = bestV.value;

@@ -72,6 +72,8 @@ class OverlayEngine implements OverlayController {
       this.config = {
         theme: "dark",
         minimalModeByDefault: false,
+        snappingThreshold: 15,
+        desnappingThreshold: 15,
         shortcuts: {
           toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
           toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },

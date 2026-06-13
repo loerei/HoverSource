@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HoverSource Dashboard</title>
+  <title>HoverSource Console</title>
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,243 +24,243 @@
   </script>
   <style>
     body {
-      background: radial-gradient(circle at top right, rgba(37, 99, 235, 0.1) 0%, rgba(15, 23, 42, 1) 100%);
+      background: radial-gradient(circle at top right, rgba(16, 185, 129, 0.08) 0%, rgba(15, 23, 42, 1) 100%);
       min-height: 100vh;
       color: #f8fafc;
     }
     .glass-card {
-      background: rgba(30, 41, 59, 0.4);
-      backdrop-filter: blur(12px);
+      background: rgba(30, 41, 59, 0.45);
+      backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+    .glass-card:hover {
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+    /* Hide number input spinners */
+    input::-webkit-outer-spin-button,
+    input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
     }
   </style>
 </head>
-<body class="font-sans antialiased">
-  <div class="max-w-4xl mx-auto px-6 py-12">
+<body class="font-sans antialiased pb-24">
+
+  <!-- Main Dashboard Container -->
+  <div class="max-w-6xl mx-auto px-4 py-8">
     <!-- Header -->
-    <header class="flex justify-between items-center mb-12 pb-6 border-b border-slate-800">
+    <header class="flex justify-between items-center mb-6 pb-4 border-b border-slate-800">
       <div>
-        <h1 class="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">HoverSource Dashboard</h1>
-        <p class="text-slate-400 mt-1 text-sm">Configure your zero-invasive UI-to-Code overlay mappings</p>
+        <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-2">
+          HoverSource Console
+        </h1>
+        <p class="text-slate-400 text-xs mt-0.5">Unified controls with instant config targeting & file deletion</p>
       </div>
       <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-        Companion Server Connected
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+        Companion Active
       </div>
     </header>
 
-    <!-- Main Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-      
-      <!-- Left Panel: General Settings -->
-      <div class="md:col-span-1 space-y-6">
-        <div class="glass-card rounded-2xl p-6 shadow-xl">
-          <h2 class="text-lg font-semibold mb-4 text-blue-400 flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-            Preferences
-          </h2>
-          
-          <div class="space-y-4">
-            <!-- Theme Selection -->
-            <div>
-              <label for="theme" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Overlay Theme</label>
-              <select id="theme" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="dark">Dark Theme</option>
-                <option value="light">Light Theme</option>
-                <option value="system">Follow System</option>
-              </select>
-            </div>
+    <!-- Top Target Bar -->
+    <div class="glass-card rounded-xl p-4 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-20">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Target Config:</span>
+        <div class="relative custom-dropdown target-dropdown flex-1 max-w-[280px]">
+          <button type="button" class="custom-dropdown-btn w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none flex justify-between items-center gap-2">
+            <span class="custom-dropdown-label truncate text-left">Global Preferences (~/.hoversourcerc)</span>
+            <svg class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200 dropdown-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          <div class="custom-dropdown-menu hidden absolute left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50 py-1 backdrop-blur-md overflow-hidden max-h-60 overflow-y-auto"></div>
+        </div>
+        <input type="text" class="custom-path-input hidden bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-300 flex-1 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="Workspace path...">
+      </div>
+      <div class="flex items-center gap-2.5 self-end">
+        <button class="delete-btn text-red-400 hover:text-red-300 border border-red-950/80 bg-red-950/20 hover:bg-red-950/40 font-medium px-3.5 py-1.5 rounded-lg transition-all text-xs active:scale-95 flex items-center gap-1.5" title="Delete this target's .hoversourcerc file">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-11V4a1 1 0 00-1-1h-2a1 1 0 00-1 1v3M4 7h16" /></svg>
+          Delete Config File
+        </button>
+        <button class="reset-btn bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium px-3.5 py-1.5 rounded-lg transition-all text-xs active:scale-95">
+          Reset Defaults
+        </button>
+        <button class="save-btn font-semibold px-4 py-1.5 rounded-lg transition-all text-xs active:scale-95 disabled:opacity-50 disabled:pointer-events-none text-slate-400 bg-slate-800 border border-slate-700">
+          Save Changes
+        </button>
+      </div>
+    </div>
 
-            <!-- Default Mode -->
-            <div>
-              <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Default Mode</span>
-              <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
-                <input type="checkbox" id="minimalModeByDefault" class="rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 h-4 w-4">
-                <div>
-                  <label for="minimalModeByDefault" class="text-sm font-medium text-slate-200 cursor-pointer">Minimalist by Default</label>
-                  <p class="text-slate-500 text-[10px]">Hides CSS metrics to avoid UI clutter</p>
-                </div>
+    <!-- Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Preferences -->
+      <div class="glass-card rounded-xl p-5">
+        <h2 class="text-sm font-semibold mb-4 text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+          General Preferences
+        </h2>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Overlay Theme</label>
+            <select class="theme-select w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+              <option value="dark">Dark Theme</option>
+              <option value="light">Light Theme</option>
+              <option value="system">Follow System</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Preferred Editor</label>
+            <select class="editor-select w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+              <option value="vscode">VS Code (code -g)</option>
+              <option value="cursor">Cursor (cursor -g)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Snapping Threshold (px)</label>
+            <input type="number" class="snapping-threshold-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="0" max="100">
+          </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">De-snapping Threshold (px)</label>
+            <input type="number" class="desnapping-threshold-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="0" max="100">
+          </div>
+          <div class="bg-slate-950/40 border border-slate-800 rounded-lg p-3 space-y-3">
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" class="minimal-checkbox rounded text-blue-500 bg-slate-900 border-slate-700 h-3.5 w-3.5">
+              <div>
+                <span class="text-xs font-medium text-slate-200">Minimal Mode</span>
+                <p class="text-slate-500 text-[10px]">Hides raw CSS rules to avoid screen clutter</p>
               </div>
-            </div>
-
-            <!-- Layer Picker -->
-            <div>
-              <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Layer Picker</span>
-              <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
-                <input type="checkbox" id="layerPickerEnabled" class="rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 h-4 w-4">
-                <div>
-                  <label for="layerPickerEnabled" class="text-sm font-medium text-slate-200 cursor-pointer">Enable Layer Picker</label>
-                  <p class="text-slate-500 text-[10px]">Show diamond layer indicator &amp; allow cycling overlapping elements</p>
-                </div>
+            </label>
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" class="layer-picker-checkbox rounded text-blue-500 bg-slate-900 border-slate-700 h-3.5 w-3.5">
+              <div>
+                <span class="text-xs font-medium text-slate-200">Layer Picker</span>
+                <p class="text-slate-500 text-[10px]">Cycle overlapping elements at cursor</p>
               </div>
-            </div>
-
-            <!-- Auto-Resolve Port Conflicts -->
-            <div>
-              <span class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Port Conflicts</span>
-              <div class="flex items-center gap-3 bg-slate-950 p-3 rounded-lg border border-slate-800">
-                <input type="checkbox" id="autoResolvePortConflicts" class="rounded text-blue-500 focus:ring-blue-500 bg-slate-900 border-slate-700 h-4 w-4">
-                <div>
-                  <label for="autoResolvePortConflicts" class="text-sm font-medium text-slate-200 cursor-pointer">Auto-Resolve Conflicts</label>
-                  <p class="text-slate-500 text-[10px]">Automatically terminates processes or patches ports on conflict</p>
-                </div>
+            </label>
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" class="auto-resolve-checkbox rounded text-blue-500 bg-slate-900 border-slate-700 h-3.5 w-3.5">
+              <div>
+                <span class="text-xs font-medium text-slate-200">Auto-Resolve Port Conflicts</span>
+                <p class="text-slate-500 text-[10px]">Auto terminates process occupying ports</p>
               </div>
-            </div>
-
-            <!-- Target IDE -->
-            <div>
-              <label for="editor" class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Preferred Editor</label>
-              <select id="editor" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="vscode">VS Code (code -g)</option>
-                <option value="cursor">Cursor (cursor -g)</option>
-              </select>
-            </div>
+            </label>
           </div>
         </div>
       </div>
 
-      <!-- Right Panel: Shortcut Configurator -->
-      <div class="md:col-span-2 space-y-6">
-        <div class="glass-card rounded-2xl p-6 shadow-xl">
-          <div class="flex justify-between items-center mb-6">
-            <h2 class="text-lg font-semibold text-blue-400 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
-              Keyboard Shortcuts
-            </h2>
-            <button id="save-btn" class="text-white font-medium px-5 py-2 rounded-xl transition-all text-xs flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap opacity-50 pointer-events-none cursor-not-allowed bg-slate-800 text-slate-500 border border-slate-700">
-              Save Configuration
-            </button>
-          </div>
-
-          <div class="space-y-6">
-            <!-- Shortcut row: Toggle UI -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-              <div>
-                <h3 class="text-sm font-medium text-slate-200">Toggle Tooltip UI</h3>
-                <p class="text-slate-500 text-xs mt-0.5">Show or hide the overlay tooltip visual card</p>
-              </div>
-              <div class="flex items-center gap-2" id="shortcut-toggleUI">
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
-                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
-              </div>
+      <!-- Shortcuts Col 1 -->
+      <div class="glass-card rounded-xl p-5 md:col-span-2 space-y-3">
+        <h2 class="text-sm font-semibold text-blue-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+          Keyboard Mappings
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- toggleUI -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Toggle Tooltip UI</span>
+              <p class="text-[10px] text-slate-500">Show/hide overlay card</p>
             </div>
-
-            <!-- Shortcut row: Toggle Mode -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-              <div>
-                <h3 class="text-sm font-medium text-slate-200">Toggle Minimal Mode</h3>
-                <p class="text-slate-500 text-xs mt-0.5">Switch between Minimalist and Detailed metrics views</p>
-              </div>
-              <div class="flex items-center gap-2" id="shortcut-toggleMinimal">
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
-                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
-              </div>
-            </div>
-
-            <!-- Shortcut row: Toggle Freeze -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-              <div>
-                <h3 class="text-sm font-medium text-slate-200">Toggle Freeze State</h3>
-                <p class="text-slate-500 text-xs mt-0.5">Freeze or unfreeze the tooltip coordinates and visual outline</p>
-              </div>
-              <div class="flex items-center gap-2" id="shortcut-toggleFreeze">
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
-                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
-              </div>
-            </div>
-
-            <!-- Shortcut row: Copy Metadata -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-              <div>
-                <h3 class="text-sm font-medium text-slate-200">Copy AI-Ready Metadata</h3>
-                <p class="text-slate-500 text-xs mt-0.5">Copy layout specs, styles, and file coordinates</p>
-              </div>
-              <div class="flex items-center gap-2" id="shortcut-copyMetadata">
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
-                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
-              </div>
-            </div>
-
-            <!-- Shortcut row: Copy All Layers Metadata -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-              <div>
-                <h3 class="text-sm font-medium text-slate-200">Copy All Layers Metadata</h3>
-                <p class="text-slate-500 text-xs mt-0.5">Copy specs, styles, and coordinates for all active layers under cursor</p>
-              </div>
-              <div class="flex items-center gap-2" id="shortcut-copyAllLayers">
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
-                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
-              </div>
-            </div>
-
-            <!-- Shortcut row: Open Dashboard -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-              <div>
-                <h3 class="text-sm font-medium text-slate-200">Open Dashboard in Browser</h3>
-                <p class="text-slate-500 text-xs mt-0.5">Quickly launch this configuration dashboard</p>
-              </div>
-              <div class="flex items-center gap-2" id="shortcut-openDashboard">
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
-                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
-              </div>
-            </div>
-
-            <!-- Shortcut row: Toggle Mode -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-              <div>
-                <h3 class="text-sm font-medium text-slate-200">Toggle Inspection Mode</h3>
-                <p class="text-slate-500 text-xs mt-0.5">Switch between Inspector and Design modes</p>
-              </div>
-              <div class="flex items-center gap-2" id="shortcut-toggleMode">
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
-                <input type="text" class="key-input w-16 bg-slate-950 text-center border border-slate-700 rounded py-1 text-xs text-blue-400 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase" placeholder="Key" maxlength="10">
-              </div>
-            </div>
-
-            <!-- Shortcut row: Layer Picker -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-900/50 rounded-xl border border-slate-800">
-              <div>
-                <h3 class="text-sm font-medium text-slate-200">Layer Picker</h3>
-                <p class="text-slate-500 text-xs mt-0.5">Cycle through overlapping elements at cursor position</p>
-              </div>
-              <div class="flex items-center gap-2" id="shortcut-layerPickerScroll">
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="alt">Alt</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="ctrl">Ctrl</button>
-                <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded text-xs border border-slate-700" data-modifier="shift">Shift</button>
-                <span class="inline-flex items-center justify-center w-16 bg-slate-950 border border-slate-700 rounded py-1 text-xs font-mono text-slate-500 cursor-not-allowed select-none opacity-60" title="Fixed trigger — scroll wheel">Scroll</span>
-              </div>
+            <div class="flex items-center gap-1 shortcut-toggleUI">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
-
-          <!-- Bottom Actions / Save Target -->
-          <div class="mt-8 pt-6 border-t border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-3 w-full md:w-auto">
-              <div class="flex items-center gap-2">
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Save Target:</span>
-                <select id="save-target" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px] sm:max-w-[280px] truncate">
-                  <option value="global">Global Preferences (~/.hoversourcerc)</option>
-                </select>
-              </div>
-              <input type="text" id="custom-path-input" class="hidden bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-300 w-full sm:w-80 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Paste repository folder path (e.g. D:/Projects/MyProject)...">
+          <!-- toggleMinimal -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Toggle Minimal Mode</span>
+              <p class="text-[10px] text-slate-500">Switch detail/minimal view</p>
             </div>
-            
-            <button id="reset-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium px-4 py-2 rounded-xl transition-all text-xs flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap">
-              Reset to Default
-            </button>
+            <div class="flex items-center gap-1 shortcut-toggleMinimal">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+            </div>
+          </div>
+          <!-- toggleFreeze -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Toggle Freeze State</span>
+              <p class="text-[10px] text-slate-500">Locks current inspection</p>
+            </div>
+            <div class="flex items-center gap-1 shortcut-toggleFreeze">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+            </div>
+          </div>
+          <!-- toggleMode -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Toggle Mode</span>
+              <p class="text-[10px] text-slate-500">Switch Design/Inspector mode</p>
+            </div>
+            <div class="flex items-center gap-1 shortcut-toggleMode">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+            </div>
+          </div>
+          <!-- copyMetadata -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Copy AI Metadata</span>
+              <p class="text-[10px] text-slate-500">Copy current layout specs</p>
+            </div>
+            <div class="flex items-center gap-1 shortcut-copyMetadata">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+            </div>
+          </div>
+          <!-- copyAllLayers -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Copy All Layers Specs</span>
+              <p class="text-[10px] text-slate-500">Copy specs of overlapping elements</p>
+            </div>
+            <div class="flex items-center gap-1 shortcut-copyAllLayers">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+            </div>
+          </div>
+          <!-- openDashboard -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Open Dashboard</span>
+              <p class="text-[10px] text-slate-500">Shortcut to launch this page</p>
+            </div>
+            <div class="flex items-center gap-1 shortcut-openDashboard">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+            </div>
+          </div>
+          <!-- layerPickerScroll -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Layer Picker Scroll</span>
+              <p class="text-[10px] text-slate-500">Hold modifiers and use scroll wheel</p>
+            </div>
+            <div class="flex items-center gap-1 shortcut-layerPickerScroll">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <span class="inline-flex items-center justify-center w-10 bg-slate-950 border border-slate-800 rounded py-0.5 text-[10px] font-mono text-slate-500 select-none opacity-60">Scroll</span>
+            </div>
           </div>
         </div>
       </div>
@@ -268,14 +268,155 @@
   </div>
 
   <!-- Toast notification -->
-  <div id="toast" class="fixed bottom-6 right-6 glass-card px-4 py-3 rounded-xl border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+  <div id="toast" class="fixed bottom-6 right-6 glass-card px-4 py-3 rounded-xl border border-emerald-500/30 text-emerald-400 text-sm flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none z-50">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
-    <span>Configuration saved successfully!</span>
+    <span class="toast-message">Configuration saved successfully!</span>
+  </div>
+
+  <!-- Custom Confirm Modal -->
+  <div id="confirm-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-200">
+    <div class="glass-card max-w-md w-full mx-4 rounded-2xl p-6 shadow-2xl border border-slate-700/50 transform scale-95 transition-transform duration-200" id="confirm-modal-content">
+      <h3 class="text-base font-bold text-slate-200 mb-2 flex items-center gap-2">
+        <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+        Confirm Action
+      </h3>
+      <p class="text-xs text-slate-400 leading-relaxed mb-6 confirm-modal-message">
+        Are you sure you want to proceed?
+      </p>
+      <div class="flex justify-end gap-3">
+        <button id="confirm-cancel-btn" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold active:scale-95 transition-all">
+          Cancel
+        </button>
+        <button id="confirm-action-btn" class="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold active:scale-95 transition-all shadow-lg shadow-red-600/20">
+          Confirm
+        </button>
+      </div>
+    </div>
   </div>
 
   <script type="module">
     const API_BASE = '';
     let loadedConfig = null;
+
+    class CustomDropdownWrapper {
+      constructor(container) {
+        if (!container) return;
+        this.container = container;
+        this.btn = container.querySelector('.custom-dropdown-btn');
+        this.label = container.querySelector('.custom-dropdown-label');
+        this.menu = container.querySelector('.custom-dropdown-menu');
+        this.chevron = container.querySelector('.dropdown-chevron');
+        
+        this._options = [];
+        this._value = '';
+        this._selectedIndex = -1;
+        this.onchange = null;
+        this.listeners = { change: [] };
+        
+        this.btn.onclick = (e) => {
+          e.stopPropagation();
+          // Close other dropdowns
+          document.querySelectorAll('.custom-dropdown-menu').forEach(m => {
+            if (m !== this.menu) m.classList.add('hidden');
+          });
+          document.querySelectorAll('.dropdown-chevron').forEach(c => {
+            if (c !== this.chevron) c.classList.remove('rotate-180');
+          });
+          
+          const isHidden = this.menu.classList.contains('hidden');
+          if (isHidden) {
+            this.menu.classList.remove('hidden');
+            this.chevron.classList.add('rotate-180');
+          } else {
+            this.menu.classList.add('hidden');
+            this.chevron.classList.remove('rotate-180');
+          }
+        };
+        
+        document.addEventListener('click', () => {
+          this.menu.classList.add('hidden');
+          this.chevron.classList.remove('rotate-180');
+        });
+      }
+      
+      get value() {
+        return this._value;
+      }
+      
+      set value(val) {
+        this._value = val;
+        let idx = this._options.findIndex(o => o.value === val);
+        if (idx !== -1) {
+          this._selectedIndex = idx;
+          this.label.textContent = this._options[idx].textContent;
+        }
+      }
+      
+      get selectedIndex() {
+        return this._selectedIndex;
+      }
+      
+      set selectedIndex(idx) {
+        this._selectedIndex = idx;
+        if (idx >= 0 && idx < this._options.length) {
+          const opt = this._options[idx];
+          this._value = opt.value;
+          this.label.textContent = opt.textContent;
+        }
+      }
+      
+      get options() {
+        return this._options;
+      }
+      
+      addEventListener(event, cb) {
+        if (this.listeners[event]) {
+          this.listeners[event].push(cb);
+        }
+      }
+      
+      clear(defaultLabel = 'Select target...') {
+        this._options = [];
+        this.menu.innerHTML = '';
+        this._selectedIndex = -1;
+        this._value = '';
+        this.label.textContent = defaultLabel;
+      }
+      
+      addOption(value, text, path = '') {
+        const optObj = {
+          value: value,
+          textContent: text,
+          dataset: { path: path }
+        };
+        
+        this._options.push(optObj);
+        
+        const div = document.createElement('div');
+        div.className = 'px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer truncate transition-colors border-b border-slate-800 last:border-0';
+        div.textContent = text;
+        
+        div.onclick = (e) => {
+          e.stopPropagation();
+          const oldValue = this._value;
+          this.value = value;
+          this._selectedIndex = this._options.indexOf(optObj);
+          this.label.textContent = text;
+          
+          this.menu.classList.add('hidden');
+          this.chevron.classList.remove('rotate-180');
+          
+          if (oldValue !== value) {
+            if (this.onchange) this.onchange();
+            if (this.listeners.change) {
+              this.listeners.change.forEach(cb => cb({ target: this }));
+            }
+          }
+        };
+        
+        this.menu.appendChild(div);
+      }
+    }
 
     const DEFAULT_CONFIG = {
       theme: 'dark',
@@ -283,6 +424,8 @@
       editor: 'vscode',
       autoResolvePortConflicts: false,
       layerPickerEnabled: true,
+      snappingThreshold: 15,
+      desnappingThreshold: 15,
       layerPickerScroll: { altKey: true, shiftKey: true, ctrlKey: false },
       shortcuts: {
         toggleUI: { key: 'h', altKey: true, ctrlKey: false, shiftKey: false },
@@ -294,7 +437,21 @@
         toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
       }
     };
-    
+
+    // Selectors
+    const themeSelect = document.querySelector('.theme-select');
+    const minimalCheckbox = document.querySelector('.minimal-checkbox');
+    const autoResolveCheckbox = document.querySelector('.auto-resolve-checkbox');
+    const layerPickerCheckbox = document.querySelector('.layer-picker-checkbox');
+    const editorSelect = document.querySelector('.editor-select');
+    const snappingThresholdInput = document.querySelector('.snapping-threshold-input');
+    const desnappingThresholdInput = document.querySelector('.desnapping-threshold-input');
+    const saveTargetSelect = new CustomDropdownWrapper(document.querySelector('.target-dropdown'));
+    const customPathInput = document.querySelector('.custom-path-input');
+    const saveBtns = document.querySelectorAll('.save-btn');
+    const resetBtns = document.querySelectorAll('.reset-btn');
+    const deleteBtns = document.querySelectorAll('.delete-btn');
+
     // Initial fetch to load target options
     async function initDashboard() {
       try {
@@ -302,70 +459,63 @@
         const data = await res.json();
         
         // Populate save target options dynamically
-        const select = document.getElementById('save-target');
-        select.innerHTML = '';
+        saveTargetSelect.clear('Select target...');
         
         // 1. Global Option
-        const optGlobal = document.createElement('option');
-        optGlobal.value = 'global';
-        optGlobal.textContent = 'Global Preferences (~/.hoversourcerc)';
-        select.appendChild(optGlobal);
+        saveTargetSelect.addOption('global', 'Global Preferences (~/.hoversourcerc)');
 
         // 2. Current Project Option
         if (data.currentProject) {
-          const optLocal = document.createElement('option');
-          optLocal.value = 'local';
           const folderName = data.currentProject.split('/').pop();
-          optLocal.textContent = `Current Project: ${folderName} (${data.currentProject})`;
-          select.appendChild(optLocal);
+          saveTargetSelect.addOption('local', `Current Project: ${folderName} (${data.currentProject})`);
         }
 
-        // 3. Recent Projects Options
+        // 3. Recent Project Options
         if (data.recentProjects && data.recentProjects.length > 0) {
-          data.recentProjects.forEach(p => {
-            if (p === data.currentProject) return;
-            const opt = document.createElement('option');
-            opt.value = 'custom';
-            opt.dataset.path = p;
-            const name = p.split('/').pop();
-            opt.textContent = `Recent Project: ${name} (${p})`;
-            select.appendChild(opt);
+          data.recentProjects.forEach(proj => {
+            if (proj !== data.currentProject) {
+              const name = proj.split('/').pop();
+              saveTargetSelect.addOption('custom', `Recent Project: ${name} (${proj})`, proj);
+            }
           });
         }
 
-        // 4. Custom Folder Option
-        const optCustom = document.createElement('option');
-        optCustom.value = 'custom-input';
-        optCustom.textContent = 'Choose another folder...';
-        select.appendChild(optCustom);
+        // 4. Custom Path Option
+        saveTargetSelect.addOption('custom-input', 'Specify custom directory path...');
 
-        // Select default to global as requested
-        select.value = 'global';
-
-        // Add change listener to toggle custom path textbox and reload config
-        const pathInput = document.getElementById('custom-path-input');
-        select.onchange = async () => {
-          if (select.value === 'custom-input') {
-            pathInput.classList.remove('hidden');
+        // Default to global
+        saveTargetSelect.value = 'global';
+        
+        saveTargetSelect.onchange = async () => {
+          const val = saveTargetSelect.value;
+          if (val === 'custom-input') {
+            customPathInput.classList.remove('hidden');
+            customPathInput.value = '';
+            customPathInput.focus();
           } else {
-            pathInput.classList.add('hidden');
+            customPathInput.classList.add('hidden');
           }
           await loadConfigForSelectedTarget();
         };
 
-        pathInput.oninput = () => {
-          loadConfigForSelectedTarget();
+        customPathInput.oninput = () => {
+          checkChanges();
+        };
+        customPathInput.onblur = async () => {
+          await loadConfigForSelectedTarget();
         };
 
         // Load config for the default target (global)
         await loadConfigForSelectedTarget();
 
         // Listen for changes
-        document.getElementById('theme').addEventListener('change', checkChanges);
-        document.getElementById('minimalModeByDefault').addEventListener('change', checkChanges);
-        document.getElementById('autoResolvePortConflicts').addEventListener('change', checkChanges);
-        document.getElementById('layerPickerEnabled').addEventListener('change', checkChanges);
-        document.getElementById('editor').addEventListener('change', checkChanges);
+        themeSelect.addEventListener('change', checkChanges);
+        minimalCheckbox.addEventListener('change', checkChanges);
+        autoResolveCheckbox.addEventListener('change', checkChanges);
+        layerPickerCheckbox.addEventListener('change', checkChanges);
+        editorSelect.addEventListener('change', checkChanges);
+        snappingThresholdInput.addEventListener('input', checkChanges);
+        desnappingThresholdInput.addEventListener('input', checkChanges);
 
       } catch (e) {
         console.error('Failed to init dashboard', e);
@@ -374,16 +524,15 @@
 
     async function loadConfigForSelectedTarget() {
       try {
-        const select = document.getElementById('save-target');
-        const target = select.value;
+        const target = saveTargetSelect.value;
         let url = `${API_BASE}/config?target=${target}`;
         
         if (target === 'custom') {
-          const selectedOpt = select.options[select.selectedIndex];
+          const selectedOpt = saveTargetSelect.options[saveTargetSelect.selectedIndex];
           const path = selectedOpt.dataset.path || '';
           url += `&customPath=${encodeURIComponent(path)}`;
         } else if (target === 'custom-input') {
-          const path = document.getElementById('custom-path-input').value.trim();
+          const path = customPathInput.value.trim();
           if (path) {
             url += `&customPath=${encodeURIComponent(path)}`;
           }
@@ -394,11 +543,13 @@
         loadedConfig = data.config;
 
         // Apply config to UI
-        document.getElementById('theme').value = loadedConfig.theme || 'dark';
-        document.getElementById('minimalModeByDefault').checked = !!loadedConfig.minimalModeByDefault;
-        document.getElementById('autoResolvePortConflicts').checked = !!loadedConfig.autoResolvePortConflicts;
-        document.getElementById('layerPickerEnabled').checked = loadedConfig.layerPickerEnabled !== false;
-        document.getElementById('editor').value = loadedConfig.editor || 'vscode';
+        themeSelect.value = loadedConfig.theme || 'dark';
+        minimalCheckbox.checked = !!loadedConfig.minimalModeByDefault;
+        autoResolveCheckbox.checked = !!loadedConfig.autoResolvePortConflicts;
+        layerPickerCheckbox.checked = loadedConfig.layerPickerEnabled !== false;
+        editorSelect.value = loadedConfig.editor || 'vscode';
+        snappingThresholdInput.value = loadedConfig.snappingThreshold !== undefined ? loadedConfig.snappingThreshold : 15;
+        desnappingThresholdInput.value = loadedConfig.desnappingThreshold !== undefined ? loadedConfig.desnappingThreshold : 15;
         
         setupShortcutUI('toggleUI', loadedConfig.shortcuts.toggleUI);
         setupShortcutUI('toggleMinimal', loadedConfig.shortcuts.toggleMinimal);
@@ -409,6 +560,22 @@
         setupShortcutUI('toggleMode', loadedConfig.shortcuts.toggleMode || DEFAULT_CONFIG.shortcuts.toggleMode);
         setupScrollShortcutUI('layerPickerScroll', loadedConfig.layerPickerScroll || DEFAULT_CONFIG.layerPickerScroll);
 
+        // Toggle delete button visibility/state based on target
+        deleteBtns.forEach(btn => {
+          if (target === 'global') {
+            btn.classList.add('hidden');
+          } else {
+            btn.classList.remove('hidden');
+            if (data.configExists) {
+              btn.disabled = false;
+              btn.classList.remove('opacity-40', 'pointer-events-none', 'cursor-not-allowed');
+            } else {
+              btn.disabled = true;
+              btn.classList.add('opacity-40', 'pointer-events-none', 'cursor-not-allowed');
+            }
+          }
+        });
+
         checkChanges();
 
       } catch (e) {
@@ -417,7 +584,7 @@
     }
 
     function setupShortcutUI(name, shortcutObj) {
-      const container = document.getElementById(`shortcut-${name}`);
+      const container = document.querySelector(`.shortcut-${name}`);
       if (!container) return;
       
       const modBtns = container.querySelectorAll('.modifier-btn');
@@ -426,7 +593,6 @@
         const active = !!shortcutObj[`${mod}Key`];
         setBtnActive(btn, active);
         
-        // click listener
         btn.onclick = () => {
           const currentlyActive = btn.classList.contains('bg-blue-600');
           setBtnActive(btn, !currentlyActive);
@@ -437,52 +603,67 @@
       const input = container.querySelector('.key-input');
       input.value = shortcutObj.key || '';
       
-      // keypress listener to capture key name directly
       input.onkeydown = (e) => {
-        // block modifier keys from direct text input
+        e.preventDefault();
         if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
-          e.preventDefault();
           return;
         }
-        e.preventDefault();
+        
+        const altBtn = container.querySelector('[data-modifier="alt"]');
+        const ctrlBtn = container.querySelector('[data-modifier="ctrl"]');
+        const shiftBtn = container.querySelector('[data-modifier="shift"]');
+        
+        if (altBtn) setBtnActive(altBtn, e.altKey);
+        if (ctrlBtn) setBtnActive(ctrlBtn, e.ctrlKey);
+        if (shiftBtn) setBtnActive(shiftBtn, e.shiftKey);
+        
         input.value = e.key;
         checkChanges();
       };
     }
 
     function setupScrollShortcutUI(name, shortcutObj) {
-      const container = document.getElementById(`shortcut-${name}`);
+      const container = document.querySelector(`.shortcut-${name}`);
       if (!container) return;
       const modBtns = container.querySelectorAll('.modifier-btn');
       modBtns.forEach(btn => {
         const mod = btn.dataset.modifier;
         setBtnActive(btn, !!shortcutObj[`${mod}Key`]);
         btn.onclick = () => {
-          setBtnActive(btn, !btn.classList.contains('bg-blue-600'));
+          const currentlyActive = btn.classList.contains('bg-blue-600');
+          setBtnActive(btn, !currentlyActive);
           checkChanges();
         };
       });
     }
 
     function getScrollShortcutFromUI(name) {
-      const container = document.getElementById(`shortcut-${name}`);
-      const btnState = (mod) => container.querySelector(`.modifier-btn[data-modifier="${mod}"]`).classList.contains('bg-blue-600');
+      const container = document.querySelector(`.shortcut-${name}`);
+      if (!container) return DEFAULT_CONFIG.layerPickerScroll;
+      const btnState = (mod) => {
+        const btn = container.querySelector(`.modifier-btn[data-modifier="${mod}"]`);
+        return btn ? btn.classList.contains('bg-blue-600') : false;
+      };
       return { altKey: btnState('alt'), ctrlKey: btnState('ctrl'), shiftKey: btnState('shift') };
     }
 
     function setBtnActive(btn, active) {
       if (active) {
-        btn.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-300');
+        btn.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-400');
         btn.classList.add('bg-blue-600', 'border-blue-500', 'text-white');
       } else {
         btn.classList.remove('bg-blue-600', 'border-blue-500', 'text-white');
-        btn.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
+        btn.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-400');
       }
     }
 
     function getShortcutFromUI(name) {
-      const container = document.getElementById(`shortcut-${name}`);
-      const btnState = (mod) => container.querySelector(`.modifier-btn[data-modifier="${mod}"]`).classList.contains('bg-blue-600');
+      const container = document.querySelector(`.shortcut-${name}`);
+      if (!container) return DEFAULT_CONFIG.shortcuts[name] || { key: '', altKey: false, ctrlKey: false, shiftKey: false };
+      const btnState = (mod) => {
+        const btn = container.querySelector(`.modifier-btn[data-modifier="${mod}"]`);
+        return btn ? btn.classList.contains('bg-blue-600') : false;
+      };
       return {
         key: container.querySelector('.key-input').value || '',
         altKey: btnState('alt'),
@@ -492,21 +673,28 @@
     }
 
     function getConfigFromUI() {
+      const shortcuts = {
+        toggleUI: getShortcutFromUI('toggleUI'),
+        toggleMinimal: getShortcutFromUI('toggleMinimal'),
+        toggleFreeze: getShortcutFromUI('toggleFreeze'),
+        copyMetadata: getShortcutFromUI('copyMetadata'),
+        copyAllLayers: getShortcutFromUI('copyAllLayers'),
+        openDashboard: getShortcutFromUI('openDashboard'),
+        toggleMode: getShortcutFromUI('toggleMode')
+      };
+
+      const snapVal = parseInt(snappingThresholdInput.value, 10);
+      const deSnapVal = parseInt(desnappingThresholdInput.value, 10);
+
       return {
-        theme: document.getElementById('theme').value,
-        minimalModeByDefault: document.getElementById('minimalModeByDefault').checked,
-        editor: document.getElementById('editor').value,
-        autoResolvePortConflicts: document.getElementById('autoResolvePortConflicts').checked,
-        layerPickerEnabled: document.getElementById('layerPickerEnabled').checked,
-        shortcuts: {
-          toggleUI: getShortcutFromUI('toggleUI'),
-          toggleMinimal: getShortcutFromUI('toggleMinimal'),
-          toggleFreeze: getShortcutFromUI('toggleFreeze'),
-          copyMetadata: getShortcutFromUI('copyMetadata'),
-          copyAllLayers: getShortcutFromUI('copyAllLayers'),
-          openDashboard: getShortcutFromUI('openDashboard'),
-          toggleMode: getShortcutFromUI('toggleMode')
-        },
+        theme: themeSelect.value,
+        minimalModeByDefault: minimalCheckbox.checked,
+        editor: editorSelect.value,
+        autoResolvePortConflicts: autoResolveCheckbox.checked,
+        layerPickerEnabled: layerPickerCheckbox.checked,
+        snappingThreshold: isNaN(snapVal) ? 15 : snapVal,
+        desnappingThreshold: isNaN(deSnapVal) ? 15 : deSnapVal,
+        shortcuts,
         layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll')
       };
     }
@@ -515,82 +703,160 @@
       if (!loadedConfig) return;
       
       const current = getConfigFromUI();
-
       const hasChanged = JSON.stringify(current) !== JSON.stringify(loadedConfig);
-      const saveBtn = document.getElementById('save-btn');
       
-      if (hasChanged) {
-        saveBtn.disabled = false;
-        saveBtn.classList.remove('opacity-50', 'pointer-events-none', 'cursor-not-allowed', 'bg-slate-800', 'text-slate-500', 'border-slate-700');
-        saveBtn.classList.add('bg-gradient-to-r', 'from-blue-500', 'to-emerald-500', 'hover:from-blue-600', 'hover:to-emerald-600', 'text-white', 'shadow-lg', 'shadow-blue-500/25');
-      } else {
-        saveBtn.disabled = true;
-        saveBtn.classList.add('opacity-50', 'pointer-events-none', 'cursor-not-allowed', 'bg-slate-800', 'text-slate-500', 'border-slate-700');
-        saveBtn.classList.remove('bg-gradient-to-r', 'from-blue-500', 'to-emerald-500', 'hover:from-blue-600', 'hover:to-emerald-600', 'text-white', 'shadow-lg', 'shadow-blue-500/25');
-      }
+      saveBtns.forEach(btn => {
+        if (hasChanged) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-50', 'pointer-events-none', 'text-slate-400', 'bg-slate-800', 'border-slate-700');
+          btn.classList.add('bg-gradient-to-r', 'from-blue-500', 'to-emerald-500', 'hover:from-blue-600', 'hover:to-emerald-600', 'text-white', 'shadow-lg', 'shadow-blue-500/25');
+        } else {
+          btn.disabled = true;
+          btn.classList.add('opacity-50', 'pointer-events-none', 'text-slate-400', 'bg-slate-800', 'border-slate-700');
+          btn.classList.remove('bg-gradient-to-r', 'from-blue-500', 'to-emerald-500', 'hover:from-blue-600', 'hover:to-emerald-600', 'text-white', 'shadow-lg', 'shadow-blue-500/25');
+        }
+      });
     }
 
     // Reset UI to defaults
-    document.getElementById('reset-btn').onclick = () => {
-      document.getElementById('theme').value = DEFAULT_CONFIG.theme;
-      document.getElementById('minimalModeByDefault').checked = DEFAULT_CONFIG.minimalModeByDefault;
-      document.getElementById('autoResolvePortConflicts').checked = DEFAULT_CONFIG.autoResolvePortConflicts;
-      document.getElementById('layerPickerEnabled').checked = DEFAULT_CONFIG.layerPickerEnabled;
-      document.getElementById('editor').value = DEFAULT_CONFIG.editor;
-      
-      setupShortcutUI('toggleUI', DEFAULT_CONFIG.shortcuts.toggleUI);
-      setupShortcutUI('toggleMinimal', DEFAULT_CONFIG.shortcuts.toggleMinimal);
-      setupShortcutUI('toggleFreeze', DEFAULT_CONFIG.shortcuts.toggleFreeze);
-      setupShortcutUI('copyMetadata', DEFAULT_CONFIG.shortcuts.copyMetadata);
-      setupShortcutUI('copyAllLayers', DEFAULT_CONFIG.shortcuts.copyAllLayers);
-      setupShortcutUI('openDashboard', DEFAULT_CONFIG.shortcuts.openDashboard);
-      setupShortcutUI('toggleMode', DEFAULT_CONFIG.shortcuts.toggleMode);
-      setupScrollShortcutUI('layerPickerScroll', DEFAULT_CONFIG.layerPickerScroll);
-      
-      checkChanges();
-    };
+    resetBtns.forEach(btn => {
+      btn.onclick = () => {
+        themeSelect.value = DEFAULT_CONFIG.theme;
+        minimalCheckbox.checked = DEFAULT_CONFIG.minimalModeByDefault;
+        autoResolveCheckbox.checked = DEFAULT_CONFIG.autoResolvePortConflicts;
+        layerPickerCheckbox.checked = DEFAULT_CONFIG.layerPickerEnabled;
+        editorSelect.value = DEFAULT_CONFIG.editor;
+        snappingThresholdInput.value = DEFAULT_CONFIG.snappingThreshold;
+        desnappingThresholdInput.value = DEFAULT_CONFIG.desnappingThreshold;
+        
+        setupShortcutUI('toggleUI', DEFAULT_CONFIG.shortcuts.toggleUI);
+        setupShortcutUI('toggleMinimal', DEFAULT_CONFIG.shortcuts.toggleMinimal);
+        setupShortcutUI('toggleFreeze', DEFAULT_CONFIG.shortcuts.toggleFreeze);
+        setupShortcutUI('copyMetadata', DEFAULT_CONFIG.shortcuts.copyMetadata);
+        setupShortcutUI('copyAllLayers', DEFAULT_CONFIG.shortcuts.copyAllLayers);
+        setupShortcutUI('openDashboard', DEFAULT_CONFIG.shortcuts.openDashboard);
+        setupShortcutUI('toggleMode', DEFAULT_CONFIG.shortcuts.toggleMode);
+        setupScrollShortcutUI('layerPickerScroll', DEFAULT_CONFIG.layerPickerScroll);
+        
+        checkChanges();
+      };
+    });
 
     // Save configuration
-    document.getElementById('save-btn').onclick = async () => {
-      const config = getConfigFromUI();
+    saveBtns.forEach(btn => {
+      btn.onclick = async () => {
+        const config = getConfigFromUI();
+        let target = saveTargetSelect.value;
+        let customPath = '';
 
-      const select = document.getElementById('save-target');
-      let target = select.value;
-      let customPath = '';
+        if (target === 'custom') {
+          const selectedOpt = saveTargetSelect.options[saveTargetSelect.selectedIndex];
+          customPath = selectedOpt.dataset.path || '';
+        } else if (target === 'custom-input') {
+          target = 'custom';
+          customPath = customPathInput.value.trim();
+          if (!customPath) {
+            alert('Please enter a valid directory path.');
+            return;
+          }
+        }
 
-      if (target === 'custom') {
-        const selectedOpt = select.options[select.selectedIndex];
-        customPath = selectedOpt.dataset.path || '';
-      } else if (target === 'custom-input') {
-        target = 'custom';
-        customPath = document.getElementById('custom-path-input').value.trim();
-        if (!customPath) {
-          alert('Please enter a valid directory path.');
+        try {
+          const res = await fetch(`${API_BASE}/config`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config, target, customPath })
+          });
+          
+          if (res.ok) {
+            showToast('Configuration saved successfully!');
+            await loadConfigForSelectedTarget();
+          } else {
+            alert('Failed to save configuration');
+          }
+        } catch (e) {
+          console.error('Error saving config', e);
+        }
+      };
+    });
+
+    // Delete configuration file
+    deleteBtns.forEach(btn => {
+      btn.onclick = async () => {
+        const target = saveTargetSelect.value;
+        let customPath = '';
+
+        if (target === 'custom') {
+          const selectedOpt = saveTargetSelect.options[saveTargetSelect.selectedIndex];
+          customPath = selectedOpt.dataset.path || '';
+        } else if (target === 'custom-input') {
+          customPath = customPathInput.value.trim();
+        }
+
+        if (target === 'global') {
+          alert('Cannot delete global configuration.');
           return;
         }
-      }
 
-      try {
-        const res = await fetch(`${API_BASE}/config`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ config, target, customPath })
-        });
+        const confirmMsg = `Are you sure you want to delete the configuration file for ${target === 'local' ? 'the current project' : (customPath || 'this target')}? This will revert it to global defaults.`;
         
-        if (res.ok) {
-          showToast();
-          // Reload the specific target config after save
-          await loadConfigForSelectedTarget();
-        } else {
-          alert('Failed to save configuration');
-        }
-      } catch (e) {
-        console.error('Error saving config', e);
-      }
-    };
+        showConfirm(confirmMsg, async () => {
+          try {
+            const res = await fetch(`${API_BASE}/config?target=${target}&customPath=${encodeURIComponent(customPath)}`, {
+              method: 'DELETE'
+            });
+            const data = await res.json();
+            if (res.ok) {
+              showToast('Configuration deleted. Reverted to defaults.');
+              await initDashboard();
+            } else {
+              alert(`Failed to delete configuration: ${data.error || 'Unknown error'}`);
+            }
+          } catch (e) {
+            console.error('Error deleting config', e);
+          }
+        });
+      };
+    });
 
-    function showToast() {
+    function showConfirm(message, onConfirm) {
+      const modal = document.getElementById('confirm-modal');
+      const content = document.getElementById('confirm-modal-content');
+      modal.querySelector('.confirm-modal-message').textContent = message;
+      
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        content.classList.remove('scale-95');
+        content.classList.add('scale-100');
+      }, 10);
+      
+      const close = () => {
+        modal.classList.add('opacity-0');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
+        setTimeout(() => {
+          modal.classList.add('hidden');
+        }, 200);
+      };
+      
+      document.getElementById('confirm-cancel-btn').onclick = () => {
+        close();
+      };
+      
+      document.getElementById('confirm-action-btn').onclick = () => {
+        close();
+      };
+      
+      document.getElementById('confirm-action-btn').onclick = () => {
+        close();
+        onConfirm();
+      };
+    }
+
+    function showToast(msg) {
       const toast = document.getElementById('toast');
+      toast.querySelector('.toast-message').textContent = msg;
       toast.classList.remove('translate-y-20', 'opacity-0');
       toast.classList.add('translate-y-0', 'opacity-100');
       setTimeout(() => {

@@ -22,6 +22,8 @@ export interface HoverSourceConfig {
   minimalModeByDefault: boolean;
   editor: string;
   autoResolvePortConflicts?: boolean;
+  snappingThreshold?: number;
+  desnappingThreshold?: number;
   shortcuts: {
     toggleUI: ShortcutKey;
     toggleMinimal: ShortcutKey;
@@ -45,6 +47,8 @@ const DEFAULT_CONFIG: HoverSourceConfig = {
   minimalModeByDefault: false,
   editor: "vscode",
   autoResolvePortConflicts: false,
+  snappingThreshold: 15,
+  desnappingThreshold: 15,
   shortcuts: {
     toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
     toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
@@ -64,6 +68,15 @@ function getLocalConfigPath(projectRoot: string): string {
   return path.join(projectRoot, ".hoversourcerc");
 }
 
+// Helper to normalize project path casing (Windows drive letters) and separators
+export function normalizeProjectPath(projectPath: string): string {
+  let resolved = path.resolve(projectPath).replaceAll("\\", "/");
+  if (/^[a-zA-Z]:/.test(resolved)) {
+    resolved = resolved[0].toUpperCase() + resolved.slice(1);
+  }
+  return resolved;
+}
+
 // Helper to record recent projects
 function registerRecentProject(projectRoot: string) {
   const globalPath = getGlobalConfigPath();
@@ -79,18 +92,30 @@ function registerRecentProject(projectRoot: string) {
     globalData.recentProjects = [];
   }
   
-  const normalized = path.resolve(projectRoot).replaceAll("\\", "/");
+  const normalized = normalizeProjectPath(projectRoot);
   
-  if (!globalData.recentProjects.includes(normalized)) {
-    globalData.recentProjects.push(normalized);
-    if (globalData.recentProjects.length > 10) {
-      globalData.recentProjects.shift();
+  // Clean up and deduplicate existing recentProjects
+  const cleaned: string[] = [];
+  for (const p of globalData.recentProjects) {
+    const norm = normalizeProjectPath(p);
+    if (!cleaned.includes(norm)) {
+      cleaned.push(norm);
     }
-    try {
-      fs.writeFileSync(globalPath, JSON.stringify(globalData, null, 2), "utf-8");
-    } catch (e) {
-      console.warn(`[HoverSource] Failed to save project history to global config`, e);
+  }
+  
+  if (!cleaned.includes(normalized)) {
+    cleaned.push(normalized);
+    if (cleaned.length > 10) {
+      cleaned.shift();
     }
+  }
+  
+  globalData.recentProjects = cleaned;
+  
+  try {
+    fs.writeFileSync(globalPath, JSON.stringify(globalData, null, 2), "utf-8");
+  } catch (e) {
+    console.warn(`[HoverSource] Failed to save project history to global config`, e);
   }
 }
 
@@ -99,7 +124,15 @@ function getRecentProjects(): string[] {
   if (fs.existsSync(globalPath)) {
     try {
       const globalData = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
-      return globalData.recentProjects || [];
+      const list = globalData.recentProjects || [];
+      const cleaned: string[] = [];
+      for (const p of list) {
+        const norm = normalizeProjectPath(p);
+        if (!cleaned.includes(norm)) {
+          cleaned.push(norm);
+        }
+      }
+      return cleaned;
     } catch {}
   }
   return [];
@@ -384,12 +417,26 @@ function handleConfigGet(req: http.IncomingMessage, res: http.ServerResponse, ur
   const customPath = url.searchParams.get("customPath");
   
   const targetConfig = getConfigForTarget(queryTarget, customPath, config.projectRoot);
+
+  let configExists = false;
+  let targetPath = "";
+  if (queryTarget === "local") {
+    targetPath = getLocalConfigPath(config.projectRoot);
+  } else if (queryTarget === "custom" && customPath) {
+    targetPath = getLocalConfigPath(customPath);
+  } else if (queryTarget === "global") {
+    targetPath = getGlobalConfigPath();
+  }
+  if (targetPath) {
+    configExists = fs.existsSync(targetPath);
+  }
   
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({
     config: targetConfig,
-    currentProject: config.projectRoot.replaceAll("\\", "/"),
-    recentProjects: getRecentProjects()
+    currentProject: normalizeProjectPath(config.projectRoot),
+    recentProjects: getRecentProjects(),
+    configExists
   }));
 }
 
@@ -444,6 +491,65 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
       res.end(JSON.stringify({ error: `Failed to save config: ${e.message}` }));
     }
   });
+}
+
+function handleConfigDelete(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  config: ServerConfig
+) {
+  try {
+    const target = url.searchParams.get("target");
+    const customPath = url.searchParams.get("customPath");
+    const removeRecent = url.searchParams.get("removeRecent") === "true";
+
+    let targetPath = "";
+    if (target === "local") {
+      targetPath = getLocalConfigPath(config.projectRoot);
+    } else if (target === "custom" && customPath) {
+      targetPath = getLocalConfigPath(customPath);
+    }
+
+    let deletedFile = false;
+    if (targetPath && fs.existsSync(targetPath)) {
+      fs.unlinkSync(targetPath);
+      deletedFile = true;
+      console.log(`[HoverSource] Configuration deleted at: ${targetPath}`);
+    }
+
+    const globalPath = getGlobalConfigPath();
+    if (removeRecent || target === "custom") {
+      if (fs.existsSync(globalPath)) {
+        try {
+          const globalData = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
+          if (globalData.recentProjects) {
+            const pathToRemove = target === "local" ? config.projectRoot : (customPath || "");
+            const normalized = normalizeProjectPath(pathToRemove);
+            globalData.recentProjects = globalData.recentProjects
+              .map((p: string) => normalizeProjectPath(p))
+              .filter((p: string) => p !== normalized);
+            fs.writeFileSync(globalPath, JSON.stringify(globalData, null, 2), "utf-8");
+          }
+        } catch (e: any) {
+          console.warn(`[HoverSource] Failed to update recent list on config delete`, e);
+        }
+      }
+    }
+
+    // Broadcast configuration hot-reload trigger to active app pages with the new merged config
+    const newConfig = loadMergedConfig(config.projectRoot);
+    const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(newConfig)} }, "*");`;
+    broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
+      console.error("[HoverSource] Broadcast failed on delete:", e)
+    );
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ success: true, deletedFile, removedRecent: removeRecent || target === "custom", newConfig }));
+  } catch (e: any) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: `Failed to delete config: ${e.message}` }));
+  }
 }
 
 interface RequestLocationParams {
@@ -585,7 +691,7 @@ export function startCompanionServer(config: ServerConfig): http.Server {
   const server = http.createServer((req, res) => {
     // Set CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
     if (req.method === "OPTIONS") {
@@ -635,6 +741,12 @@ export function startCompanionServer(config: ServerConfig): http.Server {
     // POST config
     if (url.pathname === "/config" && req.method === "POST") {
       handleConfigPost(req, res, config);
+      return;
+    }
+
+    // DELETE config
+    if (url.pathname === "/config" && req.method === "DELETE") {
+      handleConfigDelete(req, res, url, config);
       return;
     }
 

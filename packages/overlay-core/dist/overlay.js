@@ -59,6 +59,7 @@ class OverlayEngine {
                 minimalModeByDefault: false,
                 snappingThreshold: 15,
                 desnappingThreshold: 15,
+                maxTraversalDepth: 32,
                 shortcuts: {
                     toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
                     toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },

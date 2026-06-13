@@ -8,6 +8,7 @@ export declare class InspectorAdapter implements InteractionMode {
     private currentElement;
     private currentSourceInfo;
     private debounceTimer;
+    private maxTraversalDepth;
     private layerStack;
     private activeLayerIndex;
     private layerPickerEnabled;

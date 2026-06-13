@@ -10,7 +10,7 @@ if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" &
     });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
 }
-export function inspectVisualContext(element) {
+export function inspectVisualContext(element, maxDepth = 32) {
     if (contextCache.has(element)) {
         return contextCache.get(element);
     }
@@ -38,10 +38,11 @@ export function inspectVisualContext(element) {
     catch (e) {
         console.warn("[HoverSource] Failed to compute element layout constraints", e);
     }
-    // 2. Traverse up parent hierarchy (up to 32 levels) to identify inherited visual/scrolling effects
+    // 2. Traverse up parent hierarchy (up to maxDepth levels) to identify inherited visual/scrolling effects
     let current = element.parentElement;
     let depth = 0;
-    while (current && depth < 32) {
+    const limit = Math.min(maxDepth, 100);
+    while (current && depth < limit) {
         const tagName = current.tagName.toLowerCase();
         if (tagName === "body" || tagName === "html") {
             break;

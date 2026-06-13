@@ -63,4 +63,19 @@ describe("inspectVisualContext", () => {
         // So target has 34 parents. The walk should traverse exactly 32 levels.
         expect(context.parentEffects.length).toBe(32);
     });
+    it("should respect custom maxDepth in inspectVisualContext", () => {
+        // Build a chain of 15 elements
+        let currentEl = null;
+        for (let i = 0; i < 15; i++) {
+            currentEl = {
+                tagName: "DIV",
+                classList: [],
+                parentElement: currentEl,
+                _mockComputedStyle: { position: "sticky" }
+            };
+        }
+        // Pass custom maxDepth = 10
+        const context = inspectVisualContext(currentEl, 10);
+        expect(context.parentEffects.length).toBe(10);
+    });
 });

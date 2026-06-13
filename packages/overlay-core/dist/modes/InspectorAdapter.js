@@ -12,6 +12,7 @@ export class InspectorAdapter {
     currentElement = null;
     currentSourceInfo = null;
     debounceTimer = null;
+    maxTraversalDepth = 32;
     // --- Layer Picker state ---
     layerStack = [];
     activeLayerIndex = 0;
@@ -23,6 +24,7 @@ export class InspectorAdapter {
         this.minimalMode = !!config?.minimalModeByDefault;
         this.layerPickerEnabled = config?.layerPickerEnabled !== false;
         this.layerScrollModifiers = config?.layerPickerScroll ?? { altKey: true, shiftKey: true, ctrlKey: false };
+        this.maxTraversalDepth = config?.maxTraversalDepth ?? 32;
         if (this.layerPickerEnabled) {
             window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
         }
@@ -53,7 +55,7 @@ export class InspectorAdapter {
             if (container && (el === container || container.contains(el)))
                 return false;
             return true;
-        });
+        }).slice(0, this.maxTraversalDepth);
         this.activeLayerIndex = 0;
         this.resolveAndShowLayer(this.activeLayerIndex, event);
     }
@@ -103,6 +105,7 @@ export class InspectorAdapter {
     }
     onConfigUpdate(newConfig) {
         this.minimalMode = !!newConfig.minimalModeByDefault;
+        this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
         const newEnabled = newConfig.layerPickerEnabled !== false;
         if (newEnabled !== this.layerPickerEnabled) {
             this.layerPickerEnabled = newEnabled;
@@ -175,7 +178,7 @@ export class InspectorAdapter {
             visualContext: null,
             staticMetadata: null
         };
-        info.visualContext = inspectVisualContext(target);
+        info.visualContext = inspectVisualContext(target, this.maxTraversalDepth);
         this.currentSourceInfo = info;
         if (this.controller.isUIVisible()) {
             this.renderTooltip(event);

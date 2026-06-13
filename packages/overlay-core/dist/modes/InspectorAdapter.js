@@ -11,6 +11,7 @@ export class InspectorAdapter {
     minimalMode = false;
     currentElement = null;
     currentSourceInfo = null;
+    debounceTimer = null;
     // --- Layer Picker state ---
     layerStack = [];
     activeLayerIndex = 0;
@@ -28,6 +29,10 @@ export class InspectorAdapter {
         console.log("[HoverSource] Activated Inspector Mode");
     }
     deactivate() {
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = null;
+        }
         this.controller.clear();
         this.currentElement = null;
         this.currentSourceInfo = null;
@@ -77,7 +82,12 @@ export class InspectorAdapter {
             this.isFrozen = !this.isFrozen;
             this.controller.setFreezeMode(this.isFrozen);
             console.log(`[HoverSource] Freeze: ${this.isFrozen}`);
-            this.renderTooltip({ clientX: 0, clientY: 0 });
+            if (this.isFrozen && this.currentElement) {
+                this.flushResolve(this.currentElement, { clientX: 0, clientY: 0 });
+            }
+            else {
+                this.renderTooltip({ clientX: 0, clientY: 0 });
+            }
         }
         else if (command === 'toggleMinimal') {
             this.minimalMode = !this.minimalMode;
@@ -126,7 +136,33 @@ export class InspectorAdapter {
             this.controller.clear();
             this.currentElement = null;
             this.currentSourceInfo = null;
+            if (this.debounceTimer) {
+                clearTimeout(this.debounceTimer);
+                this.debounceTimer = null;
+            }
             return;
+        }
+        // Phase A: Draw highlight immediately
+        this.currentElement = target;
+        if (this.controller.isUIVisible()) {
+            this.controller.drawHighlight(target, this.isFrozen);
+        }
+        // Cancel any pending debounce timer
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+        }
+        // Phase B: Debounce source resolution and visual context
+        this.debounceTimer = setTimeout(() => {
+            this.debounceTimer = null;
+            if (this.currentElement !== target)
+                return;
+            this.flushResolve(target, event);
+        }, 50);
+    }
+    flushResolve(target, event) {
+        if (this.debounceTimer) {
+            clearTimeout(this.debounceTimer);
+            this.debounceTimer = null;
         }
         const info = this.resolver.resolve(target) || {
             componentName: target.tagName.toLowerCase(),
@@ -140,10 +176,8 @@ export class InspectorAdapter {
             staticMetadata: null
         };
         info.visualContext = inspectVisualContext(target);
-        this.currentElement = target;
         this.currentSourceInfo = info;
         if (this.controller.isUIVisible()) {
-            this.controller.drawHighlight(target, this.isFrozen);
             this.renderTooltip(event);
         }
         if (info.fileName) {

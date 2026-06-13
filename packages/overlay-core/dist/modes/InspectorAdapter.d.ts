@@ -7,6 +7,7 @@ export declare class InspectorAdapter implements InteractionMode {
     private minimalMode;
     private currentElement;
     private currentSourceInfo;
+    private debounceTimer;
     private layerStack;
     private activeLayerIndex;
     private layerPickerEnabled;
@@ -20,6 +21,7 @@ export declare class InspectorAdapter implements InteractionMode {
     onUIVisibilityChanged(visible: boolean): void;
     private readonly handleAltScroll;
     private resolveAndShowLayer;
+    private flushResolve;
     private fetchBackgroundValidation;
     private getShortcutLabel;
     private renderMinimalTooltip;

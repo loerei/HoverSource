@@ -19,6 +19,7 @@ export * from "./adapters/AngularAdapter.js";
 export class SourceResolver {
   private readonly adapters: SourceAdapter[] = [];
   private readonly fiberAdapter: ReactFiberAdapter;
+  private nodeCache = new WeakMap<HTMLElement, AncestorInfo>();
 
   constructor() {
     // Register default adapters
@@ -30,6 +31,24 @@ export class SourceResolver {
     this.adapters.push(new SolidAdapter());
     this.adapters.push(new AstroAdapter());
     this.adapters.push(new AngularAdapter());
+    this.setupMutationObserver();
+  }
+
+  private setupMutationObserver() {
+    if (
+      typeof MutationObserver !== "undefined" &&
+      typeof document !== "undefined" &&
+      document.body
+    ) {
+      const observer = new MutationObserver(() => {
+        this.clearCache();
+      });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+    }
+  }
+
+  public clearCache() {
+    this.nodeCache = new WeakMap();
   }
 
   registerAdapter(adapter: SourceAdapter) {
@@ -58,12 +77,20 @@ export class SourceResolver {
    * Always resolves: selector, display, position.
    * Resolves conditionally: layoutProps (flex/grid only), fileName/lineNumber/componentName (via adapters).
    */
-  resolveAncestors(element: HTMLElement, maxDepth = 8): AncestorInfo[] {
+  resolveAncestors(element: HTMLElement, maxDepth = 32): AncestorInfo[] {
     const results: AncestorInfo[] = [];
     let current: HTMLElement | null = element.parentElement;
     let depth = 0;
+    const limit = Math.min(maxDepth, 32);
 
-    while (current && current !== document.documentElement && depth < maxDepth) {
+    while (current && current !== document.documentElement && depth < limit) {
+      if (this.nodeCache.has(current)) {
+        results.push(this.nodeCache.get(current)!);
+        current = current.parentElement;
+        depth++;
+        continue;
+      }
+
       try {
         const comp = globalThis.getComputedStyle(current);
         const display = comp.display || "block";
@@ -100,6 +127,7 @@ export class SourceResolver {
           info.componentName = sourceInfo.componentName;
         }
 
+        this.nodeCache.set(current, info);
         results.push(info);
       } catch {
         // Skip elements where getComputedStyle throws (e.g. detached)

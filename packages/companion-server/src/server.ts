@@ -24,6 +24,7 @@ export interface HoverSourceConfig {
   autoResolvePortConflicts?: boolean;
   snappingThreshold?: number;
   desnappingThreshold?: number;
+  maxTraversalDepth?: number;
   shortcuts: {
     toggleUI: ShortcutKey;
     toggleMinimal: ShortcutKey;
@@ -49,6 +50,7 @@ const DEFAULT_CONFIG: HoverSourceConfig = {
   autoResolvePortConflicts: false,
   snappingThreshold: 15,
   desnappingThreshold: 15,
+  maxTraversalDepth: 32,
   shortcuts: {
     toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
     toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },

@@ -46,6 +46,7 @@ export class DesignAdapter implements InteractionMode {
   private badgeElementH: HTMLDivElement | null = null;
   private badgeElementV: HTMLDivElement | null = null;
   private dragBlocker: HTMLDivElement | null = null;
+  private maxTraversalDepth = 32;
 
   public activate(controller: OverlayController): void {
     this.controller = controller;
@@ -57,6 +58,7 @@ export class DesignAdapter implements InteractionMode {
     this.targetElement = null;
     this.anchorHElement = null;
     this.anchorVElement = null;
+    this.maxTraversalDepth = controller.getConfig()?.maxTraversalDepth ?? 32;
 
     // Spawn at the center of the window
     this.crosshairX = globalThis.innerWidth / 2;
@@ -987,7 +989,7 @@ Suggested layout insertion (heuristic only):
 
     // --- Layout Context ---
     const anchorForContext = this.anchorHElement || this.anchorVElement || this.targetElement;
-    const ancestors = this.resolver.resolveAncestors(anchorForContext, 8);
+    const ancestors = this.resolver.resolveAncestors(anchorForContext, this.maxTraversalDepth);
 
     const anchorDisplayInfo = this.getAnchorDisplayInfo(anchorForContext);
     const anchorElementDisplay = anchorDisplayInfo.display;
@@ -1038,7 +1040,7 @@ Suggested layout insertion (heuristic only):
   }
 
   public onConfigUpdate(newConfig: any): void {
-    // Handle live config changes if needed
+    this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
   }
 
   public onUIVisibilityChanged(visible: boolean): void {

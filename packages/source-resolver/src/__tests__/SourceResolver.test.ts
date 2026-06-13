@@ -436,4 +436,125 @@ describe("SourceResolver", () => {
     expect(ancestors[1].componentName).toBe("RootComponent");
     expect(ancestors[1].fileName).toBe("RootFile.tsx");
   });
+
+  it("should cache ancestor resolution results and not call getComputedStyle repeatedly", () => {
+    const resolver = new SourceResolver();
+    const rootEl = {
+      tagName: "DIV",
+      classList: [],
+      parentElement: null,
+      _mockComputedStyle: { display: "block" }
+    } as any;
+    const parentEl = {
+      tagName: "DIV",
+      classList: [],
+      parentElement: rootEl,
+      _mockComputedStyle: { display: "block" }
+    } as any;
+
+    const originalGetComputedStyle = globalThis.getComputedStyle;
+    const spy = vi.fn().mockImplementation((el: any) => {
+      return el._mockComputedStyle || { display: "block", position: "static" };
+    });
+    globalThis.getComputedStyle = spy as any;
+
+    try {
+      // First resolution
+      const first = resolver.resolveAncestors(parentEl, 5);
+      expect(first.length).toBe(1);
+      expect(spy).toHaveBeenCalledTimes(1); // rootEl is evaluated
+
+      // Second resolution of the same element
+      const second = resolver.resolveAncestors(parentEl, 5);
+      expect(second.length).toBe(1);
+      expect(spy).toHaveBeenCalledTimes(1); // Cached, no new getComputedStyle call
+    } finally {
+      globalThis.getComputedStyle = originalGetComputedStyle;
+    }
+  });
+
+  it("should invalidate the cache when a DOM mutation occurs", () => {
+    let mutationCallback: any = null;
+    const mockObserver = vi.fn().mockImplementation(function (this: any, cb) {
+      mutationCallback = cb;
+      this.observe = vi.fn();
+      this.disconnect = vi.fn();
+    });
+
+    const originalMutationObserver = globalThis.MutationObserver;
+    const originalDocument = globalThis.document;
+
+    globalThis.MutationObserver = mockObserver as any;
+    globalThis.document = {
+      body: {},
+      documentElement: {}
+    } as any;
+
+    try {
+      const resolver = new SourceResolver();
+      expect(mockObserver).toHaveBeenCalled();
+      expect(mutationCallback).not.toBeNull();
+
+      const rootEl = {
+        tagName: "DIV",
+        classList: [],
+        parentElement: null,
+        _mockComputedStyle: { display: "block" }
+      } as any;
+      const parentEl = {
+        tagName: "DIV",
+        classList: [],
+        parentElement: rootEl,
+        _mockComputedStyle: { display: "block" }
+      } as any;
+
+      const originalGetComputedStyle = globalThis.getComputedStyle;
+      const spy = vi.fn().mockImplementation((el: any) => {
+        return el._mockComputedStyle || { display: "block", position: "static" };
+      });
+      globalThis.getComputedStyle = spy as any;
+
+      try {
+        // First resolution
+        resolver.resolveAncestors(parentEl, 5);
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        // Simulate DOM mutation by calling callback
+        mutationCallback!([], {});
+
+        // Second resolution (should call getComputedStyle again because cache was cleared)
+        resolver.resolveAncestors(parentEl, 5);
+        expect(spy).toHaveBeenCalledTimes(2);
+      } finally {
+        globalThis.getComputedStyle = originalGetComputedStyle;
+      }
+    } finally {
+      globalThis.MutationObserver = originalMutationObserver;
+      globalThis.document = originalDocument;
+    }
+  });
+
+  it("should support deep DOM walks up to 32 levels", () => {
+    const resolver = new SourceResolver();
+    
+    // Build a chain of 35 nested elements
+    let currentEl: any = null;
+    for (let i = 0; i < 35; i++) {
+      currentEl = {
+        tagName: "DIV",
+        classList: [],
+        parentElement: currentEl,
+        _mockComputedStyle: { display: "block", position: "static" }
+      } as any;
+    }
+    
+    // Call resolveAncestors on the deepest child (currentEl)
+    // The default maxDepth should be 32, so it should return 32 ancestors (excluding documentElement)
+    const ancestorsDefault = resolver.resolveAncestors(currentEl);
+    expect(ancestorsDefault.length).toBe(32);
+
+    // If we pass maxDepth = 35, it should be capped at our safe ceiling of 32
+    const ancestorsCapped = resolver.resolveAncestors(currentEl, 35);
+    expect(ancestorsCapped.length).toBe(32);
+  });
 });

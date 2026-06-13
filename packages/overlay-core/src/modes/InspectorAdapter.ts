@@ -16,6 +16,8 @@ export class InspectorAdapter implements InteractionMode {
   
   private currentElement: HTMLElement | null = null;
   private currentSourceInfo: any = null;
+  private debounceTimer: any = null;
+  private maxTraversalDepth = 32;
 
   // --- Layer Picker state ---
   private layerStack: HTMLElement[] = [];
@@ -29,6 +31,7 @@ export class InspectorAdapter implements InteractionMode {
     this.minimalMode = !!config?.minimalModeByDefault;
     this.layerPickerEnabled = config?.layerPickerEnabled !== false;
     this.layerScrollModifiers = config?.layerPickerScroll ?? { altKey: true, shiftKey: true, ctrlKey: false };
+    this.maxTraversalDepth = config?.maxTraversalDepth ?? 32;
     if (this.layerPickerEnabled) {
       window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
     }
@@ -36,6 +39,10 @@ export class InspectorAdapter implements InteractionMode {
   }
 
   public deactivate(): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
     this.controller.clear();
     this.currentElement = null;
     this.currentSourceInfo = null;
@@ -55,7 +62,7 @@ export class InspectorAdapter implements InteractionMode {
       if (el === document.documentElement || el === document.body) return false;
       if (container && (el === container || container.contains(el))) return false;
       return true;
-    });
+    }).slice(0, this.maxTraversalDepth);
 
     this.activeLayerIndex = 0;
     this.resolveAndShowLayer(this.activeLayerIndex, event);
@@ -89,7 +96,11 @@ export class InspectorAdapter implements InteractionMode {
       this.isFrozen = !this.isFrozen;
       this.controller.setFreezeMode(this.isFrozen);
       console.log(`[HoverSource] Freeze: ${this.isFrozen}`);
-      this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
+      if (this.isFrozen && this.currentElement) {
+        this.flushResolve(this.currentElement, { clientX: 0, clientY: 0 } as PointerEvent);
+      } else {
+        this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
+      }
     } else if (command === 'toggleMinimal') {
       this.minimalMode = !this.minimalMode;
       console.log(`[HoverSource] Minimal Mode: ${this.minimalMode}`);
@@ -103,6 +114,7 @@ export class InspectorAdapter implements InteractionMode {
 
   public onConfigUpdate(newConfig: any): void {
     this.minimalMode = !!newConfig.minimalModeByDefault;
+    this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
     const newEnabled = newConfig.layerPickerEnabled !== false;
     if (newEnabled !== this.layerPickerEnabled) {
       this.layerPickerEnabled = newEnabled;
@@ -136,7 +148,36 @@ export class InspectorAdapter implements InteractionMode {
       this.controller.clear();
       this.currentElement = null;
       this.currentSourceInfo = null;
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
+      }
       return;
+    }
+
+    // Phase A: Draw highlight immediately
+    this.currentElement = target;
+    if (this.controller.isUIVisible()) {
+      this.controller.drawHighlight(target, this.isFrozen);
+    }
+
+    // Cancel any pending debounce timer
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+
+    // Phase B: Debounce source resolution and visual context
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = null;
+      if (this.currentElement !== target) return;
+      this.flushResolve(target, event);
+    }, 50);
+  }
+
+  private flushResolve(target: HTMLElement, event: PointerEvent): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
     }
 
     const info = this.resolver.resolve(target) || {
@@ -150,12 +191,10 @@ export class InspectorAdapter implements InteractionMode {
       visualContext: null,
       staticMetadata: null
     };
-    info.visualContext = inspectVisualContext(target);
-    this.currentElement = target;
+    info.visualContext = inspectVisualContext(target, this.maxTraversalDepth);
     this.currentSourceInfo = info;
 
     if (this.controller.isUIVisible()) {
-      this.controller.drawHighlight(target, this.isFrozen);
       this.renderTooltip(event);
     }
 

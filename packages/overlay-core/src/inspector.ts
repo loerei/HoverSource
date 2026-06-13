@@ -1,6 +1,25 @@
 import { VisualContext, ParentVisualEffect } from "@hoversource/source-resolver";
 
-export function inspectVisualContext(element: HTMLElement): VisualContext {
+let contextCache = new WeakMap<HTMLElement, VisualContext>();
+let parentStyleCache = new WeakMap<HTMLElement, ParentVisualEffect[]>();
+
+export function clearInspectorCache(): void {
+  contextCache = new WeakMap();
+  parentStyleCache = new WeakMap();
+}
+
+if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+  const observer = new MutationObserver(() => {
+    clearInspectorCache();
+  });
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+}
+
+export function inspectVisualContext(element: HTMLElement, maxDepth = 32): VisualContext {
+  if (contextCache.has(element)) {
+    return contextCache.get(element)!;
+  }
+
   const parentEffects: ParentVisualEffect[] = [];
   const layoutConstraints: Record<string, string> = {};
 
@@ -27,11 +46,12 @@ export function inspectVisualContext(element: HTMLElement): VisualContext {
     console.warn("[HoverSource] Failed to compute element layout constraints", e);
   }
 
-  // 2. Traverse up parent hierarchy (up to 5 levels) to identify inherited visual/scrolling effects
+  // 2. Traverse up parent hierarchy (up to maxDepth levels) to identify inherited visual/scrolling effects
   let current: HTMLElement | null = element.parentElement;
   let depth = 0;
+  const limit = Math.min(maxDepth, 100);
 
-  while (current && depth < 5) {
+  while (current && depth < limit) {
     const tagName = current.tagName.toLowerCase();
     if (tagName === "body" || tagName === "html") {
       break;
@@ -43,10 +63,13 @@ export function inspectVisualContext(element: HTMLElement): VisualContext {
     depth++;
   }
 
-  return {
+  const result: VisualContext = {
     parentEffects,
     layoutConstraints
   };
+
+  contextCache.set(element, result);
+  return result;
 }
 
 function checkMaskEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[]) {
@@ -94,17 +117,26 @@ function checkPositionEffect(comp: CSSStyleDeclaration, tagName: string, classLi
 }
 
 function inspectParentElementStyle(current: HTMLElement, parentEffects: ParentVisualEffect[]): void {
+  if (parentStyleCache.has(current)) {
+    parentEffects.push(...parentStyleCache.get(current)!);
+    return;
+  }
+
+  const effects: ParentVisualEffect[] = [];
   const tagName = current.tagName.toLowerCase();
   try {
     const comp = globalThis.getComputedStyle(current);
     const classList = Array.from(current.classList);
 
-    checkMaskEffect(comp, tagName, classList, parentEffects);
-    checkBackdropEffect(comp, tagName, classList, parentEffects);
-    checkFilterEffect(comp, tagName, classList, parentEffects);
-    checkOpacityEffect(comp, tagName, classList, parentEffects);
-    checkOverflowEffect(comp, tagName, classList, parentEffects);
-    checkPositionEffect(comp, tagName, classList, parentEffects);
+    checkMaskEffect(comp, tagName, classList, effects);
+    checkBackdropEffect(comp, tagName, classList, effects);
+    checkFilterEffect(comp, tagName, classList, effects);
+    checkOpacityEffect(comp, tagName, classList, effects);
+    checkOverflowEffect(comp, tagName, classList, effects);
+    checkPositionEffect(comp, tagName, classList, effects);
+
+    parentStyleCache.set(current, effects);
+    parentEffects.push(...effects);
   } catch (e) {
     console.warn(`[HoverSource] Failed to compute styles for parent element <${tagName}>`, e);
   }

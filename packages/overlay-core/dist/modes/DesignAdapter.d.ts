@@ -33,6 +33,7 @@ export declare class DesignAdapter implements InteractionMode {
     private badgeElementH;
     private badgeElementV;
     private dragBlocker;
+    private maxTraversalDepth;
     activate(controller: OverlayController): void;
     deactivate(): void;
     onPointerOver(event: PointerEvent, target: HTMLElement): void;

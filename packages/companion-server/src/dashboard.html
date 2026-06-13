@@ -125,6 +125,10 @@
             <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">De-snapping Threshold (px)</label>
             <input type="number" class="desnapping-threshold-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="0" max="100">
           </div>
+          <div>
+            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Max Inspection Depth (layers)</label>
+            <input type="number" class="max-depth-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="8" max="100" title="Limits how many parent layers HoverSource climbs to resolve layout details and source code paths. Min: 8, Max: 100.">
+          </div>
           <div class="bg-slate-950/40 border border-slate-800 rounded-lg p-3 space-y-3">
             <label class="flex items-center gap-2.5 cursor-pointer">
               <input type="checkbox" class="minimal-checkbox rounded text-blue-500 bg-slate-900 border-slate-700 h-3.5 w-3.5">
@@ -426,6 +430,7 @@
       layerPickerEnabled: true,
       snappingThreshold: 15,
       desnappingThreshold: 15,
+      maxTraversalDepth: 32,
       layerPickerScroll: { altKey: true, shiftKey: true, ctrlKey: false },
       shortcuts: {
         toggleUI: { key: 'h', altKey: true, ctrlKey: false, shiftKey: false },
@@ -446,6 +451,7 @@
     const editorSelect = document.querySelector('.editor-select');
     const snappingThresholdInput = document.querySelector('.snapping-threshold-input');
     const desnappingThresholdInput = document.querySelector('.desnapping-threshold-input');
+    const maxDepthInput = document.querySelector('.max-depth-input');
     const saveTargetSelect = new CustomDropdownWrapper(document.querySelector('.target-dropdown'));
     const customPathInput = document.querySelector('.custom-path-input');
     const saveBtns = document.querySelectorAll('.save-btn');
@@ -516,6 +522,15 @@
         editorSelect.addEventListener('change', checkChanges);
         snappingThresholdInput.addEventListener('input', checkChanges);
         desnappingThresholdInput.addEventListener('input', checkChanges);
+        maxDepthInput.addEventListener('input', checkChanges);
+        maxDepthInput.addEventListener('blur', () => {
+          let val = parseInt(maxDepthInput.value, 10);
+          if (isNaN(val)) val = 32;
+          if (val < 8) val = 8;
+          if (val > 100) val = 100;
+          maxDepthInput.value = val;
+          checkChanges();
+        });
 
       } catch (e) {
         console.error('Failed to init dashboard', e);
@@ -550,6 +565,7 @@
         editorSelect.value = loadedConfig.editor || 'vscode';
         snappingThresholdInput.value = loadedConfig.snappingThreshold !== undefined ? loadedConfig.snappingThreshold : 15;
         desnappingThresholdInput.value = loadedConfig.desnappingThreshold !== undefined ? loadedConfig.desnappingThreshold : 15;
+        maxDepthInput.value = loadedConfig.maxTraversalDepth !== undefined ? loadedConfig.maxTraversalDepth : 32;
         
         setupShortcutUI('toggleUI', loadedConfig.shortcuts.toggleUI);
         setupShortcutUI('toggleMinimal', loadedConfig.shortcuts.toggleMinimal);
@@ -685,6 +701,7 @@
 
       const snapVal = parseInt(snappingThresholdInput.value, 10);
       const deSnapVal = parseInt(desnappingThresholdInput.value, 10);
+      const depthVal = parseInt(maxDepthInput.value, 10);
 
       return {
         theme: themeSelect.value,
@@ -694,6 +711,7 @@
         layerPickerEnabled: layerPickerCheckbox.checked,
         snappingThreshold: isNaN(snapVal) ? 15 : snapVal,
         desnappingThreshold: isNaN(deSnapVal) ? 15 : deSnapVal,
+        maxTraversalDepth: isNaN(depthVal) ? 32 : (depthVal < 8 ? 8 : (depthVal > 100 ? 100 : depthVal)),
         shortcuts,
         layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll')
       };
@@ -728,6 +746,7 @@
         editorSelect.value = DEFAULT_CONFIG.editor;
         snappingThresholdInput.value = DEFAULT_CONFIG.snappingThreshold;
         desnappingThresholdInput.value = DEFAULT_CONFIG.desnappingThreshold;
+        maxDepthInput.value = DEFAULT_CONFIG.maxTraversalDepth;
         
         setupShortcutUI('toggleUI', DEFAULT_CONFIG.shortcuts.toggleUI);
         setupShortcutUI('toggleMinimal', DEFAULT_CONFIG.shortcuts.toggleMinimal);

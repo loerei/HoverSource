@@ -4,8 +4,11 @@ export interface OverlayController {
   /** Renders a highlighted box over a specific element */
   drawHighlight(target: HTMLElement, isFrozen: boolean): void;
 
-  /** Renders secondary outline frames and leader line callouts for parent effects */
-  drawParentHighlights(effects: any[]): void;
+  /** Renders secondary outline frame and leader line callout for a single parent effect */
+  drawParentHighlight(effect: any, rowRect?: DOMRect): void;
+
+  /** Clears any active parent highlight overlays and leader lines */
+  clearParentHighlights(): void;
   
   /** Renders a tooltip near the pointer */
   drawTooltip(html: string, pointerEvent: PointerEvent): void;

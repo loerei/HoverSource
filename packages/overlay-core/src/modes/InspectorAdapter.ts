@@ -195,7 +195,6 @@ export class InspectorAdapter implements InteractionMode {
     this.currentSourceInfo = info;
 
     if (this.controller.isUIVisible()) {
-      this.controller.drawParentHighlights(info.visualContext?.parentEffects || []);
       this.renderTooltip(event);
     }
 
@@ -401,7 +400,7 @@ export class InspectorAdapter implements InteractionMode {
       return "";
     }
     const effectsHtml = info.visualContext.parentEffects
-      .map((fx: ParentVisualEffect) => {
+      .map((fx: ParentVisualEffect, idx: number) => {
         const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
         let originLabel = "";
         if (info.staticMetadata?.classOrigins) {
@@ -414,7 +413,7 @@ export class InspectorAdapter implements InteractionMode {
             }
           }
         }
-        return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
+        return `<div class="hoversource-parent-item hoversource-stack-item" data-index="${idx}" style="cursor: pointer;">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
       })
       .join("");
 
@@ -564,6 +563,27 @@ export class InspectorAdapter implements InteractionMode {
 
     const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
     this.controller.drawTooltip(html, e);
+
+    const tooltipBox = (this.controller as any).tooltipBox as HTMLElement | null;
+    if (tooltipBox) {
+      const parentItems = tooltipBox.querySelectorAll(".hoversource-parent-item");
+      parentItems.forEach((item) => {
+        item.addEventListener("mouseenter", () => {
+          const indexAttr = item.getAttribute("data-index");
+          if (indexAttr !== null) {
+            const idx = parseInt(indexAttr, 10);
+            const fx = info.visualContext?.parentEffects[idx];
+            if (fx && fx.element) {
+              const rowRect = item.getBoundingClientRect();
+              this.controller.drawParentHighlight(fx, rowRect);
+            }
+          }
+        });
+        item.addEventListener("mouseleave", () => {
+          this.controller.clearParentHighlights();
+        });
+      });
+    }
   }
 
   private formatSelectorLabel(tagName: string, classList: string[], classOrigins: Record<string, any> | undefined): string {

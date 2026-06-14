@@ -461,50 +461,44 @@ class OverlayEngine {
         this.tooltipBox.style.left = `${x}px`;
         this.tooltipBox.style.top = `${y}px`;
     }
-    drawParentHighlights(effects) {
+    drawParentHighlight(fx, rowRect) {
         this.clearParentHighlights();
-        if (!this.container || !effects || effects.length === 0)
+        if (!this.container || !fx || !fx.element || !(fx.element instanceof HTMLElement))
             return;
-        // Group effects by parent element
-        const grouped = new Map();
-        for (const fx of effects) {
-            if (fx.element && fx.element instanceof HTMLElement) {
-                if (!grouped.has(fx.element)) {
-                    grouped.set(fx.element, []);
-                }
-                grouped.get(fx.element).push(fx);
+        const parentEl = fx.element;
+        const rect = parentEl.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0)
+            return;
+        // 1. Outline frame
+        const frame = document.createElement("div");
+        frame.className = "hoversource-parent-outline";
+        frame.style.width = `${rect.width}px`;
+        frame.style.height = `${rect.height}px`;
+        frame.style.left = `${rect.left}px`;
+        frame.style.top = `${rect.top}px`;
+        this.container.appendChild(frame);
+        this.parentHighlightElements.push(frame);
+        // 2. SVG overlay for leader line
+        if (rowRect) {
+            const svgNS = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(svgNS, "svg");
+            svg.setAttribute("class", "hoversource-parent-svg");
+            this.container.appendChild(svg);
+            this.parentHighlightElements.push(svg);
+            // Tooltip row target point: vertical center of rowRect
+            const rx = rowRect.left;
+            const ry = rowRect.top + rowRect.height / 2;
+            // Determine parent start point on the edge nearest to rx
+            let x1 = rect.left + rect.width / 2;
+            let y1 = rect.top + rect.height / 2;
+            if (rect.right < rx) {
+                x1 = rect.right;
+                y1 = rect.top + rect.height / 2;
             }
-        }
-        if (grouped.size === 0)
-            return;
-        const svgNS = "http://www.w3.org/2000/svg";
-        const svg = document.createElementNS(svgNS, "svg");
-        svg.setAttribute("class", "hoversource-parent-svg");
-        this.container.appendChild(svg);
-        this.parentHighlightElements.push(svg);
-        let index = 0;
-        for (const [parentEl, parentEffects] of grouped.entries()) {
-            const rect = parentEl.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0)
-                continue;
-            // Outline frame
-            const frame = document.createElement("div");
-            frame.className = "hoversource-parent-outline";
-            frame.style.width = `${rect.width}px`;
-            frame.style.height = `${rect.height}px`;
-            frame.style.left = `${rect.left}px`;
-            frame.style.top = `${rect.top}px`;
-            this.container.appendChild(frame);
-            this.parentHighlightElements.push(frame);
-            // Callout points
-            const x1 = rect.right;
-            const y1 = rect.top;
-            const dir = (x1 + 180 > window.innerWidth) ? -1 : 1;
-            const vOffset = index * 30;
-            const x_mid = x1 + dir * 20;
-            const y_mid = y1 - 20 - vOffset;
-            const x_end = x_mid + dir * 30;
-            const y_end = y_mid;
+            else if (rect.left > rx) {
+                x1 = rect.left;
+                y1 = rect.top + rect.height / 2;
+            }
             // Draw target dot
             const dotCircle = document.createElementNS(svgNS, "circle");
             dotCircle.setAttribute("cx", x1.toString());
@@ -518,36 +512,14 @@ class OverlayEngine {
             dotInner.setAttribute("r", "1.5");
             dotInner.setAttribute("fill", "#ffffff");
             svg.appendChild(dotInner);
-            // Draw leader line path
+            // Draw leader line (diagonal then horizontal)
+            const dir = (rx > x1) ? 1 : -1;
+            const x_mid = x1 + dir * 20;
+            const y_mid = ry;
             const path = document.createElementNS(svgNS, "path");
-            path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${y_mid} L ${x_end} ${y_end}`);
+            path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${y_mid} L ${rx} ${ry}`);
             path.setAttribute("class", "hoversource-leader-line");
             svg.appendChild(path);
-            // Create floating badge
-            const badge = document.createElement("div");
-            badge.className = "hoversource-parent-badge";
-            const badgeTitle = document.createElement("div");
-            badgeTitle.className = "hoversource-parent-badge-title";
-            const classStr = parentEffects[0].classList.length > 0 ? `.${parentEffects[0].classList.join(".")}` : "";
-            badgeTitle.textContent = `${parentEffects[0].tagName}${classStr}`;
-            badge.appendChild(badgeTitle);
-            const uniqueProps = Array.from(new Set(parentEffects.map(fx => fx.property)));
-            for (const prop of uniqueProps) {
-                const effectEl = document.createElement("div");
-                effectEl.className = "hoversource-parent-badge-effect";
-                const fxVal = parentEffects.find(fx => fx.property === prop)?.value || "";
-                effectEl.textContent = `${prop}: ${fxVal}`;
-                badge.appendChild(effectEl);
-            }
-            this.container.appendChild(badge);
-            this.parentHighlightElements.push(badge);
-            const badgeHeight = badge.offsetHeight || 25;
-            const badgeWidth = badge.offsetWidth || 120;
-            const badgeX = (dir === 1) ? x_end : x_end - badgeWidth;
-            const badgeY = y_end - badgeHeight / 2;
-            badge.style.left = `${badgeX}px`;
-            badge.style.top = `${badgeY}px`;
-            index++;
         }
     }
     clearParentHighlights() {

@@ -465,17 +465,34 @@ class OverlayEngine {
         this.clearParentHighlights();
         if (!this.container || !fx || !fx.element || !(fx.element instanceof HTMLElement))
             return;
+        // Filter properties to only visual modifier/scrolling ones
+        const prop = fx.property;
+        const isVisualEffect = prop === "mask-image" || prop === "clip-path" || prop.startsWith("overflow");
+        if (!isVisualEffect)
+            return;
         const parentEl = fx.element;
         const rect = parentEl.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0)
             return;
+        // Calculate sub-border dimensions based on effect
+        let subRect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+        if (prop === "mask-image") {
+            const parsed = parseMaskGradient(fx.value, rect);
+            if (parsed)
+                subRect = parsed;
+        }
+        else if (prop === "clip-path") {
+            const parsed = parseClipPathInset(fx.value, rect);
+            if (parsed)
+                subRect = parsed;
+        }
         // 1. Outline frame
         const frame = document.createElement("div");
         frame.className = "hoversource-parent-outline";
-        frame.style.width = `${rect.width}px`;
-        frame.style.height = `${rect.height}px`;
-        frame.style.left = `${rect.left}px`;
-        frame.style.top = `${rect.top}px`;
+        frame.style.width = `${subRect.width}px`;
+        frame.style.height = `${subRect.height}px`;
+        frame.style.left = `${subRect.left}px`;
+        frame.style.top = `${subRect.top}px`;
         this.container.appendChild(frame);
         this.parentHighlightElements.push(frame);
         // 2. SVG overlay for leader line
@@ -488,17 +505,9 @@ class OverlayEngine {
             // Tooltip row target point: vertical center of rowRect
             const rx = rowRect.left;
             const ry = rowRect.top + rowRect.height / 2;
-            // Determine parent start point on the edge nearest to rx
-            let x1 = rect.left + rect.width / 2;
-            let y1 = rect.top + rect.height / 2;
-            if (rect.right < rx) {
-                x1 = rect.right;
-                y1 = rect.top + rect.height / 2;
-            }
-            else if (rect.left > rx) {
-                x1 = rect.left;
-                y1 = rect.top + rect.height / 2;
-            }
+            // Start point: EXACT CENTER of the sub-border
+            const x1 = subRect.left + subRect.width / 2;
+            const y1 = subRect.top + subRect.height / 2;
             // Draw target dot
             const dotCircle = document.createElementNS(svgNS, "circle");
             dotCircle.setAttribute("cx", x1.toString());
@@ -512,12 +521,16 @@ class OverlayEngine {
             dotInner.setAttribute("r", "1.5");
             dotInner.setAttribute("fill", "#ffffff");
             svg.appendChild(dotInner);
-            // Draw leader line (diagonal then horizontal)
-            const dir = (rx > x1) ? 1 : -1;
-            const x_mid = x1 + dir * 20;
-            const y_mid = ry;
+            // Draw leader line (diagonal then horizontal) with viewport bounds check
+            const dx = rx - x1;
+            const dir = dx > 0 ? 1 : -1;
+            let x_mid = x1 + dir * 30;
+            if (Math.abs(dx) <= 60) {
+                x_mid = x1 + dx * 0.5;
+            }
+            x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
             const path = document.createElementNS(svgNS, "path");
-            path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${y_mid} L ${rx} ${ry}`);
+            path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
             path.setAttribute("class", "hoversource-leader-line");
             svg.appendChild(path);
         }
@@ -597,8 +610,103 @@ globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
     })
         .catch(e => console.error("[HoverSource] Failed to reach companion server:", e));
 };
-if (!globalThis.__HoverSourceInitialized__) {
+if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
     globalThis.__HoverSourceInitialized__ = true;
     OverlayEngine.launch();
     console.log("[HoverSource] Overlay injected.");
+}
+export function parseMaskGradient(value, rect) {
+    if (!value || !value.includes("linear-gradient"))
+        return null;
+    const matches = Array.from(value.matchAll(/(\d+(?:\.\d+)?)(px|%)/g));
+    if (matches.length === 0)
+        return null;
+    let stopValue = 0;
+    let stopUnit = "px";
+    for (const m of matches) {
+        const val = parseFloat(m[1]);
+        if (val > 0) {
+            stopValue = val;
+            stopUnit = m[2];
+            break;
+        }
+    }
+    if (stopValue === 0)
+        return null;
+    let direction = "to bottom";
+    if (value.includes("to top"))
+        direction = "to top";
+    else if (value.includes("to right"))
+        direction = "to right";
+    else if (value.includes("to left"))
+        direction = "to left";
+    let subLeft = rect.left;
+    let subTop = rect.top;
+    let subWidth = rect.width;
+    let subHeight = rect.height;
+    const rectBottom = (rect.bottom !== undefined) ? rect.bottom : rect.top + rect.height;
+    const rectRight = (rect.right !== undefined) ? rect.right : rect.left + rect.width;
+    if (direction === "to bottom") {
+        const h = (stopUnit === "px") ? stopValue : rect.height * (stopValue / 100);
+        subHeight = Math.min(h, rect.height);
+    }
+    else if (direction === "to top") {
+        const h = (stopUnit === "px") ? stopValue : rect.height * (stopValue / 100);
+        subHeight = Math.min(h, rect.height);
+        subTop = rectBottom - subHeight;
+    }
+    else if (direction === "to right") {
+        const w = (stopUnit === "px") ? stopValue : rect.width * (stopValue / 100);
+        subWidth = Math.min(w, rect.width);
+    }
+    else if (direction === "to left") {
+        const w = (stopUnit === "px") ? stopValue : rect.width * (stopValue / 100);
+        subWidth = Math.min(w, rect.width);
+        subLeft = rectRight - subWidth;
+    }
+    return { left: subLeft, top: subTop, width: subWidth, height: subHeight };
+}
+export function parseClipPathInset(value, rect) {
+    if (!value || !value.includes("inset("))
+        return null;
+    const insetMatch = value.match(/inset\(([^)]+)\)/);
+    if (!insetMatch)
+        return null;
+    let content = insetMatch[1].split("round")[0].trim();
+    const tokens = content.split(/\s+/).filter(t => t.length > 0);
+    if (tokens.length === 0)
+        return null;
+    const parseVal = (token, size) => {
+        const num = parseFloat(token);
+        if (isNaN(num))
+            return 0;
+        if (token.includes("%"))
+            return size * (num / 100);
+        return num;
+    };
+    let t = 0, r = 0, b = 0, l = 0;
+    if (tokens.length === 1) {
+        t = r = b = l = parseVal(tokens[0], Math.min(rect.width, rect.height));
+    }
+    else if (tokens.length === 2) {
+        t = b = parseVal(tokens[0], rect.height);
+        l = r = parseVal(tokens[1], rect.width);
+    }
+    else if (tokens.length === 3) {
+        t = parseVal(tokens[0], rect.height);
+        l = r = parseVal(tokens[1], rect.width);
+        b = parseVal(tokens[2], rect.height);
+    }
+    else if (tokens.length >= 4) {
+        t = parseVal(tokens[0], rect.height);
+        r = parseVal(tokens[1], rect.width);
+        b = parseVal(tokens[2], rect.height);
+        l = parseVal(tokens[3], rect.width);
+    }
+    return {
+        left: rect.left + l,
+        top: rect.top + t,
+        width: Math.max(0, rect.width - l - r),
+        height: Math.max(0, rect.height - t - b)
+    };
 }

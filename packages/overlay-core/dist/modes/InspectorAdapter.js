@@ -374,7 +374,10 @@ export class InspectorAdapter {
                     }
                 }
             }
-            return `<div class="hoversource-parent-item hoversource-stack-item" data-index="${idx}" style="cursor: pointer;">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
+            const isVisual = fx.property === "mask-image" || fx.property === "clip-path" || fx.property.startsWith("overflow");
+            const cursorStyle = isVisual ? "cursor: pointer;" : "cursor: default;";
+            const hoverClass = isVisual ? " hoversource-parent-item" : "";
+            return `<div class="hoversource-stack-item${hoverClass}" data-index="${idx}" style="${cursorStyle}">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
         })
             .join("");
         return `

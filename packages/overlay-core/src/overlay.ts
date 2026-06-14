@@ -536,50 +536,72 @@ class OverlayEngine implements OverlayController {
 
     // 2. SVG overlay for leader line
     if (rowRect) {
-      const svgNS = "http://www.w3.org/2000/svg";
-      const svg = document.createElementNS(svgNS, "svg");
-      svg.setAttribute("class", "hoversource-parent-svg");
-      svg.setAttribute("width", "100%");
-      svg.setAttribute("height", "100%");
-      this.container.appendChild(svg);
-      this.parentHighlightElements.push(svg);
-
-      // Tooltip row target point: vertical center of rowRect
-      const rx = rowRect.left;
-      const ry = rowRect.top + rowRect.height / 2;
-
       // Start point: EXACT CENTER of the sub-border
       const x1 = subRect.left + subRect.width / 2;
       const y1 = subRect.top + subRect.height / 2;
 
-      // Draw target dot
-      const dotCircle = document.createElementNS(svgNS, "circle");
-      dotCircle.setAttribute("cx", x1.toString());
-      dotCircle.setAttribute("cy", y1.toString());
-      dotCircle.setAttribute("r", "5");
-      dotCircle.setAttribute("class", "hoversource-leader-dot");
-      svg.appendChild(dotCircle);
-
-      const dotInner = document.createElementNS(svgNS, "circle");
-      dotInner.setAttribute("cx", x1.toString());
-      dotInner.setAttribute("cy", y1.toString());
-      dotInner.setAttribute("r", "1.5");
-      dotInner.setAttribute("fill", "#ffffff");
-      svg.appendChild(dotInner);
-
-      // Draw leader line (diagonal then horizontal) with viewport bounds check
-      const dx = rx - x1;
-      const dir = dx > 0 ? 1 : -1;
-      let x_mid = x1 + dir * 30;
-      if (Math.abs(dx) <= 60) {
-        x_mid = x1 + dx * 0.5;
+      // Check if start point is inside the tooltip box to avoid drawing over it
+      let isInsideTooltip = false;
+      let tooltipRect: DOMRect | null = null;
+      if (this.tooltipBox && this.tooltipBox.style.display !== "none") {
+        tooltipRect = this.tooltipBox.getBoundingClientRect();
+        if (
+          x1 >= tooltipRect.left &&
+          x1 <= tooltipRect.right &&
+          y1 >= tooltipRect.top &&
+          y1 <= tooltipRect.bottom
+        ) {
+          isInsideTooltip = true;
+        }
       }
-      x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
 
-      const path = document.createElementNS(svgNS, "path");
-      path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
-      path.setAttribute("class", "hoversource-leader-line");
-      svg.appendChild(path);
+      if (!isInsideTooltip) {
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("class", "hoversource-parent-svg");
+        svg.setAttribute("width", "100%");
+        svg.setAttribute("height", "100%");
+        this.container.appendChild(svg);
+        this.parentHighlightElements.push(svg);
+
+        // Determine termination edge based on relative horizontal position
+        let rx = rowRect.left;
+        if (tooltipRect && x1 > (tooltipRect.left + tooltipRect.width / 2)) {
+          rx = rowRect.right;
+        }
+
+        // Tooltip row target point: vertical center of rowRect
+        const ry = rowRect.top + rowRect.height / 2;
+
+        // Draw target dot
+        const dotCircle = document.createElementNS(svgNS, "circle");
+        dotCircle.setAttribute("cx", x1.toString());
+        dotCircle.setAttribute("cy", y1.toString());
+        dotCircle.setAttribute("r", "5");
+        dotCircle.setAttribute("class", "hoversource-leader-dot");
+        svg.appendChild(dotCircle);
+
+        const dotInner = document.createElementNS(svgNS, "circle");
+        dotInner.setAttribute("cx", x1.toString());
+        dotInner.setAttribute("cy", y1.toString());
+        dotInner.setAttribute("r", "1.5");
+        dotInner.setAttribute("fill", "#ffffff");
+        svg.appendChild(dotInner);
+
+        // Draw leader line (diagonal then horizontal) with viewport bounds check
+        const dx = rx - x1;
+        const dir = dx > 0 ? 1 : -1;
+        let x_mid = x1 + dir * 30;
+        if (Math.abs(dx) <= 60) {
+          x_mid = x1 + dx * 0.5;
+        }
+        x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
+
+        const path = document.createElementNS(svgNS, "path");
+        path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
+        path.setAttribute("class", "hoversource-leader-line");
+        svg.appendChild(path);
+      }
     }
   }
 

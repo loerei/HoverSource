@@ -649,7 +649,7 @@ if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
 export function parseMaskGradient(value, rect) {
     if (!value || !value.includes("linear-gradient"))
         return null;
-    const matches = Array.from(value.matchAll(/(\d+(?:\.\d+)?)(px|%)/g));
+    const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
     if (matches.length === 0)
         return null;
     let stopValue = 0;

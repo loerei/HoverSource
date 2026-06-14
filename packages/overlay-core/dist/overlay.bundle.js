@@ -1070,9 +1070,13 @@
             if (indexAttr !== null) {
               const idx = parseInt(indexAttr, 10);
               const fx = info.visualContext?.parentEffects[idx];
-              if (fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path")) {
+              const shouldHighlight = fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path");
+              if (shouldHighlight) {
                 const rowRect = item.getBoundingClientRect();
                 this.controller.drawParentHighlight(fx, rowRect);
+                item.classList.add("hs-parent-active");
+              } else {
+                item.classList.remove("hs-parent-active");
               }
             }
           });
@@ -1086,6 +1090,8 @@
               const fx = info.visualContext?.parentEffects[idx];
               if (fx && fx.element) {
                 const rowRect = item.getBoundingClientRect();
+                parentItems.forEach((el) => el.classList.remove("hs-parent-active"));
+                item.classList.add("hs-parent-active");
                 this.controller.clearParentHighlights();
                 this.controller.drawParentHighlight(fx, rowRect);
               }
@@ -2423,6 +2429,18 @@ Suggested layout insertion (heuristic only):
         font-size: 9px;
         color: #f3e8ff;
       }
+      .hoversource-parent-item:hover {
+        background: rgba(168, 85, 247, 0.15) !important;
+        color: #c084fc !important;
+      }
+      .hoversource-parent-item.hs-parent-active {
+        background: rgba(168, 85, 247, 0.25) !important;
+        border: 1px dashed #c084fc !important;
+        color: #ffffff !important;
+        border-radius: 4px;
+        padding-left: 6px;
+        transition: all 0.15s ease;
+      }
       .hoversource-tooltip {
         position: absolute;
         background: ${isLightTheme ? "rgba(255, 255, 255, 0.96)" : "rgba(18, 18, 18, 0.95)"};
@@ -2753,6 +2771,8 @@ Suggested layout insertion (heuristic only):
         const svgNS = "http://www.w3.org/2000/svg";
         const svg = document.createElementNS(svgNS, "svg");
         svg.setAttribute("class", "hoversource-parent-svg");
+        svg.setAttribute("width", "100%");
+        svg.setAttribute("height", "100%");
         this.container.appendChild(svg);
         this.parentHighlightElements.push(svg);
         const rx = rowRect.left;

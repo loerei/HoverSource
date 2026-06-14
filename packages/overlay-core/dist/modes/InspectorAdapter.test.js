@@ -21,7 +21,11 @@ describe("InspectorAdapter - Two-Phase Debounced Hover", () => {
         vi.useFakeTimers();
         const mockParentItem = {
             getAttribute: () => "0",
-            addEventListener: vi.fn()
+            addEventListener: vi.fn(),
+            classList: {
+                add: vi.fn(),
+                remove: vi.fn()
+            }
         };
         const mockTooltipBox = {
             querySelectorAll: vi.fn().mockReturnValue([mockParentItem])

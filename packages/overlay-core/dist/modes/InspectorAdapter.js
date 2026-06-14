@@ -520,9 +520,14 @@ export class InspectorAdapter {
                     if (indexAttr !== null) {
                         const idx = parseInt(indexAttr, 10);
                         const fx = info.visualContext?.parentEffects[idx];
-                        if (fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path")) {
+                        const shouldHighlight = fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path");
+                        if (shouldHighlight) {
                             const rowRect = item.getBoundingClientRect();
                             this.controller.drawParentHighlight(fx, rowRect);
+                            item.classList.add("hs-parent-active");
+                        }
+                        else {
+                            item.classList.remove("hs-parent-active");
                         }
                     }
                 });
@@ -537,6 +542,10 @@ export class InspectorAdapter {
                         const fx = info.visualContext?.parentEffects[idx];
                         if (fx && fx.element) {
                             const rowRect = item.getBoundingClientRect();
+                            // Clear active class from all rows
+                            parentItems.forEach(el => el.classList.remove("hs-parent-active"));
+                            // Add to this row
+                            item.classList.add("hs-parent-active");
                             this.controller.clearParentHighlights();
                             this.controller.drawParentHighlight(fx, rowRect);
                         }

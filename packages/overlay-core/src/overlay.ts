@@ -168,6 +168,18 @@ class OverlayEngine implements OverlayController {
         font-size: 9px;
         color: #f3e8ff;
       }
+      .hoversource-parent-item:hover {
+        background: rgba(168, 85, 247, 0.15) !important;
+        color: #c084fc !important;
+      }
+      .hoversource-parent-item.hs-parent-active {
+        background: rgba(168, 85, 247, 0.25) !important;
+        border: 1px dashed #c084fc !important;
+        color: #ffffff !important;
+        border-radius: 4px;
+        padding-left: 6px;
+        transition: all 0.15s ease;
+      }
       .hoversource-tooltip {
         position: absolute;
         background: ${isLightTheme ? "rgba(255, 255, 255, 0.96)" : "rgba(18, 18, 18, 0.95)"};
@@ -527,6 +539,8 @@ class OverlayEngine implements OverlayController {
       const svgNS = "http://www.w3.org/2000/svg";
       const svg = document.createElementNS(svgNS, "svg");
       svg.setAttribute("class", "hoversource-parent-svg");
+      svg.setAttribute("width", "100%");
+      svg.setAttribute("height", "100%");
       this.container.appendChild(svg);
       this.parentHighlightElements.push(svg);
 

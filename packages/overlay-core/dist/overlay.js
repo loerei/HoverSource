@@ -462,8 +462,7 @@ class OverlayEngine {
         this.tooltipBox.style.top = `${y}px`;
     }
     drawParentHighlight(fx, rowRect) {
-        this.clearParentHighlights();
-        if (!this.container || !fx || !fx.element || !(fx.element instanceof HTMLElement))
+        if (!this.container || !fx || !fx.element || typeof fx.element !== "object" || fx.element.nodeType !== 1)
             return;
         // Filter properties to only visual modifier/scrolling ones
         const prop = fx.property;

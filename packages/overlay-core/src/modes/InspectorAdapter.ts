@@ -570,6 +570,25 @@ export class InspectorAdapter implements InteractionMode {
     const tooltipBox = (this.controller as any).tooltipBox as HTMLElement | null;
     if (tooltipBox) {
       const parentItems = tooltipBox.querySelectorAll(".hoversource-parent-item");
+      
+      const drawDefaultHighlights = () => {
+        this.controller.clearParentHighlights();
+        parentItems.forEach((item) => {
+          const indexAttr = item.getAttribute("data-index");
+          if (indexAttr !== null) {
+            const idx = parseInt(indexAttr, 10);
+            const fx = info.visualContext?.parentEffects[idx];
+            if (fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path")) {
+              const rowRect = item.getBoundingClientRect();
+              this.controller.drawParentHighlight(fx, rowRect);
+            }
+          }
+        });
+      };
+
+      // Draw defaults on initial render
+      drawDefaultHighlights();
+
       parentItems.forEach((item) => {
         item.addEventListener("mouseenter", () => {
           const indexAttr = item.getAttribute("data-index");
@@ -578,12 +597,13 @@ export class InspectorAdapter implements InteractionMode {
             const fx = info.visualContext?.parentEffects[idx];
             if (fx && fx.element) {
               const rowRect = item.getBoundingClientRect();
+              this.controller.clearParentHighlights();
               this.controller.drawParentHighlight(fx, rowRect);
             }
           }
         });
         item.addEventListener("mouseleave", () => {
-          this.controller.clearParentHighlights();
+          drawDefaultHighlights();
         });
       });
     }

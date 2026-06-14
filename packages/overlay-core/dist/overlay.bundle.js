@@ -1063,6 +1063,21 @@
       const tooltipBox = this.controller.tooltipBox;
       if (tooltipBox) {
         const parentItems = tooltipBox.querySelectorAll(".hoversource-parent-item");
+        const drawDefaultHighlights = () => {
+          this.controller.clearParentHighlights();
+          parentItems.forEach((item) => {
+            const indexAttr = item.getAttribute("data-index");
+            if (indexAttr !== null) {
+              const idx = parseInt(indexAttr, 10);
+              const fx = info.visualContext?.parentEffects[idx];
+              if (fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path")) {
+                const rowRect = item.getBoundingClientRect();
+                this.controller.drawParentHighlight(fx, rowRect);
+              }
+            }
+          });
+        };
+        drawDefaultHighlights();
         parentItems.forEach((item) => {
           item.addEventListener("mouseenter", () => {
             const indexAttr = item.getAttribute("data-index");
@@ -1071,12 +1086,13 @@
               const fx = info.visualContext?.parentEffects[idx];
               if (fx && fx.element) {
                 const rowRect = item.getBoundingClientRect();
+                this.controller.clearParentHighlights();
                 this.controller.drawParentHighlight(fx, rowRect);
               }
             }
           });
           item.addEventListener("mouseleave", () => {
-            this.controller.clearParentHighlights();
+            drawDefaultHighlights();
           });
         });
       }
@@ -2705,8 +2721,7 @@ Suggested layout insertion (heuristic only):
       this.tooltipBox.style.top = `${y}px`;
     }
     drawParentHighlight(fx, rowRect) {
-      this.clearParentHighlights();
-      if (!this.container || !fx || !fx.element || !(fx.element instanceof HTMLElement))
+      if (!this.container || !fx || !fx.element || typeof fx.element !== "object" || fx.element.nodeType !== 1)
         return;
       const prop = fx.property;
       const isVisualEffect = prop === "mask-image" || prop === "clip-path" || prop.startsWith("overflow");

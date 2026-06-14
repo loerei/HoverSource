@@ -491,9 +491,7 @@ class OverlayEngine implements OverlayController {
   }
 
   public drawParentHighlight(fx: any, rowRect?: DOMRect): void {
-    this.clearParentHighlights();
-
-    if (!this.container || !fx || !fx.element || !(fx.element instanceof HTMLElement)) return;
+    if (!this.container || !fx || !fx.element || typeof fx.element !== "object" || fx.element.nodeType !== 1) return;
 
     // Filter properties to only visual modifier/scrolling ones
     const prop = fx.property;

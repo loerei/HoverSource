@@ -111,7 +111,7 @@ class OverlayEngine {
         width: 100vw;
         height: 100vh;
         pointer-events: none;
-        z-index: 999999;
+        z-index: 1000001;
       }
       .hoversource-leader-line {
         stroke: #a855f7;

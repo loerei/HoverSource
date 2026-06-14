@@ -88,6 +88,33 @@ export class InspectorAdapter implements InteractionMode {
 
     if (this.currentSourceInfo && this.controller.isUIVisible()) {
       this.controller.drawTooltip("", event);
+      
+      const tooltipBox = (this.controller as any).tooltipBox as HTMLElement | null;
+      if (tooltipBox && this.currentSourceInfo.visualContext) {
+        const parentItems = tooltipBox.querySelectorAll(".hoversource-parent-item");
+        const activeItems: { item: HTMLElement; fx: any }[] = [];
+        
+        parentItems.forEach((item) => {
+          if (item.classList.contains("hs-parent-active")) {
+            const indexAttr = item.getAttribute("data-index");
+            if (indexAttr !== null) {
+              const idx = parseInt(indexAttr, 10);
+              const fx = this.currentSourceInfo.visualContext.parentEffects[idx];
+              if (fx && fx.element) {
+                activeItems.push({ item: item as HTMLElement, fx });
+              }
+            }
+          }
+        });
+
+        if (activeItems.length > 0) {
+          this.controller.clearParentHighlights();
+          activeItems.forEach(({ item, fx }) => {
+            const rowRect = item.getBoundingClientRect();
+            this.controller.drawParentHighlight(fx, rowRect);
+          });
+        }
+      }
     }
   }
 

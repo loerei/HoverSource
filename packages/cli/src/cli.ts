@@ -33,8 +33,34 @@ function getArgs() {
       }
     } else if (arg.startsWith("-")) {
       const char = arg.slice(1);
-      if (char === "d") {
+      const eqIdx = char.indexOf("=");
+      const optionChar = eqIdx === -1 ? char : char.slice(0, eqIdx);
+      const val = eqIdx === -1 ? undefined : char.slice(eqIdx + 1);
+
+      const optionMap: Record<string, string> = {
+        p: "port",
+        t: "target",
+        e: "exec",
+        r: "root"
+      };
+
+      if (optionChar === "d") {
         args["dashboard"] = true;
+      } else if (optionChar === "h") {
+        args["help"] = true;
+      } else if (optionChar === "v") {
+        args["vue"] = true;
+      } else if (optionChar === "s") {
+        args["solid"] = true;
+      } else if (optionChar === "a") {
+        args["angular"] = true;
+      } else if (optionChar in optionMap) {
+        const key = optionMap[optionChar];
+        if (val !== undefined) {
+          args[key] = val;
+        } else if (i + 1 < process.argv.length && !process.argv[i + 1].startsWith("-")) {
+          args[key] = process.argv[++i];
+        }
       }
     } else if (!subcommand) {
       subcommand = arg; // e.g. "start", "dev"
@@ -881,11 +907,43 @@ async function uninstallInvasive(projectRoot: string) {
   console.log(`[HoverSource] Uninstallation complete.`);
 }
 
+function printHelp() {
+  console.log(`HoverSource CLI - Code intelligence overlay for web and Electron applications
+
+Usage:
+  hs [subcommand] [options]
+
+Subcommands:
+  install -v|-s|-a|--vue|--solid|--angular   Install framework integration plugins
+  uninstall                                  Uninstall framework integration plugins
+  [npm-script]                               Run an npm script from package.json with HoverSource enabled (e.g. hs start, hs dev)
+
+Options:
+  -r, --root=<path>                          Path to the project root directory (default: current directory)
+  -p, --port=<port>                          Port for the companion server (default: 3000)
+  --debug-port=<port>                        Debug port for remote debugging (default: 9222)
+  -t, --target=<url>                         Proxy mode target URL (for web/browser apps)
+  -e, --exec=<command>                       Exec mode command wrapper (for Electron apps)
+  --proxy-port=<port>                        Port for the local proxy server (default: target port + 1)
+  -d, --dashboard                            Open the HoverSource dashboard in browser on startup
+  -h, --help                                 Display this help message
+
+Examples:
+  hs start                                   Run the start script from package.json
+  hs -t http://localhost:5173                Launch companion server and proxy targeting localhost:5173
+  hs install -v                              Install Vue template inspector plugin`);
+}
+
 async function main() {
   // Self-heal any leftover patches from previous crashed/force-killed runs
   restoreLeftoverPatches();
 
   const { args, subcommand } = getArgs();
+
+  if (subcommand === "help" || args.help) {
+    printHelp();
+    process.exit(0);
+  }
   const projectRoot = path.resolve((args.root as string) || process.cwd());
 
   if (subcommand === "install") {

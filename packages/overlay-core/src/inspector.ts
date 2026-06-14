@@ -72,47 +72,66 @@ export function inspectVisualContext(element: HTMLElement, maxDepth = 32): Visua
   return result;
 }
 
-function checkMaskEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[]) {
+function checkMaskEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
   const mask = comp.maskImage || (comp as any).webkitMaskImage;
   if (mask && mask !== "none") {
-    parentEffects.push({ tagName, classList, property: "mask-image", value: mask });
+    parentEffects.push({ tagName, classList, property: "mask-image", value: mask, element: current });
   }
 }
 
-function checkBackdropEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[]) {
+function checkBackdropEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
   const backdropFilter = comp.backdropFilter || (comp as any).webkitBackdropFilter;
   if (backdropFilter && backdropFilter !== "none") {
-    parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter });
+    parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter, element: current });
   }
 }
 
-function checkFilterEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[]) {
+function checkFilterEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
   if (comp.filter && comp.filter !== "none") {
-    parentEffects.push({ tagName, classList, property: "filter", value: comp.filter });
+    parentEffects.push({ tagName, classList, property: "filter", value: comp.filter, element: current });
   }
 }
 
-function checkOpacityEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[]) {
+function checkOpacityEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
   if (comp.opacity && comp.opacity !== "1" && comp.opacity !== "") {
     const opacityVal = Number.parseFloat(comp.opacity);
     if (opacityVal < 1) {
-      parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity });
+      parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity, element: current });
     }
   }
 }
 
-function checkOverflowEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[]) {
+function checkOverflowEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
   if (comp.overflowY && (comp.overflowY === "auto" || comp.overflowY === "scroll" || comp.overflowY === "hidden")) {
-    parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY });
+    parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY, element: current });
   }
   if (comp.overflowX && (comp.overflowX === "auto" || comp.overflowX === "scroll" || comp.overflowX === "hidden")) {
-    parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX });
+    parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX, element: current });
   }
 }
 
-function checkPositionEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[]) {
-  if (comp.position && (comp.position === "sticky" || comp.position === "fixed")) {
-    parentEffects.push({ tagName, classList, property: "position", value: comp.position });
+function checkPositionEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
+  if (comp.position && (comp.position === "sticky" || comp.position === "fixed" || comp.position === "relative" || comp.position === "absolute")) {
+    parentEffects.push({ tagName, classList, property: "position", value: comp.position, element: current });
+  }
+}
+
+function checkDisplayEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
+  if (comp.display && (comp.display === "flex" || comp.display === "grid")) {
+    parentEffects.push({ tagName, classList, property: "display", value: comp.display, element: current });
+  }
+}
+
+function checkTransformEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
+  if (comp.transform && comp.transform !== "none" && comp.transform !== "") {
+    parentEffects.push({ tagName, classList, property: "transform", value: comp.transform, element: current });
+  }
+}
+
+function checkClipPathEffect(comp: CSSStyleDeclaration, tagName: string, classList: string[], parentEffects: ParentVisualEffect[], current: HTMLElement) {
+  const clipPath = comp.clipPath || (comp as any).webkitClipPath;
+  if (clipPath && clipPath !== "none" && clipPath !== "") {
+    parentEffects.push({ tagName, classList, property: "clip-path", value: clipPath, element: current });
   }
 }
 
@@ -128,12 +147,15 @@ function inspectParentElementStyle(current: HTMLElement, parentEffects: ParentVi
     const comp = globalThis.getComputedStyle(current);
     const classList = Array.from(current.classList);
 
-    checkMaskEffect(comp, tagName, classList, effects);
-    checkBackdropEffect(comp, tagName, classList, effects);
-    checkFilterEffect(comp, tagName, classList, effects);
-    checkOpacityEffect(comp, tagName, classList, effects);
-    checkOverflowEffect(comp, tagName, classList, effects);
-    checkPositionEffect(comp, tagName, classList, effects);
+    checkMaskEffect(comp, tagName, classList, effects, current);
+    checkBackdropEffect(comp, tagName, classList, effects, current);
+    checkFilterEffect(comp, tagName, classList, effects, current);
+    checkOpacityEffect(comp, tagName, classList, effects, current);
+    checkOverflowEffect(comp, tagName, classList, effects, current);
+    checkPositionEffect(comp, tagName, classList, effects, current);
+    checkDisplayEffect(comp, tagName, classList, effects, current);
+    checkTransformEffect(comp, tagName, classList, effects, current);
+    checkClipPathEffect(comp, tagName, classList, effects, current);
 
     parentStyleCache.set(current, effects);
     parentEffects.push(...effects);

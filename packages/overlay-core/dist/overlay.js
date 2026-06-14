@@ -8,6 +8,7 @@ class OverlayEngine {
     container = null;
     outlineBox = null;
     tooltipBox = null;
+    parentHighlightElements = [];
     uiVisible = true;
     isFrozen = false;
     freezeStyle = null;
@@ -94,6 +95,61 @@ class OverlayEngine {
         transition: all 0.05s ease-out;
         pointer-events: none;
         box-sizing: border-box;
+      }
+      .hoversource-parent-outline {
+        position: absolute;
+        border: 2px dashed #a855f7;
+        background-color: rgba(168, 85, 247, 0.05);
+        pointer-events: none;
+        box-sizing: border-box;
+        z-index: 999998;
+      }
+      .hoversource-parent-svg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 999999;
+      }
+      .hoversource-leader-line {
+        stroke: #a855f7;
+        stroke-width: 1.5;
+        fill: none;
+        stroke-dasharray: 2 2;
+      }
+      .hoversource-leader-dot {
+        fill: #a855f7;
+        stroke: #c084fc;
+        stroke-width: 1.5;
+      }
+      .hoversource-parent-badge {
+        position: absolute;
+        background: #a855f7;
+        color: #ffffff;
+        font-size: 10px;
+        font-family: monospace;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(168, 85, 247, 0.35);
+        pointer-events: auto;
+        white-space: nowrap;
+        z-index: 1000000;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .hoversource-parent-badge-title {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        padding-bottom: 1px;
+        margin-bottom: 2px;
+        font-weight: bold;
+      }
+      .hoversource-parent-badge-effect {
+        font-size: 9px;
+        color: #f3e8ff;
       }
       .hoversource-tooltip {
         position: absolute;
@@ -405,11 +461,107 @@ class OverlayEngine {
         this.tooltipBox.style.left = `${x}px`;
         this.tooltipBox.style.top = `${y}px`;
     }
+    drawParentHighlights(effects) {
+        this.clearParentHighlights();
+        if (!this.container || !effects || effects.length === 0)
+            return;
+        // Group effects by parent element
+        const grouped = new Map();
+        for (const fx of effects) {
+            if (fx.element && fx.element instanceof HTMLElement) {
+                if (!grouped.has(fx.element)) {
+                    grouped.set(fx.element, []);
+                }
+                grouped.get(fx.element).push(fx);
+            }
+        }
+        if (grouped.size === 0)
+            return;
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("class", "hoversource-parent-svg");
+        this.container.appendChild(svg);
+        this.parentHighlightElements.push(svg);
+        let index = 0;
+        for (const [parentEl, parentEffects] of grouped.entries()) {
+            const rect = parentEl.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0)
+                continue;
+            // Outline frame
+            const frame = document.createElement("div");
+            frame.className = "hoversource-parent-outline";
+            frame.style.width = `${rect.width}px`;
+            frame.style.height = `${rect.height}px`;
+            frame.style.left = `${rect.left}px`;
+            frame.style.top = `${rect.top}px`;
+            this.container.appendChild(frame);
+            this.parentHighlightElements.push(frame);
+            // Callout points
+            const x1 = rect.right;
+            const y1 = rect.top;
+            const dir = (x1 + 180 > window.innerWidth) ? -1 : 1;
+            const vOffset = index * 30;
+            const x_mid = x1 + dir * 20;
+            const y_mid = y1 - 20 - vOffset;
+            const x_end = x_mid + dir * 30;
+            const y_end = y_mid;
+            // Draw target dot
+            const dotCircle = document.createElementNS(svgNS, "circle");
+            dotCircle.setAttribute("cx", x1.toString());
+            dotCircle.setAttribute("cy", y1.toString());
+            dotCircle.setAttribute("r", "5");
+            dotCircle.setAttribute("class", "hoversource-leader-dot");
+            svg.appendChild(dotCircle);
+            const dotInner = document.createElementNS(svgNS, "circle");
+            dotInner.setAttribute("cx", x1.toString());
+            dotInner.setAttribute("cy", y1.toString());
+            dotInner.setAttribute("r", "1.5");
+            dotInner.setAttribute("fill", "#ffffff");
+            svg.appendChild(dotInner);
+            // Draw leader line path
+            const path = document.createElementNS(svgNS, "path");
+            path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${y_mid} L ${x_end} ${y_end}`);
+            path.setAttribute("class", "hoversource-leader-line");
+            svg.appendChild(path);
+            // Create floating badge
+            const badge = document.createElement("div");
+            badge.className = "hoversource-parent-badge";
+            const badgeTitle = document.createElement("div");
+            badgeTitle.className = "hoversource-parent-badge-title";
+            const classStr = parentEffects[0].classList.length > 0 ? `.${parentEffects[0].classList.join(".")}` : "";
+            badgeTitle.textContent = `${parentEffects[0].tagName}${classStr}`;
+            badge.appendChild(badgeTitle);
+            const uniqueProps = Array.from(new Set(parentEffects.map(fx => fx.property)));
+            for (const prop of uniqueProps) {
+                const effectEl = document.createElement("div");
+                effectEl.className = "hoversource-parent-badge-effect";
+                const fxVal = parentEffects.find(fx => fx.property === prop)?.value || "";
+                effectEl.textContent = `${prop}: ${fxVal}`;
+                badge.appendChild(effectEl);
+            }
+            this.container.appendChild(badge);
+            this.parentHighlightElements.push(badge);
+            const badgeHeight = badge.offsetHeight || 25;
+            const badgeWidth = badge.offsetWidth || 120;
+            const badgeX = (dir === 1) ? x_end : x_end - badgeWidth;
+            const badgeY = y_end - badgeHeight / 2;
+            badge.style.left = `${badgeX}px`;
+            badge.style.top = `${badgeY}px`;
+            index++;
+        }
+    }
+    clearParentHighlights() {
+        for (const el of this.parentHighlightElements) {
+            el.remove();
+        }
+        this.parentHighlightElements = [];
+    }
     clear() {
         if (this.outlineBox)
             this.outlineBox.style.display = "none";
         if (this.tooltipBox)
             this.tooltipBox.style.display = "none";
+        this.clearParentHighlights();
     }
     async copyToClipboard(text) {
         await navigator.clipboard.writeText(text);

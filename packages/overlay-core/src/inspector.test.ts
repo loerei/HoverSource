@@ -89,4 +89,47 @@ describe("inspectVisualContext", () => {
     const context = inspectVisualContext(currentEl, 10);
     expect(context.parentEffects.length).toBe(10);
   });
+
+  it("should capture relative, absolute, flex, grid, transform, and clip-path styles and element reference", () => {
+    const parentEl = {
+      tagName: "DIV",
+      classList: ["container-class"],
+      parentElement: null,
+      _mockComputedStyle: {
+        position: "relative",
+        display: "flex",
+        transform: "translate(10px, 20px)",
+        clipPath: "circle(50%)"
+      }
+    } as any;
+
+    const targetEl = {
+      tagName: "SPAN",
+      classList: [],
+      parentElement: parentEl,
+      _mockComputedStyle: { display: "inline" }
+    } as any;
+
+    const originalGetComputedStyle = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = vi.fn().mockImplementation((el: any) => {
+      return el._mockComputedStyle || {};
+    }) as any;
+
+    try {
+      const context = inspectVisualContext(targetEl);
+      // It should collect: position (relative), display (flex), transform, clip-path
+      const props = context.parentEffects.map(fx => fx.property);
+      expect(props).toContain("position");
+      expect(props).toContain("display");
+      expect(props).toContain("transform");
+      expect(props).toContain("clip-path");
+
+      // Verify that element reference is stored
+      context.parentEffects.forEach(fx => {
+        expect(fx.element).toBe(parentEl);
+      });
+    } finally {
+      globalThis.getComputedStyle = originalGetComputedStyle;
+    }
+  });
 });

@@ -181,6 +181,7 @@ export class InspectorAdapter {
         info.visualContext = inspectVisualContext(target, this.maxTraversalDepth);
         this.currentSourceInfo = info;
         if (this.controller.isUIVisible()) {
+            this.controller.drawParentHighlights(info.visualContext?.parentEffects || []);
             this.renderTooltip(event);
         }
         if (info.fileName) {

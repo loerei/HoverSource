@@ -23,6 +23,7 @@ describe("InspectorAdapter - Two-Phase Debounced Hover", () => {
             getConfig: () => ({ minimalModeByDefault: false }),
             isUIVisible: () => true,
             drawHighlight: vi.fn(),
+            drawParentHighlights: vi.fn(),
             drawTooltip: vi.fn(),
             clear: vi.fn(),
             setFreezeMode: vi.fn(),
@@ -60,6 +61,7 @@ describe("InspectorAdapter - Two-Phase Debounced Hover", () => {
         // Phase B: Now it should have run the full resolution
         expect(adapter["currentSourceInfo"]).not.toBeNull();
         expect(adapter["currentSourceInfo"].tagName).toBe("button");
+        expect(mockController.drawParentHighlights).toHaveBeenCalledWith(expect.any(Array));
         vi.useRealTimers();
     });
 });

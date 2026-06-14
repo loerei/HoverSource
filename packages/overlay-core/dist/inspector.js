@@ -58,42 +58,58 @@ export function inspectVisualContext(element, maxDepth = 32) {
     contextCache.set(element, result);
     return result;
 }
-function checkMaskEffect(comp, tagName, classList, parentEffects) {
+function checkMaskEffect(comp, tagName, classList, parentEffects, current) {
     const mask = comp.maskImage || comp.webkitMaskImage;
     if (mask && mask !== "none") {
-        parentEffects.push({ tagName, classList, property: "mask-image", value: mask });
+        parentEffects.push({ tagName, classList, property: "mask-image", value: mask, element: current });
     }
 }
-function checkBackdropEffect(comp, tagName, classList, parentEffects) {
+function checkBackdropEffect(comp, tagName, classList, parentEffects, current) {
     const backdropFilter = comp.backdropFilter || comp.webkitBackdropFilter;
     if (backdropFilter && backdropFilter !== "none") {
-        parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter });
+        parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter, element: current });
     }
 }
-function checkFilterEffect(comp, tagName, classList, parentEffects) {
+function checkFilterEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.filter && comp.filter !== "none") {
-        parentEffects.push({ tagName, classList, property: "filter", value: comp.filter });
+        parentEffects.push({ tagName, classList, property: "filter", value: comp.filter, element: current });
     }
 }
-function checkOpacityEffect(comp, tagName, classList, parentEffects) {
+function checkOpacityEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.opacity && comp.opacity !== "1" && comp.opacity !== "") {
         const opacityVal = Number.parseFloat(comp.opacity);
         if (opacityVal < 1) {
-            parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity });
+            parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity, element: current });
         }
     }
 }
-function checkOverflowEffect(comp, tagName, classList, parentEffects) {
+function checkOverflowEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.overflowY && (comp.overflowY === "auto" || comp.overflowY === "scroll" || comp.overflowY === "hidden")) {
-        parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY });
+        parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY, element: current });
     }
     if (comp.overflowX && (comp.overflowX === "auto" || comp.overflowX === "scroll" || comp.overflowX === "hidden")) {
-        parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX });
+        parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX, element: current });
     }
 }
-function checkPositionEffect(comp, tagName, classList, parentEffects) {
-    if (comp.position && (comp.position === "sticky" || comp.position === "fixed")) {
-        parentEffects.push({ tagName, classList, property: "position", value: comp.position });
+function checkPositionEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.position && (comp.position === "sticky" || comp.position === "fixed" || comp.position === "relative" || comp.position === "absolute")) {
+        parentEffects.push({ tagName, classList, property: "position", value: comp.position, element: current });
+    }
+}
+function checkDisplayEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.display && (comp.display === "flex" || comp.display === "grid")) {
+        parentEffects.push({ tagName, classList, property: "display", value: comp.display, element: current });
+    }
+}
+function checkTransformEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.transform && comp.transform !== "none" && comp.transform !== "") {
+        parentEffects.push({ tagName, classList, property: "transform", value: comp.transform, element: current });
+    }
+}
+function checkClipPathEffect(comp, tagName, classList, parentEffects, current) {
+    const clipPath = comp.clipPath || comp.webkitClipPath;
+    if (clipPath && clipPath !== "none" && clipPath !== "") {
+        parentEffects.push({ tagName, classList, property: "clip-path", value: clipPath, element: current });
     }
 }
 function inspectParentElementStyle(current, parentEffects) {
@@ -106,12 +122,15 @@ function inspectParentElementStyle(current, parentEffects) {
     try {
         const comp = globalThis.getComputedStyle(current);
         const classList = Array.from(current.classList);
-        checkMaskEffect(comp, tagName, classList, effects);
-        checkBackdropEffect(comp, tagName, classList, effects);
-        checkFilterEffect(comp, tagName, classList, effects);
-        checkOpacityEffect(comp, tagName, classList, effects);
-        checkOverflowEffect(comp, tagName, classList, effects);
-        checkPositionEffect(comp, tagName, classList, effects);
+        checkMaskEffect(comp, tagName, classList, effects, current);
+        checkBackdropEffect(comp, tagName, classList, effects, current);
+        checkFilterEffect(comp, tagName, classList, effects, current);
+        checkOpacityEffect(comp, tagName, classList, effects, current);
+        checkOverflowEffect(comp, tagName, classList, effects, current);
+        checkPositionEffect(comp, tagName, classList, effects, current);
+        checkDisplayEffect(comp, tagName, classList, effects, current);
+        checkTransformEffect(comp, tagName, classList, effects, current);
+        checkClipPathEffect(comp, tagName, classList, effects, current);
         parentStyleCache.set(current, effects);
         parentEffects.push(...effects);
     }

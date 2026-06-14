@@ -195,6 +195,7 @@ export class InspectorAdapter implements InteractionMode {
     this.currentSourceInfo = info;
 
     if (this.controller.isUIVisible()) {
+      this.controller.drawParentHighlights(info.visualContext?.parentEffects || []);
       this.renderTooltip(event);
     }
 

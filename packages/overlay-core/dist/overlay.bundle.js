@@ -336,6 +336,7 @@
   var SourceResolver = class {
     adapters = [];
     fiberAdapter;
+    nodeCache = /* @__PURE__ */ new WeakMap();
     constructor() {
       this.fiberAdapter = new ReactFiberAdapter();
       this.adapters.push(this.fiberAdapter);
@@ -345,6 +346,18 @@
       this.adapters.push(new SolidAdapter());
       this.adapters.push(new AstroAdapter());
       this.adapters.push(new AngularAdapter());
+      this.setupMutationObserver();
+    }
+    setupMutationObserver() {
+      if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+        const observer = new MutationObserver(() => {
+          this.clearCache();
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+      }
+    }
+    clearCache() {
+      this.nodeCache = /* @__PURE__ */ new WeakMap();
     }
     registerAdapter(adapter) {
       this.adapters.push(adapter);
@@ -370,11 +383,18 @@
      * Always resolves: selector, display, position.
      * Resolves conditionally: layoutProps (flex/grid only), fileName/lineNumber/componentName (via adapters).
      */
-    resolveAncestors(element, maxDepth = 8) {
+    resolveAncestors(element, maxDepth = 32) {
       const results = [];
       let current = element.parentElement;
       let depth = 0;
-      while (current && current !== document.documentElement && depth < maxDepth) {
+      const limit = Math.min(maxDepth, 32);
+      while (current && current !== document.documentElement && depth < limit) {
+        if (this.nodeCache.has(current)) {
+          results.push(this.nodeCache.get(current));
+          current = current.parentElement;
+          depth++;
+          continue;
+        }
         try {
           const comp = globalThis.getComputedStyle(current);
           const display = comp.display || "block";
@@ -405,6 +425,7 @@
             info.lineNumber = sourceInfo.lineNumber;
             info.componentName = sourceInfo.componentName;
           }
+          this.nodeCache.set(current, info);
           results.push(info);
         } catch {
         }
@@ -422,7 +443,22 @@
   };
 
   // src/inspector.ts
-  function inspectVisualContext(element) {
+  var contextCache = /* @__PURE__ */ new WeakMap();
+  var parentStyleCache = /* @__PURE__ */ new WeakMap();
+  function clearInspectorCache() {
+    contextCache = /* @__PURE__ */ new WeakMap();
+    parentStyleCache = /* @__PURE__ */ new WeakMap();
+  }
+  if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+    const observer = new MutationObserver(() => {
+      clearInspectorCache();
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+  }
+  function inspectVisualContext(element, maxDepth = 32) {
+    if (contextCache.has(element)) {
+      return contextCache.get(element);
+    }
     const parentEffects = [];
     const layoutConstraints = {};
     try {
@@ -447,7 +483,8 @@
     }
     let current = element.parentElement;
     let depth = 0;
-    while (current && depth < 5) {
+    const limit = Math.min(maxDepth, 100);
+    while (current && depth < limit) {
       const tagName = current.tagName.toLowerCase();
       if (tagName === "body" || tagName === "html") {
         break;
@@ -456,60 +493,88 @@
       current = current.parentElement;
       depth++;
     }
-    return {
+    const result = {
       parentEffects,
       layoutConstraints
     };
+    contextCache.set(element, result);
+    return result;
   }
-  function checkMaskEffect(comp, tagName, classList, parentEffects) {
+  function checkMaskEffect(comp, tagName, classList, parentEffects, current) {
     const mask = comp.maskImage || comp.webkitMaskImage;
     if (mask && mask !== "none") {
-      parentEffects.push({ tagName, classList, property: "mask-image", value: mask });
+      parentEffects.push({ tagName, classList, property: "mask-image", value: mask, element: current });
     }
   }
-  function checkBackdropEffect(comp, tagName, classList, parentEffects) {
+  function checkBackdropEffect(comp, tagName, classList, parentEffects, current) {
     const backdropFilter = comp.backdropFilter || comp.webkitBackdropFilter;
     if (backdropFilter && backdropFilter !== "none") {
-      parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter });
+      parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter, element: current });
     }
   }
-  function checkFilterEffect(comp, tagName, classList, parentEffects) {
+  function checkFilterEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.filter && comp.filter !== "none") {
-      parentEffects.push({ tagName, classList, property: "filter", value: comp.filter });
+      parentEffects.push({ tagName, classList, property: "filter", value: comp.filter, element: current });
     }
   }
-  function checkOpacityEffect(comp, tagName, classList, parentEffects) {
+  function checkOpacityEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.opacity && comp.opacity !== "1" && comp.opacity !== "") {
       const opacityVal = Number.parseFloat(comp.opacity);
       if (opacityVal < 1) {
-        parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity });
+        parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity, element: current });
       }
     }
   }
-  function checkOverflowEffect(comp, tagName, classList, parentEffects) {
+  function checkOverflowEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.overflowY && (comp.overflowY === "auto" || comp.overflowY === "scroll" || comp.overflowY === "hidden")) {
-      parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY });
+      parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY, element: current });
     }
     if (comp.overflowX && (comp.overflowX === "auto" || comp.overflowX === "scroll" || comp.overflowX === "hidden")) {
-      parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX });
+      parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX, element: current });
     }
   }
-  function checkPositionEffect(comp, tagName, classList, parentEffects) {
-    if (comp.position && (comp.position === "sticky" || comp.position === "fixed")) {
-      parentEffects.push({ tagName, classList, property: "position", value: comp.position });
+  function checkPositionEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.position && (comp.position === "sticky" || comp.position === "fixed" || comp.position === "relative" || comp.position === "absolute")) {
+      parentEffects.push({ tagName, classList, property: "position", value: comp.position, element: current });
+    }
+  }
+  function checkDisplayEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.display && (comp.display === "flex" || comp.display === "grid")) {
+      parentEffects.push({ tagName, classList, property: "display", value: comp.display, element: current });
+    }
+  }
+  function checkTransformEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.transform && comp.transform !== "none" && comp.transform !== "") {
+      parentEffects.push({ tagName, classList, property: "transform", value: comp.transform, element: current });
+    }
+  }
+  function checkClipPathEffect(comp, tagName, classList, parentEffects, current) {
+    const clipPath = comp.clipPath || comp.webkitClipPath;
+    if (clipPath && clipPath !== "none" && clipPath !== "") {
+      parentEffects.push({ tagName, classList, property: "clip-path", value: clipPath, element: current });
     }
   }
   function inspectParentElementStyle(current, parentEffects) {
+    if (parentStyleCache.has(current)) {
+      parentEffects.push(...parentStyleCache.get(current));
+      return;
+    }
+    const effects = [];
     const tagName = current.tagName.toLowerCase();
     try {
       const comp = globalThis.getComputedStyle(current);
       const classList = Array.from(current.classList);
-      checkMaskEffect(comp, tagName, classList, parentEffects);
-      checkBackdropEffect(comp, tagName, classList, parentEffects);
-      checkFilterEffect(comp, tagName, classList, parentEffects);
-      checkOpacityEffect(comp, tagName, classList, parentEffects);
-      checkOverflowEffect(comp, tagName, classList, parentEffects);
-      checkPositionEffect(comp, tagName, classList, parentEffects);
+      checkMaskEffect(comp, tagName, classList, effects, current);
+      checkBackdropEffect(comp, tagName, classList, effects, current);
+      checkFilterEffect(comp, tagName, classList, effects, current);
+      checkOpacityEffect(comp, tagName, classList, effects, current);
+      checkOverflowEffect(comp, tagName, classList, effects, current);
+      checkPositionEffect(comp, tagName, classList, effects, current);
+      checkDisplayEffect(comp, tagName, classList, effects, current);
+      checkTransformEffect(comp, tagName, classList, effects, current);
+      checkClipPathEffect(comp, tagName, classList, effects, current);
+      parentStyleCache.set(current, effects);
+      parentEffects.push(...effects);
     } catch (e) {
       console.warn(`[HoverSource] Failed to compute styles for parent element <${tagName}>`, e);
     }
@@ -527,6 +592,8 @@
     minimalMode = false;
     currentElement = null;
     currentSourceInfo = null;
+    debounceTimer = null;
+    maxTraversalDepth = 32;
     // --- Layer Picker state ---
     layerStack = [];
     activeLayerIndex = 0;
@@ -538,12 +605,17 @@
       this.minimalMode = !!config?.minimalModeByDefault;
       this.layerPickerEnabled = config?.layerPickerEnabled !== false;
       this.layerScrollModifiers = config?.layerPickerScroll ?? { altKey: true, shiftKey: true, ctrlKey: false };
+      this.maxTraversalDepth = config?.maxTraversalDepth ?? 32;
       if (this.layerPickerEnabled) {
         window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
       }
       console.log("[HoverSource] Activated Inspector Mode");
     }
     deactivate() {
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
+      }
       this.controller.clear();
       this.currentElement = null;
       this.currentSourceInfo = null;
@@ -564,7 +636,7 @@
         if (container && (el === container || container.contains(el)))
           return false;
         return true;
-      });
+      }).slice(0, this.maxTraversalDepth);
       this.activeLayerIndex = 0;
       this.resolveAndShowLayer(this.activeLayerIndex, event);
     }
@@ -590,7 +662,11 @@
         this.isFrozen = !this.isFrozen;
         this.controller.setFreezeMode(this.isFrozen);
         console.log(`[HoverSource] Freeze: ${this.isFrozen}`);
-        this.renderTooltip({ clientX: 0, clientY: 0 });
+        if (this.isFrozen && this.currentElement) {
+          this.flushResolve(this.currentElement, { clientX: 0, clientY: 0 });
+        } else {
+          this.renderTooltip({ clientX: 0, clientY: 0 });
+        }
       } else if (command === "toggleMinimal") {
         this.minimalMode = !this.minimalMode;
         console.log(`[HoverSource] Minimal Mode: ${this.minimalMode}`);
@@ -603,6 +679,7 @@
     }
     onConfigUpdate(newConfig) {
       this.minimalMode = !!newConfig.minimalModeByDefault;
+      this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
       const newEnabled = newConfig.layerPickerEnabled !== false;
       if (newEnabled !== this.layerPickerEnabled) {
         this.layerPickerEnabled = newEnabled;
@@ -635,7 +712,30 @@
         this.controller.clear();
         this.currentElement = null;
         this.currentSourceInfo = null;
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
+          this.debounceTimer = null;
+        }
         return;
+      }
+      this.currentElement = target;
+      if (this.controller.isUIVisible()) {
+        this.controller.drawHighlight(target, this.isFrozen);
+      }
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+      }
+      this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = null;
+        if (this.currentElement !== target)
+          return;
+        this.flushResolve(target, event);
+      }, 50);
+    }
+    flushResolve(target, event) {
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
       }
       const info = this.resolver.resolve(target) || {
         componentName: target.tagName.toLowerCase(),
@@ -648,11 +748,10 @@
         visualContext: null,
         staticMetadata: null
       };
-      info.visualContext = inspectVisualContext(target);
-      this.currentElement = target;
+      info.visualContext = inspectVisualContext(target, this.maxTraversalDepth);
       this.currentSourceInfo = info;
       if (this.controller.isUIVisible()) {
-        this.controller.drawHighlight(target, this.isFrozen);
+        this.controller.drawParentHighlights(info.visualContext?.parentEffects || []);
         this.renderTooltip(event);
       }
       if (info.fileName) {
@@ -1210,6 +1309,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
     badgeElementH = null;
     badgeElementV = null;
     dragBlocker = null;
+    maxTraversalDepth = 32;
     activate(controller) {
       this.controller = controller;
       this.isFrozen = false;
@@ -1220,6 +1320,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
       this.targetElement = null;
       this.anchorHElement = null;
       this.anchorVElement = null;
+      this.maxTraversalDepth = controller.getConfig()?.maxTraversalDepth ?? 32;
       this.crosshairX = globalThis.innerWidth / 2;
       this.crosshairY = globalThis.innerHeight / 2;
       this.lastMouseX = this.crosshairX;
@@ -1942,7 +2043,7 @@ Suggested layout insertion (heuristic only):
       const isHAndVSame = this.anchorHElement && this.anchorHElement === this.anchorVElement;
       const selector = this.getTargetSelector();
       const anchorForContext = this.anchorHElement || this.anchorVElement || this.targetElement;
-      const ancestors = this.resolver.resolveAncestors(anchorForContext, 8);
+      const ancestors = this.resolver.resolveAncestors(anchorForContext, this.maxTraversalDepth);
       const anchorDisplayInfo = this.getAnchorDisplayInfo(anchorForContext);
       const anchorElementDisplay = anchorDisplayInfo.display;
       const anchorDisplayNote = anchorDisplayInfo.note;
@@ -1988,6 +2089,7 @@ Suggested layout insertion (heuristic only):
       this.controller.copyToClipboard(text);
     }
     onConfigUpdate(newConfig) {
+      this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
     }
     onUIVisibilityChanged(visible) {
       if (this.svgOverlay) {
@@ -2143,6 +2245,7 @@ Suggested layout insertion (heuristic only):
     container = null;
     outlineBox = null;
     tooltipBox = null;
+    parentHighlightElements = [];
     uiVisible = true;
     isFrozen = false;
     freezeStyle = null;
@@ -2192,6 +2295,7 @@ Suggested layout insertion (heuristic only):
           minimalModeByDefault: false,
           snappingThreshold: 15,
           desnappingThreshold: 15,
+          maxTraversalDepth: 32,
           shortcuts: {
             toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
             toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
@@ -2225,6 +2329,61 @@ Suggested layout insertion (heuristic only):
         transition: all 0.05s ease-out;
         pointer-events: none;
         box-sizing: border-box;
+      }
+      .hoversource-parent-outline {
+        position: absolute;
+        border: 2px dashed #a855f7;
+        background-color: rgba(168, 85, 247, 0.05);
+        pointer-events: none;
+        box-sizing: border-box;
+        z-index: 999998;
+      }
+      .hoversource-parent-svg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 999999;
+      }
+      .hoversource-leader-line {
+        stroke: #a855f7;
+        stroke-width: 1.5;
+        fill: none;
+        stroke-dasharray: 2 2;
+      }
+      .hoversource-leader-dot {
+        fill: #a855f7;
+        stroke: #c084fc;
+        stroke-width: 1.5;
+      }
+      .hoversource-parent-badge {
+        position: absolute;
+        background: #a855f7;
+        color: #ffffff;
+        font-size: 10px;
+        font-family: monospace;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(168, 85, 247, 0.35);
+        pointer-events: auto;
+        white-space: nowrap;
+        z-index: 1000000;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .hoversource-parent-badge-title {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        padding-bottom: 1px;
+        margin-bottom: 2px;
+        font-weight: bold;
+      }
+      .hoversource-parent-badge-effect {
+        font-size: 9px;
+        color: #f3e8ff;
       }
       .hoversource-tooltip {
         position: absolute;
@@ -2523,11 +2682,101 @@ Suggested layout insertion (heuristic only):
       this.tooltipBox.style.left = `${x}px`;
       this.tooltipBox.style.top = `${y}px`;
     }
+    drawParentHighlights(effects) {
+      this.clearParentHighlights();
+      if (!this.container || !effects || effects.length === 0)
+        return;
+      const grouped = /* @__PURE__ */ new Map();
+      for (const fx of effects) {
+        if (fx.element && fx.element instanceof HTMLElement) {
+          if (!grouped.has(fx.element)) {
+            grouped.set(fx.element, []);
+          }
+          grouped.get(fx.element).push(fx);
+        }
+      }
+      if (grouped.size === 0)
+        return;
+      const svgNS = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("class", "hoversource-parent-svg");
+      this.container.appendChild(svg);
+      this.parentHighlightElements.push(svg);
+      let index = 0;
+      for (const [parentEl, parentEffects] of grouped.entries()) {
+        const rect = parentEl.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0)
+          continue;
+        const frame = document.createElement("div");
+        frame.className = "hoversource-parent-outline";
+        frame.style.width = `${rect.width}px`;
+        frame.style.height = `${rect.height}px`;
+        frame.style.left = `${rect.left}px`;
+        frame.style.top = `${rect.top}px`;
+        this.container.appendChild(frame);
+        this.parentHighlightElements.push(frame);
+        const x1 = rect.right;
+        const y1 = rect.top;
+        const dir = x1 + 180 > window.innerWidth ? -1 : 1;
+        const vOffset = index * 30;
+        const x_mid = x1 + dir * 20;
+        const y_mid = y1 - 20 - vOffset;
+        const x_end = x_mid + dir * 30;
+        const y_end = y_mid;
+        const dotCircle = document.createElementNS(svgNS, "circle");
+        dotCircle.setAttribute("cx", x1.toString());
+        dotCircle.setAttribute("cy", y1.toString());
+        dotCircle.setAttribute("r", "5");
+        dotCircle.setAttribute("class", "hoversource-leader-dot");
+        svg.appendChild(dotCircle);
+        const dotInner = document.createElementNS(svgNS, "circle");
+        dotInner.setAttribute("cx", x1.toString());
+        dotInner.setAttribute("cy", y1.toString());
+        dotInner.setAttribute("r", "1.5");
+        dotInner.setAttribute("fill", "#ffffff");
+        svg.appendChild(dotInner);
+        const path = document.createElementNS(svgNS, "path");
+        path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${y_mid} L ${x_end} ${y_end}`);
+        path.setAttribute("class", "hoversource-leader-line");
+        svg.appendChild(path);
+        const badge = document.createElement("div");
+        badge.className = "hoversource-parent-badge";
+        const badgeTitle = document.createElement("div");
+        badgeTitle.className = "hoversource-parent-badge-title";
+        const classStr = parentEffects[0].classList.length > 0 ? `.${parentEffects[0].classList.join(".")}` : "";
+        badgeTitle.textContent = `${parentEffects[0].tagName}${classStr}`;
+        badge.appendChild(badgeTitle);
+        const uniqueProps = Array.from(new Set(parentEffects.map((fx) => fx.property)));
+        for (const prop of uniqueProps) {
+          const effectEl = document.createElement("div");
+          effectEl.className = "hoversource-parent-badge-effect";
+          const fxVal = parentEffects.find((fx) => fx.property === prop)?.value || "";
+          effectEl.textContent = `${prop}: ${fxVal}`;
+          badge.appendChild(effectEl);
+        }
+        this.container.appendChild(badge);
+        this.parentHighlightElements.push(badge);
+        const badgeHeight = badge.offsetHeight || 25;
+        const badgeWidth = badge.offsetWidth || 120;
+        const badgeX = dir === 1 ? x_end : x_end - badgeWidth;
+        const badgeY = y_end - badgeHeight / 2;
+        badge.style.left = `${badgeX}px`;
+        badge.style.top = `${badgeY}px`;
+        index++;
+      }
+    }
+    clearParentHighlights() {
+      for (const el of this.parentHighlightElements) {
+        el.remove();
+      }
+      this.parentHighlightElements = [];
+    }
     clear() {
       if (this.outlineBox)
         this.outlineBox.style.display = "none";
       if (this.tooltipBox)
         this.tooltipBox.style.display = "none";
+      this.clearParentHighlights();
     }
     async copyToClipboard(text) {
       await navigator.clipboard.writeText(text);

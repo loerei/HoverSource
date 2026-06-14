@@ -336,6 +336,7 @@
   var SourceResolver = class {
     adapters = [];
     fiberAdapter;
+    nodeCache = /* @__PURE__ */ new WeakMap();
     constructor() {
       this.fiberAdapter = new ReactFiberAdapter();
       this.adapters.push(this.fiberAdapter);
@@ -345,6 +346,18 @@
       this.adapters.push(new SolidAdapter());
       this.adapters.push(new AstroAdapter());
       this.adapters.push(new AngularAdapter());
+      this.setupMutationObserver();
+    }
+    setupMutationObserver() {
+      if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+        const observer = new MutationObserver(() => {
+          this.clearCache();
+        });
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+      }
+    }
+    clearCache() {
+      this.nodeCache = /* @__PURE__ */ new WeakMap();
     }
     registerAdapter(adapter) {
       this.adapters.push(adapter);
@@ -370,11 +383,18 @@
      * Always resolves: selector, display, position.
      * Resolves conditionally: layoutProps (flex/grid only), fileName/lineNumber/componentName (via adapters).
      */
-    resolveAncestors(element, maxDepth = 8) {
+    resolveAncestors(element, maxDepth = 32) {
       const results = [];
       let current = element.parentElement;
       let depth = 0;
-      while (current && current !== document.documentElement && depth < maxDepth) {
+      const limit = Math.min(maxDepth, 32);
+      while (current && current !== document.documentElement && depth < limit) {
+        if (this.nodeCache.has(current)) {
+          results.push(this.nodeCache.get(current));
+          current = current.parentElement;
+          depth++;
+          continue;
+        }
         try {
           const comp = globalThis.getComputedStyle(current);
           const display = comp.display || "block";
@@ -405,6 +425,7 @@
             info.lineNumber = sourceInfo.lineNumber;
             info.componentName = sourceInfo.componentName;
           }
+          this.nodeCache.set(current, info);
           results.push(info);
         } catch {
         }
@@ -422,7 +443,22 @@
   };
 
   // src/inspector.ts
-  function inspectVisualContext(element) {
+  var contextCache = /* @__PURE__ */ new WeakMap();
+  var parentStyleCache = /* @__PURE__ */ new WeakMap();
+  function clearInspectorCache() {
+    contextCache = /* @__PURE__ */ new WeakMap();
+    parentStyleCache = /* @__PURE__ */ new WeakMap();
+  }
+  if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
+    const observer = new MutationObserver(() => {
+      clearInspectorCache();
+    });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+  }
+  function inspectVisualContext(element, maxDepth = 32) {
+    if (contextCache.has(element)) {
+      return contextCache.get(element);
+    }
     const parentEffects = [];
     const layoutConstraints = {};
     try {
@@ -447,7 +483,8 @@
     }
     let current = element.parentElement;
     let depth = 0;
-    while (current && depth < 5) {
+    const limit = Math.min(maxDepth, 100);
+    while (current && depth < limit) {
       const tagName = current.tagName.toLowerCase();
       if (tagName === "body" || tagName === "html") {
         break;
@@ -456,60 +493,88 @@
       current = current.parentElement;
       depth++;
     }
-    return {
+    const result = {
       parentEffects,
       layoutConstraints
     };
+    contextCache.set(element, result);
+    return result;
   }
-  function checkMaskEffect(comp, tagName, classList, parentEffects) {
+  function checkMaskEffect(comp, tagName, classList, parentEffects, current) {
     const mask = comp.maskImage || comp.webkitMaskImage;
     if (mask && mask !== "none") {
-      parentEffects.push({ tagName, classList, property: "mask-image", value: mask });
+      parentEffects.push({ tagName, classList, property: "mask-image", value: mask, element: current });
     }
   }
-  function checkBackdropEffect(comp, tagName, classList, parentEffects) {
+  function checkBackdropEffect(comp, tagName, classList, parentEffects, current) {
     const backdropFilter = comp.backdropFilter || comp.webkitBackdropFilter;
     if (backdropFilter && backdropFilter !== "none") {
-      parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter });
+      parentEffects.push({ tagName, classList, property: "backdrop-filter", value: backdropFilter, element: current });
     }
   }
-  function checkFilterEffect(comp, tagName, classList, parentEffects) {
+  function checkFilterEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.filter && comp.filter !== "none") {
-      parentEffects.push({ tagName, classList, property: "filter", value: comp.filter });
+      parentEffects.push({ tagName, classList, property: "filter", value: comp.filter, element: current });
     }
   }
-  function checkOpacityEffect(comp, tagName, classList, parentEffects) {
+  function checkOpacityEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.opacity && comp.opacity !== "1" && comp.opacity !== "") {
       const opacityVal = Number.parseFloat(comp.opacity);
       if (opacityVal < 1) {
-        parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity });
+        parentEffects.push({ tagName, classList, property: "opacity", value: comp.opacity, element: current });
       }
     }
   }
-  function checkOverflowEffect(comp, tagName, classList, parentEffects) {
+  function checkOverflowEffect(comp, tagName, classList, parentEffects, current) {
     if (comp.overflowY && (comp.overflowY === "auto" || comp.overflowY === "scroll" || comp.overflowY === "hidden")) {
-      parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY });
+      parentEffects.push({ tagName, classList, property: "overflow-y", value: comp.overflowY, element: current });
     }
     if (comp.overflowX && (comp.overflowX === "auto" || comp.overflowX === "scroll" || comp.overflowX === "hidden")) {
-      parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX });
+      parentEffects.push({ tagName, classList, property: "overflow-x", value: comp.overflowX, element: current });
     }
   }
-  function checkPositionEffect(comp, tagName, classList, parentEffects) {
-    if (comp.position && (comp.position === "sticky" || comp.position === "fixed")) {
-      parentEffects.push({ tagName, classList, property: "position", value: comp.position });
+  function checkPositionEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.position && (comp.position === "sticky" || comp.position === "fixed" || comp.position === "relative" || comp.position === "absolute")) {
+      parentEffects.push({ tagName, classList, property: "position", value: comp.position, element: current });
+    }
+  }
+  function checkDisplayEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.display && (comp.display === "flex" || comp.display === "grid")) {
+      parentEffects.push({ tagName, classList, property: "display", value: comp.display, element: current });
+    }
+  }
+  function checkTransformEffect(comp, tagName, classList, parentEffects, current) {
+    if (comp.transform && comp.transform !== "none" && comp.transform !== "") {
+      parentEffects.push({ tagName, classList, property: "transform", value: comp.transform, element: current });
+    }
+  }
+  function checkClipPathEffect(comp, tagName, classList, parentEffects, current) {
+    const clipPath = comp.clipPath || comp.webkitClipPath;
+    if (clipPath && clipPath !== "none" && clipPath !== "") {
+      parentEffects.push({ tagName, classList, property: "clip-path", value: clipPath, element: current });
     }
   }
   function inspectParentElementStyle(current, parentEffects) {
+    if (parentStyleCache.has(current)) {
+      parentEffects.push(...parentStyleCache.get(current));
+      return;
+    }
+    const effects = [];
     const tagName = current.tagName.toLowerCase();
     try {
       const comp = globalThis.getComputedStyle(current);
       const classList = Array.from(current.classList);
-      checkMaskEffect(comp, tagName, classList, parentEffects);
-      checkBackdropEffect(comp, tagName, classList, parentEffects);
-      checkFilterEffect(comp, tagName, classList, parentEffects);
-      checkOpacityEffect(comp, tagName, classList, parentEffects);
-      checkOverflowEffect(comp, tagName, classList, parentEffects);
-      checkPositionEffect(comp, tagName, classList, parentEffects);
+      checkMaskEffect(comp, tagName, classList, effects, current);
+      checkBackdropEffect(comp, tagName, classList, effects, current);
+      checkFilterEffect(comp, tagName, classList, effects, current);
+      checkOpacityEffect(comp, tagName, classList, effects, current);
+      checkOverflowEffect(comp, tagName, classList, effects, current);
+      checkPositionEffect(comp, tagName, classList, effects, current);
+      checkDisplayEffect(comp, tagName, classList, effects, current);
+      checkTransformEffect(comp, tagName, classList, effects, current);
+      checkClipPathEffect(comp, tagName, classList, effects, current);
+      parentStyleCache.set(current, effects);
+      parentEffects.push(...effects);
     } catch (e) {
       console.warn(`[HoverSource] Failed to compute styles for parent element <${tagName}>`, e);
     }
@@ -527,6 +592,8 @@
     minimalMode = false;
     currentElement = null;
     currentSourceInfo = null;
+    debounceTimer = null;
+    maxTraversalDepth = 32;
     // --- Layer Picker state ---
     layerStack = [];
     activeLayerIndex = 0;
@@ -538,12 +605,17 @@
       this.minimalMode = !!config?.minimalModeByDefault;
       this.layerPickerEnabled = config?.layerPickerEnabled !== false;
       this.layerScrollModifiers = config?.layerPickerScroll ?? { altKey: true, shiftKey: true, ctrlKey: false };
+      this.maxTraversalDepth = config?.maxTraversalDepth ?? 32;
       if (this.layerPickerEnabled) {
         window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
       }
       console.log("[HoverSource] Activated Inspector Mode");
     }
     deactivate() {
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
+      }
       this.controller.clear();
       this.currentElement = null;
       this.currentSourceInfo = null;
@@ -564,7 +636,7 @@
         if (container && (el === container || container.contains(el)))
           return false;
         return true;
-      });
+      }).slice(0, this.maxTraversalDepth);
       this.activeLayerIndex = 0;
       this.resolveAndShowLayer(this.activeLayerIndex, event);
     }
@@ -583,6 +655,30 @@
       }
       if (this.currentSourceInfo && this.controller.isUIVisible()) {
         this.controller.drawTooltip("", event);
+        const tooltipBox = this.controller.tooltipBox;
+        if (tooltipBox && this.currentSourceInfo.visualContext) {
+          const parentItems = tooltipBox.querySelectorAll(".hoversource-parent-item");
+          const activeItems = [];
+          parentItems.forEach((item) => {
+            if (item.classList.contains("hs-parent-active")) {
+              const indexAttr = item.getAttribute("data-index");
+              if (indexAttr !== null) {
+                const idx = parseInt(indexAttr, 10);
+                const fx = this.currentSourceInfo.visualContext.parentEffects[idx];
+                if (fx && fx.element) {
+                  activeItems.push({ item, fx });
+                }
+              }
+            }
+          });
+          if (activeItems.length > 0) {
+            this.controller.clearParentHighlights();
+            activeItems.forEach(({ item, fx }) => {
+              const rowRect = item.getBoundingClientRect();
+              this.controller.drawParentHighlight(fx, rowRect);
+            });
+          }
+        }
       }
     }
     onShortcut(command) {
@@ -590,7 +686,11 @@
         this.isFrozen = !this.isFrozen;
         this.controller.setFreezeMode(this.isFrozen);
         console.log(`[HoverSource] Freeze: ${this.isFrozen}`);
-        this.renderTooltip({ clientX: 0, clientY: 0 });
+        if (this.isFrozen && this.currentElement) {
+          this.flushResolve(this.currentElement, { clientX: 0, clientY: 0 });
+        } else {
+          this.renderTooltip({ clientX: 0, clientY: 0 });
+        }
       } else if (command === "toggleMinimal") {
         this.minimalMode = !this.minimalMode;
         console.log(`[HoverSource] Minimal Mode: ${this.minimalMode}`);
@@ -603,6 +703,7 @@
     }
     onConfigUpdate(newConfig) {
       this.minimalMode = !!newConfig.minimalModeByDefault;
+      this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
       const newEnabled = newConfig.layerPickerEnabled !== false;
       if (newEnabled !== this.layerPickerEnabled) {
         this.layerPickerEnabled = newEnabled;
@@ -635,7 +736,30 @@
         this.controller.clear();
         this.currentElement = null;
         this.currentSourceInfo = null;
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
+          this.debounceTimer = null;
+        }
         return;
+      }
+      this.currentElement = target;
+      if (this.controller.isUIVisible()) {
+        this.controller.drawHighlight(target, this.isFrozen);
+      }
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+      }
+      this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = null;
+        if (this.currentElement !== target)
+          return;
+        this.flushResolve(target, event);
+      }, 50);
+    }
+    flushResolve(target, event) {
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = null;
       }
       const info = this.resolver.resolve(target) || {
         componentName: target.tagName.toLowerCase(),
@@ -648,11 +772,9 @@
         visualContext: null,
         staticMetadata: null
       };
-      info.visualContext = inspectVisualContext(target);
-      this.currentElement = target;
+      info.visualContext = inspectVisualContext(target, this.maxTraversalDepth);
       this.currentSourceInfo = info;
       if (this.controller.isUIVisible()) {
-        this.controller.drawHighlight(target, this.isFrozen);
         this.renderTooltip(event);
       }
       if (info.fileName) {
@@ -824,7 +946,7 @@
       if (!info.visualContext || info.visualContext.parentEffects.length === 0) {
         return "";
       }
-      const effectsHtml = info.visualContext.parentEffects.map((fx) => {
+      const effectsHtml = info.visualContext.parentEffects.map((fx, idx) => {
         const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
         let originLabel = "";
         if (info.staticMetadata?.classOrigins) {
@@ -837,7 +959,10 @@
             }
           }
         }
-        return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
+        const isVisual = fx.property === "mask-image" || fx.property === "clip-path" || fx.property.startsWith("overflow");
+        const cursorStyle = isVisual ? "cursor: pointer;" : "cursor: default;";
+        const hoverClass = isVisual ? " hoversource-parent-item" : "";
+        return `<div class="hoversource-stack-item${hoverClass}" data-index="${idx}" style="${cursorStyle}">${fx.tagName}${classStr}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
       }).join("");
       return `
       <div class="hoversource-section">
@@ -959,6 +1084,48 @@
       const innerHtml = this.minimalMode ? this.renderMinimalTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) : this.renderDetailedTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel);
       const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
       this.controller.drawTooltip(html, e);
+      const tooltipBox = this.controller.tooltipBox;
+      if (tooltipBox) {
+        const parentItems = tooltipBox.querySelectorAll(".hoversource-parent-item");
+        const drawDefaultHighlights = () => {
+          this.controller.clearParentHighlights();
+          parentItems.forEach((item) => {
+            const indexAttr = item.getAttribute("data-index");
+            if (indexAttr !== null) {
+              const idx = parseInt(indexAttr, 10);
+              const fx = info.visualContext?.parentEffects[idx];
+              const shouldHighlight = fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path");
+              if (shouldHighlight) {
+                const rowRect = item.getBoundingClientRect();
+                this.controller.drawParentHighlight(fx, rowRect);
+                item.classList.add("hs-parent-active");
+              } else {
+                item.classList.remove("hs-parent-active");
+              }
+            }
+          });
+        };
+        drawDefaultHighlights();
+        parentItems.forEach((item) => {
+          item.addEventListener("mouseenter", () => {
+            const indexAttr = item.getAttribute("data-index");
+            if (indexAttr !== null) {
+              const idx = parseInt(indexAttr, 10);
+              const fx = info.visualContext?.parentEffects[idx];
+              if (fx && fx.element) {
+                const rowRect = item.getBoundingClientRect();
+                parentItems.forEach((el) => el.classList.remove("hs-parent-active"));
+                item.classList.add("hs-parent-active");
+                this.controller.clearParentHighlights();
+                this.controller.drawParentHighlight(fx, rowRect);
+              }
+            }
+          });
+          item.addEventListener("mouseleave", () => {
+            drawDefaultHighlights();
+          });
+        });
+      }
     }
     formatSelectorLabel(tagName, classList, classOrigins) {
       const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
@@ -1210,6 +1377,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
     badgeElementH = null;
     badgeElementV = null;
     dragBlocker = null;
+    maxTraversalDepth = 32;
     activate(controller) {
       this.controller = controller;
       this.isFrozen = false;
@@ -1220,6 +1388,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
       this.targetElement = null;
       this.anchorHElement = null;
       this.anchorVElement = null;
+      this.maxTraversalDepth = controller.getConfig()?.maxTraversalDepth ?? 32;
       this.crosshairX = globalThis.innerWidth / 2;
       this.crosshairY = globalThis.innerHeight / 2;
       this.lastMouseX = this.crosshairX;
@@ -1942,7 +2111,7 @@ Suggested layout insertion (heuristic only):
       const isHAndVSame = this.anchorHElement && this.anchorHElement === this.anchorVElement;
       const selector = this.getTargetSelector();
       const anchorForContext = this.anchorHElement || this.anchorVElement || this.targetElement;
-      const ancestors = this.resolver.resolveAncestors(anchorForContext, 8);
+      const ancestors = this.resolver.resolveAncestors(anchorForContext, this.maxTraversalDepth);
       const anchorDisplayInfo = this.getAnchorDisplayInfo(anchorForContext);
       const anchorElementDisplay = anchorDisplayInfo.display;
       const anchorDisplayNote = anchorDisplayInfo.note;
@@ -1988,6 +2157,7 @@ Suggested layout insertion (heuristic only):
       this.controller.copyToClipboard(text);
     }
     onConfigUpdate(newConfig) {
+      this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
     }
     onUIVisibilityChanged(visible) {
       if (this.svgOverlay) {
@@ -2143,6 +2313,7 @@ Suggested layout insertion (heuristic only):
     container = null;
     outlineBox = null;
     tooltipBox = null;
+    parentHighlightElements = [];
     uiVisible = true;
     isFrozen = false;
     freezeStyle = null;
@@ -2192,6 +2363,7 @@ Suggested layout insertion (heuristic only):
           minimalModeByDefault: false,
           snappingThreshold: 15,
           desnappingThreshold: 15,
+          maxTraversalDepth: 32,
           shortcuts: {
             toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
             toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
@@ -2225,6 +2397,73 @@ Suggested layout insertion (heuristic only):
         transition: all 0.05s ease-out;
         pointer-events: none;
         box-sizing: border-box;
+      }
+      .hoversource-parent-outline {
+        position: absolute;
+        border: 2px dashed #a855f7;
+        background-color: rgba(168, 85, 247, 0.05);
+        pointer-events: none;
+        box-sizing: border-box;
+        z-index: 999998;
+      }
+      .hoversource-parent-svg {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;
+        z-index: 1000001;
+      }
+      .hoversource-leader-line {
+        stroke: #a855f7;
+        stroke-width: 1.5;
+        fill: none;
+        stroke-dasharray: 2 2;
+      }
+      .hoversource-leader-dot {
+        fill: #a855f7;
+        stroke: #c084fc;
+        stroke-width: 1.5;
+      }
+      .hoversource-parent-badge {
+        position: absolute;
+        background: #a855f7;
+        color: #ffffff;
+        font-size: 10px;
+        font-family: monospace;
+        font-weight: 600;
+        padding: 4px 8px;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(168, 85, 247, 0.35);
+        pointer-events: auto;
+        white-space: nowrap;
+        z-index: 1000000;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .hoversource-parent-badge-title {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        padding-bottom: 1px;
+        margin-bottom: 2px;
+        font-weight: bold;
+      }
+      .hoversource-parent-badge-effect {
+        font-size: 9px;
+        color: #f3e8ff;
+      }
+      .hoversource-parent-item:hover {
+        background: rgba(168, 85, 247, 0.15) !important;
+        color: #c084fc !important;
+      }
+      .hoversource-parent-item.hs-parent-active {
+        background: rgba(168, 85, 247, 0.25) !important;
+        border: 1px dashed #c084fc !important;
+        color: #ffffff !important;
+        border-radius: 4px;
+        padding-left: 6px;
+        transition: all 0.15s ease;
       }
       .hoversource-tooltip {
         position: absolute;
@@ -2523,11 +2762,97 @@ Suggested layout insertion (heuristic only):
       this.tooltipBox.style.left = `${x}px`;
       this.tooltipBox.style.top = `${y}px`;
     }
+    drawParentHighlight(fx, rowRect) {
+      if (!this.container || !fx || !fx.element || typeof fx.element !== "object" || fx.element.nodeType !== 1)
+        return;
+      const prop = fx.property;
+      const isVisualEffect = prop === "mask-image" || prop === "clip-path" || prop.startsWith("overflow");
+      if (!isVisualEffect)
+        return;
+      const parentEl = fx.element;
+      const rect = parentEl.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0)
+        return;
+      let subRect = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
+      if (prop === "mask-image") {
+        const parsed = parseMaskGradient(fx.value, rect);
+        if (parsed)
+          subRect = parsed;
+      } else if (prop === "clip-path") {
+        const parsed = parseClipPathInset(fx.value, rect);
+        if (parsed)
+          subRect = parsed;
+      }
+      const frame = document.createElement("div");
+      frame.className = "hoversource-parent-outline";
+      frame.style.width = `${subRect.width}px`;
+      frame.style.height = `${subRect.height}px`;
+      frame.style.left = `${subRect.left}px`;
+      frame.style.top = `${subRect.top}px`;
+      this.container.appendChild(frame);
+      this.parentHighlightElements.push(frame);
+      if (rowRect) {
+        const x1 = subRect.left + subRect.width / 2;
+        const y1 = subRect.top + subRect.height / 2;
+        let isInsideTooltip = false;
+        let tooltipRect = null;
+        if (this.tooltipBox && this.tooltipBox.style.display !== "none") {
+          tooltipRect = this.tooltipBox.getBoundingClientRect();
+          if (x1 >= tooltipRect.left && x1 <= tooltipRect.right && y1 >= tooltipRect.top && y1 <= tooltipRect.bottom) {
+            isInsideTooltip = true;
+          }
+        }
+        if (!isInsideTooltip) {
+          const svgNS = "http://www.w3.org/2000/svg";
+          const svg = document.createElementNS(svgNS, "svg");
+          svg.setAttribute("class", "hoversource-parent-svg");
+          svg.setAttribute("width", "100%");
+          svg.setAttribute("height", "100%");
+          this.container.appendChild(svg);
+          this.parentHighlightElements.push(svg);
+          let rx = rowRect.left;
+          if (tooltipRect && x1 > tooltipRect.left + tooltipRect.width / 2) {
+            rx = rowRect.right;
+          }
+          const ry = rowRect.top + rowRect.height / 2;
+          const dotCircle = document.createElementNS(svgNS, "circle");
+          dotCircle.setAttribute("cx", x1.toString());
+          dotCircle.setAttribute("cy", y1.toString());
+          dotCircle.setAttribute("r", "5");
+          dotCircle.setAttribute("class", "hoversource-leader-dot");
+          svg.appendChild(dotCircle);
+          const dotInner = document.createElementNS(svgNS, "circle");
+          dotInner.setAttribute("cx", x1.toString());
+          dotInner.setAttribute("cy", y1.toString());
+          dotInner.setAttribute("r", "1.5");
+          dotInner.setAttribute("fill", "#ffffff");
+          svg.appendChild(dotInner);
+          const dx = rx - x1;
+          const dir = dx > 0 ? 1 : -1;
+          let x_mid = x1 + dir * 30;
+          if (Math.abs(dx) <= 60) {
+            x_mid = x1 + dx * 0.5;
+          }
+          x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
+          const path = document.createElementNS(svgNS, "path");
+          path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
+          path.setAttribute("class", "hoversource-leader-line");
+          svg.appendChild(path);
+        }
+      }
+    }
+    clearParentHighlights() {
+      for (const el of this.parentHighlightElements) {
+        el.remove();
+      }
+      this.parentHighlightElements = [];
+    }
     clear() {
       if (this.outlineBox)
         this.outlineBox.style.display = "none";
       if (this.tooltipBox)
         this.tooltipBox.style.display = "none";
+      this.clearParentHighlights();
     }
     async copyToClipboard(text) {
       await navigator.clipboard.writeText(text);
@@ -2599,9 +2924,98 @@ Suggested layout insertion (heuristic only):
       }
     }).catch((e) => console.error("[HoverSource] Failed to reach companion server:", e));
   };
-  if (!globalThis.__HoverSourceInitialized__) {
+  if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
     globalThis.__HoverSourceInitialized__ = true;
     OverlayEngine.launch();
     console.log("[HoverSource] Overlay injected.");
+  }
+  function parseMaskGradient(value, rect) {
+    if (!value || !value.includes("linear-gradient"))
+      return null;
+    const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
+    if (matches.length === 0)
+      return null;
+    let stopValue = 0;
+    let stopUnit = "px";
+    for (const m of matches) {
+      const val = parseFloat(m[1]);
+      if (val > 0) {
+        stopValue = val;
+        stopUnit = m[2];
+        break;
+      }
+    }
+    if (stopValue === 0)
+      return null;
+    let direction = "to bottom";
+    if (value.includes("to top"))
+      direction = "to top";
+    else if (value.includes("to right"))
+      direction = "to right";
+    else if (value.includes("to left"))
+      direction = "to left";
+    let subLeft = rect.left;
+    let subTop = rect.top;
+    let subWidth = rect.width;
+    let subHeight = rect.height;
+    const rectBottom = rect.bottom !== void 0 ? rect.bottom : rect.top + rect.height;
+    const rectRight = rect.right !== void 0 ? rect.right : rect.left + rect.width;
+    if (direction === "to bottom") {
+      const h = stopUnit === "px" ? stopValue : rect.height * (stopValue / 100);
+      subHeight = Math.min(h, rect.height);
+    } else if (direction === "to top") {
+      const h = stopUnit === "px" ? stopValue : rect.height * (stopValue / 100);
+      subHeight = Math.min(h, rect.height);
+      subTop = rectBottom - subHeight;
+    } else if (direction === "to right") {
+      const w = stopUnit === "px" ? stopValue : rect.width * (stopValue / 100);
+      subWidth = Math.min(w, rect.width);
+    } else if (direction === "to left") {
+      const w = stopUnit === "px" ? stopValue : rect.width * (stopValue / 100);
+      subWidth = Math.min(w, rect.width);
+      subLeft = rectRight - subWidth;
+    }
+    return { left: subLeft, top: subTop, width: subWidth, height: subHeight };
+  }
+  function parseClipPathInset(value, rect) {
+    if (!value || !value.includes("inset("))
+      return null;
+    const insetMatch = value.match(/inset\(([^)]+)\)/);
+    if (!insetMatch)
+      return null;
+    let content = insetMatch[1].split("round")[0].trim();
+    const tokens = content.split(/\s+/).filter((t2) => t2.length > 0);
+    if (tokens.length === 0)
+      return null;
+    const parseVal = (token, size) => {
+      const num = parseFloat(token);
+      if (isNaN(num))
+        return 0;
+      if (token.includes("%"))
+        return size * (num / 100);
+      return num;
+    };
+    let t = 0, r = 0, b = 0, l = 0;
+    if (tokens.length === 1) {
+      t = r = b = l = parseVal(tokens[0], Math.min(rect.width, rect.height));
+    } else if (tokens.length === 2) {
+      t = b = parseVal(tokens[0], rect.height);
+      l = r = parseVal(tokens[1], rect.width);
+    } else if (tokens.length === 3) {
+      t = parseVal(tokens[0], rect.height);
+      l = r = parseVal(tokens[1], rect.width);
+      b = parseVal(tokens[2], rect.height);
+    } else if (tokens.length >= 4) {
+      t = parseVal(tokens[0], rect.height);
+      r = parseVal(tokens[1], rect.width);
+      b = parseVal(tokens[2], rect.height);
+      l = parseVal(tokens[3], rect.width);
+    }
+    return {
+      left: rect.left + l,
+      top: rect.top + t,
+      width: Math.max(0, rect.width - l - r),
+      height: Math.max(0, rect.height - t - b)
+    };
   }
 })();

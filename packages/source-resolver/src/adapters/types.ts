@@ -3,6 +3,7 @@ export interface ParentVisualEffect {
   classList: string[];
   property: string;
   value: string;
+  element?: any;
 }
 
 export interface VisualContext {

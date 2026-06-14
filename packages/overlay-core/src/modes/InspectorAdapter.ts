@@ -88,6 +88,33 @@ export class InspectorAdapter implements InteractionMode {
 
     if (this.currentSourceInfo && this.controller.isUIVisible()) {
       this.controller.drawTooltip("", event);
+      
+      const tooltipBox = (this.controller as any).tooltipBox as HTMLElement | null;
+      if (tooltipBox && this.currentSourceInfo.visualContext) {
+        const parentItems = tooltipBox.querySelectorAll(".hoversource-parent-item");
+        const activeItems: { item: HTMLElement; fx: any }[] = [];
+        
+        parentItems.forEach((item) => {
+          if (item.classList.contains("hs-parent-active")) {
+            const indexAttr = item.getAttribute("data-index");
+            if (indexAttr !== null) {
+              const idx = parseInt(indexAttr, 10);
+              const fx = this.currentSourceInfo.visualContext.parentEffects[idx];
+              if (fx && fx.element) {
+                activeItems.push({ item: item as HTMLElement, fx });
+              }
+            }
+          }
+        });
+
+        if (activeItems.length > 0) {
+          this.controller.clearParentHighlights();
+          activeItems.forEach(({ item, fx }) => {
+            const rowRect = item.getBoundingClientRect();
+            this.controller.drawParentHighlight(fx, rowRect);
+          });
+        }
+      }
     }
   }
 
@@ -400,7 +427,7 @@ export class InspectorAdapter implements InteractionMode {
       return "";
     }
     const effectsHtml = info.visualContext.parentEffects
-      .map((fx: ParentVisualEffect) => {
+      .map((fx: ParentVisualEffect, idx: number) => {
         const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
         let originLabel = "";
         if (info.staticMetadata?.classOrigins) {
@@ -413,7 +440,10 @@ export class InspectorAdapter implements InteractionMode {
             }
           }
         }
-        return `<div class="hoversource-stack-item">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
+        const isVisual = fx.property === "mask-image" || fx.property === "clip-path" || fx.property.startsWith("overflow");
+        const cursorStyle = isVisual ? "cursor: pointer;" : "cursor: default;";
+        const hoverClass = isVisual ? " hoversource-parent-item" : "";
+        return `<div class="hoversource-stack-item${hoverClass}" data-index="${idx}" style="${cursorStyle}">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
       })
       .join("");
 
@@ -563,6 +593,57 @@ export class InspectorAdapter implements InteractionMode {
 
     const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
     this.controller.drawTooltip(html, e);
+
+    const tooltipBox = (this.controller as any).tooltipBox as HTMLElement | null;
+    if (tooltipBox) {
+      const parentItems = tooltipBox.querySelectorAll(".hoversource-parent-item");
+      
+      const drawDefaultHighlights = () => {
+        this.controller.clearParentHighlights();
+        parentItems.forEach((item) => {
+          const indexAttr = item.getAttribute("data-index");
+          if (indexAttr !== null) {
+            const idx = parseInt(indexAttr, 10);
+            const fx = info.visualContext?.parentEffects[idx];
+            const shouldHighlight = fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path");
+            if (shouldHighlight) {
+              const rowRect = item.getBoundingClientRect();
+              this.controller.drawParentHighlight(fx, rowRect);
+              item.classList.add("hs-parent-active");
+            } else {
+              item.classList.remove("hs-parent-active");
+            }
+          }
+        });
+      };
+
+      // Draw defaults on initial render
+      drawDefaultHighlights();
+
+      parentItems.forEach((item) => {
+        item.addEventListener("mouseenter", () => {
+          const indexAttr = item.getAttribute("data-index");
+          if (indexAttr !== null) {
+            const idx = parseInt(indexAttr, 10);
+            const fx = info.visualContext?.parentEffects[idx];
+            if (fx && fx.element) {
+              const rowRect = item.getBoundingClientRect();
+              
+              // Clear active class from all rows
+              parentItems.forEach(el => el.classList.remove("hs-parent-active"));
+              // Add to this row
+              item.classList.add("hs-parent-active");
+
+              this.controller.clearParentHighlights();
+              this.controller.drawParentHighlight(fx, rowRect);
+            }
+          }
+        });
+        item.addEventListener("mouseleave", () => {
+          drawDefaultHighlights();
+        });
+      });
+    }
   }
 
   private formatSelectorLabel(tagName: string, classList: string[], classOrigins: Record<string, any> | undefined): string {

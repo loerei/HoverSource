@@ -19,13 +19,27 @@ beforeAll(() => {
 describe("InspectorAdapter - Two-Phase Debounced Hover", () => {
     it("should draw highlight immediately but debounce visual context and tooltip rendering", () => {
         vi.useFakeTimers();
+        const mockParentItem = {
+            getAttribute: () => "0",
+            addEventListener: vi.fn(),
+            classList: {
+                add: vi.fn(),
+                remove: vi.fn()
+            }
+        };
+        const mockTooltipBox = {
+            querySelectorAll: vi.fn().mockReturnValue([mockParentItem])
+        };
         const mockController = {
             getConfig: () => ({ minimalModeByDefault: false }),
             isUIVisible: () => true,
             drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
             drawTooltip: vi.fn(),
             clear: vi.fn(),
             setFreezeMode: vi.fn(),
+            tooltipBox: mockTooltipBox
         };
         const adapter = new InspectorAdapter();
         adapter.activate(mockController);
@@ -60,6 +74,10 @@ describe("InspectorAdapter - Two-Phase Debounced Hover", () => {
         // Phase B: Now it should have run the full resolution
         expect(adapter["currentSourceInfo"]).not.toBeNull();
         expect(adapter["currentSourceInfo"].tagName).toBe("button");
+        // Verify event listeners were registered for parent hover highlights
+        expect(mockTooltipBox.querySelectorAll).toHaveBeenCalledWith(".hoversource-parent-item");
+        expect(mockParentItem.addEventListener).toHaveBeenCalledWith("mouseenter", expect.any(Function));
+        expect(mockParentItem.addEventListener).toHaveBeenCalledWith("mouseleave", expect.any(Function));
         vi.useRealTimers();
     });
 });

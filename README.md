@@ -51,17 +51,17 @@ The benchmarks were performed on two public open-source projects of different sc
 
 | Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
 | :--- | :---: | :---: | :---: |
-| **Agent Steps** | 35 | 9 | **-74.3%** |
-| **Tool Calls** | 16 | 3 | **-81.2%** |
-| **Execution Time** | 71s | 11s | **-84.5%** (6.5x faster) |
-| **Cumulative Input Tokens** | 139,885 | 7,995 | **-94.3%** (17.5x fewer tokens) |
-| **Peak Context Window** | 15,570 | 3,400 | **-78.2%** |
+| **Agent Steps** | 69 | 9 | **-87.0%** |
+| **Tool Calls** | 33 | 3 | **-90.9%** |
+| **Execution Time** | 106s | 13s | **-87.7%** (8x faster) |
+| **Cumulative Input Tokens** | 499,995 | 6,908 | **-98.6%** (72.3x fewer tokens) |
+| **Peak Context Window** | 27,749 | 2,850 | **-89.7%** |
 
 ---
 
 ### Why HoverSource scales with codebase complexity
 * **Zero Search & Exploration Overhead**: In YumeShelf, the natural language agent had to scan directories and run global searches (`grep`) to locate the card and CSS files. In Cal.com's monorepo, this overhead exploded. The agent had to list multiple directories, inspect packages, and evaluate ambiguous components across different packages (such as `packages/ui` vs `packages/coss-ui`) just to find the active Button code. Guided by HoverSource, the agent went straight to the exact target line in a single turn.
-* **Context Preservation**: By bypassing global searches and file listings, HoverSource keeps the agent's context window extremely clean, leading to a **94.3% reduction in token consumption** on Cal.com. This directly translates to lower API costs and faster responses.
+* **Context Preservation**: By bypassing global searches and file listings, HoverSource keeps the agent's context window extremely clean, leading to a **98.6% reduction in token consumption** on Cal.com (from half a million tokens to just under 7k). This directly translates to lower API costs and faster responses.
 
 
 ## Modes of Operation

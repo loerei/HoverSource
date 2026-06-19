@@ -24,27 +24,12 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 To measure the efficiency gains, we ran benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment. We compared a pure natural language instruction (simulating a user who does not know the codebase) against the same instruction paired with the HoverSource Component Metadata.
 
 The benchmarks were performed on two public open-source projects of different scales:
-1. **[YumeShelf](https://github.com/loerei/YumeShelf)**: A medium-sized desktop Electron application (~200 source files).
-2. **[Cal.com (cal.diy)](https://github.com/calcom/cal.diy)**: A giant enterprise-level monorepo (~7,700 source files, multiple apps/packages).
+1. **[Cal.com (cal.diy)](https://github.com/calcom/cal.diy)**: A giant enterprise-level monorepo (~7,700 source files, multiple apps/packages).
+2. **[YumeShelf](https://github.com/loerei/YumeShelf)**: A medium-sized desktop Electron application (~200 source files).
 
 ---
 
-### Benchmark 1: YumeShelf (Medium Codebase)
-* **Task**: Modify the hover state of the favorite star button on the game card (change background to `rgba(255, 215, 0, 0.12)` and color to `#ffd700` on hover).
-* **Metadata provided**: Element: `div.fav-btn`, File Path: `src/renderer/game-cards.ts` (L41), Source CSS: `src/styles/game-cards.css` (L267).
-* **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/yumeshelf-natural-language.md) | [Metadata Assisted Log](benchmark-logs/yumeshelf-metadata.md)
-
-| Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
-| :--- | :---: | :---: | :---: |
-| **Agent Steps** | 19 | 11 | **-42.1%** |
-| **Tool Calls** | 8 | 4 | **-50.0%** |
-| **Execution Time** | 22s | 11s | **-50.0%** |
-| **Cumulative Input Tokens** | 65,379 | 13,033 | **-80.1%** |
-| **Peak Context Window** | 11,167 | 4,338 | **-61.2%** |
-
----
-
-### Benchmark 2: Cal.com Monorepo (Giant Enterprise Codebase)
+### Benchmark 1: Cal.com Monorepo (Giant Enterprise Codebase)
 * **Task**: Modify the hover style of the `'destructive'` variant of the main UI Button component (change background hover class to `hover:bg-red-50` and border hover class to `hover:border-red-500`).
 * **Metadata provided**: Component: `Button`, Element: `button.bg-default.text-error`, File Path: `packages/ui/components/button/Button.tsx` (L122, C7).
 * **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/calcom-natural-language.md) | [Metadata Assisted Log](benchmark-logs/calcom-metadata.md)
@@ -56,6 +41,21 @@ The benchmarks were performed on two public open-source projects of different sc
 | **Execution Time** | 106s | 13s | **-87.7%** (8x faster) |
 | **Cumulative Input Tokens** | 499,995 | 6,908 | **-98.6%** (72.3x fewer tokens) |
 | **Peak Context Window** | 27,749 | 2,850 | **-89.7%** |
+
+---
+
+### Benchmark 2: YumeShelf (Medium Codebase)
+* **Task**: Modify the hover state of the favorite star button on the game card (change background to `rgba(255, 215, 0, 0.12)` and color to `#ffd700` on hover).
+* **Metadata provided**: Element: `div.fav-btn`, File Path: `src/renderer/game-cards.ts` (L41), Source CSS: `src/styles/game-cards.css` (L267).
+* **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/yumeshelf-natural-language.md) | [Metadata Assisted Log](benchmark-logs/yumeshelf-metadata.md)
+
+| Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
+| :--- | :---: | :---: | :---: |
+| **Agent Steps** | 19 | 11 | **-42.1%** |
+| **Tool Calls** | 8 | 4 | **-50.0%** |
+| **Execution Time** | 22s | 11s | **-50.0%** |
+| **Cumulative Input Tokens** | 65,379 | 13,033 | **-80.1%** |
+| **Peak Context Window** | 11,167 | 4,338 | **-61.2%** |
 
 ---
 

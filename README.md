@@ -19,6 +19,51 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 - **Layered Element Navigation (`Alt + Shift + Scroll`)**: Cycle through overlapping DOM elements under the cursor using a scroll combination, showing a clean 2D overlapping layer stack in the tooltip to easily target parent/child elements. Customize shortcuts in the dashboard.
 - **Element Selector & CSS Source Location**: Captures the exact HTML tag and classes of the hovered element, along with the specific line and file of their CSS definition. This includes support for CSS Preprocessors (Sass, SCSS, Less) with nested selectors, and CSS Modules (auto-resolving hashed class names back to their source definitions).
 
+## Benchmark: Human Language vs. HoverSource Metadata
+
+To measure the efficiency gains, we ran benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment. We compared a pure natural language instruction (simulating a user who does not know the codebase) against the same instruction paired with the HoverSource Component Metadata.
+
+The benchmarks were performed on two public open-source projects of different scales:
+1. **[YumeShelf](https://github.com/loerei/YumeShelf)**: A medium-sized desktop Electron application (~200 source files).
+2. **[Cal.com (cal.diy)](https://github.com/calcom/cal.diy)**: A giant enterprise-level monorepo (~7,700 source files, multiple apps/packages).
+
+---
+
+### Benchmark 1: YumeShelf (Medium Codebase)
+* **Task**: Modify the hover state of the favorite star button on the game card (change background to `rgba(255, 215, 0, 0.12)` and color to `#ffd700` on hover).
+* **Metadata provided**: Element: `div.fav-btn`, File Path: `src/renderer/game-cards.ts` (L41), Source CSS: `src/styles/game-cards.css` (L267).
+* **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/yumeshelf-natural-language.md) | [Metadata Assisted Log](benchmark-logs/yumeshelf-metadata.md)
+
+| Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
+| :--- | :---: | :---: | :---: |
+| **Agent Steps** | 19 | 11 | **-42.1%** |
+| **Tool Calls** | 8 | 4 | **-50.0%** |
+| **Execution Time** | 22s | 11s | **-50.0%** |
+| **Cumulative Input Tokens** | 65,379 | 13,033 | **-80.1%** |
+| **Peak Context Window** | 11,167 | 4,338 | **-61.2%** |
+
+---
+
+### Benchmark 2: Cal.com Monorepo (Giant Enterprise Codebase)
+* **Task**: Modify the hover style of the `'destructive'` variant of the main UI Button component (change background hover class to `hover:bg-red-50` and border hover class to `hover:border-red-500`).
+* **Metadata provided**: Component: `Button`, Element: `button.bg-default.text-error`, File Path: `packages/ui/components/button/Button.tsx` (L122, C7).
+* **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/calcom-natural-language.md) | [Metadata Assisted Log](benchmark-logs/calcom-metadata.md)
+
+| Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
+| :--- | :---: | :---: | :---: |
+| **Agent Steps** | 35 | 9 | **-74.3%** |
+| **Tool Calls** | 16 | 3 | **-81.2%** |
+| **Execution Time** | 71s | 11s | **-84.5%** (6.5x faster) |
+| **Cumulative Input Tokens** | 139,885 | 7,995 | **-94.3%** (17.5x fewer tokens) |
+| **Peak Context Window** | 15,570 | 3,400 | **-78.2%** |
+
+---
+
+### Why HoverSource scales with codebase complexity
+* **Zero Search & Exploration Overhead**: In YumeShelf, the natural language agent had to scan directories and run global searches (`grep`) to locate the card and CSS files. In Cal.com's monorepo, this overhead exploded. The agent had to list multiple directories, inspect packages, and evaluate ambiguous components across different packages (such as `packages/ui` vs `packages/coss-ui`) just to find the active Button code. Guided by HoverSource, the agent went straight to the exact target line in a single turn.
+* **Context Preservation**: By bypassing global searches and file listings, HoverSource keeps the agent's context window extremely clean, leading to a **94.3% reduction in token consumption** on Cal.com. This directly translates to lower API costs and faster responses.
+
+
 ## Modes of Operation
 
 HoverSource runs in two distinct interaction modes depending on your task. You can toggle between them at any time by pressing **`Alt + X`**.
@@ -251,50 +296,6 @@ Suggested layout insertion (heuristic only):
   <img src="assets/Screenshot%202.png" alt="HoverSource Configuration Dashboard" width="80%">
 </p>
 
-
-## Benchmark: Human Language vs. HoverSource Metadata
-
-To measure the efficiency gains, we ran benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment. We compared a pure natural language instruction (simulating a user who does not know the codebase) against the same instruction paired with the HoverSource Component Metadata.
-
-The benchmarks were performed on two public open-source projects of different scales:
-1. **[YumeShelf](https://github.com/loerei/YumeShelf)**: A medium-sized desktop Electron application (~200 source files).
-2. **[Cal.com (cal.diy)](https://github.com/calcom/cal.diy)**: A giant enterprise-level monorepo (~7,700 source files, multiple apps/packages).
-
----
-
-### Benchmark 1: YumeShelf (Medium Codebase)
-* **Task**: Modify the hover state of the favorite star button on the game card (change background to `rgba(255, 215, 0, 0.12)` and color to `#ffd700` on hover).
-* **Metadata provided**: Element: `div.fav-btn`, File Path: `src/renderer/game-cards.ts` (L41), Source CSS: `src/styles/game-cards.css` (L267).
-* **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/yumeshelf-natural-language.md) | [Metadata Assisted Log](benchmark-logs/yumeshelf-metadata.md)
-
-| Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
-| :--- | :---: | :---: | :---: |
-| **Agent Steps** | 19 | 11 | **-42.1%** |
-| **Tool Calls** | 8 | 4 | **-50.0%** |
-| **Execution Time** | 22s | 11s | **-50.0%** |
-| **Cumulative Input Tokens** | 65,379 | 13,033 | **-80.1%** |
-| **Peak Context Window** | 11,167 | 4,338 | **-61.2%** |
-
----
-
-### Benchmark 2: Cal.com Monorepo (Giant Enterprise Codebase)
-* **Task**: Modify the hover style of the `'destructive'` variant of the main UI Button component (change background hover class to `hover:bg-red-50` and border hover class to `hover:border-red-500`).
-* **Metadata provided**: Component: `Button`, Element: `button.bg-default.text-error`, File Path: `packages/ui/components/button/Button.tsx` (L122, C7).
-* **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/calcom-natural-language.md) | [Metadata Assisted Log](benchmark-logs/calcom-metadata.md)
-
-| Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
-| :--- | :---: | :---: | :---: |
-| **Agent Steps** | 35 | 9 | **-74.3%** |
-| **Tool Calls** | 16 | 3 | **-81.2%** |
-| **Execution Time** | 71s | 11s | **-84.5%** (6.5x faster) |
-| **Cumulative Input Tokens** | 139,885 | 7,995 | **-94.3%** (17.5x fewer tokens) |
-| **Peak Context Window** | 15,570 | 3,400 | **-78.2%** |
-
----
-
-### Why HoverSource scales with codebase complexity
-* **Zero Search & Exploration Overhead**: In YumeShelf, the natural language agent had to scan directories and run global searches (`grep`) to locate the card and CSS files. In Cal.com's monorepo, this overhead exploded. The agent had to list multiple directories, inspect packages, and evaluate ambiguous components across different packages (such as `packages/ui` vs `packages/coss-ui`) just to find the active Button code. Guided by HoverSource, the agent went straight to the exact target line in a single turn.
-* **Context Preservation**: By bypassing global searches and file listings, HoverSource keeps the agent's context window extremely clean, leading to a **94.3% reduction in token consumption** on Cal.com. This directly translates to lower API costs and faster responses.
 
 
 ## Install HoverSource

@@ -21,7 +21,7 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 
 ## Benchmark: Human Language vs. HoverSource Metadata
 
-To measure the efficiency gains, we ran benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment (benchmarked and logged using [chronicle-mcp](https://github.com/loerei/chronicle-mcp)). We compared a pure natural language instruction (simulating a user who does not know the codebase) against the same instruction paired with the HoverSource Component Metadata.
+To measure the efficiency gains, we ran benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment (benchmarked and logged using [chronicle-mcp](https://github.com/loerei/chronicle-mcp) via the `js-tiktoken` tokenizer). We compared a pure natural language instruction (simulating a user who does not know the codebase) against the same instruction paired with the HoverSource Component Metadata.
 
 The benchmarks were performed on two public open-source projects of different scales:
 1. **[Cal.com (cal.diy)](https://github.com/calcom/cal.diy)**: A giant enterprise-level monorepo (~7,700 source files, multiple apps/packages).

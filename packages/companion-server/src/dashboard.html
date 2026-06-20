@@ -77,7 +77,8 @@
           </button>
           <div class="custom-dropdown-menu hidden absolute left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50 py-1 backdrop-blur-md overflow-hidden max-h-60 overflow-y-auto"></div>
         </div>
-        <input type="text" class="custom-path-input hidden bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-300 flex-1 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="Workspace path...">
+        <label for="custom-path-input" class="sr-only">Workspace path</label>
+        <input id="custom-path-input" type="text" class="custom-path-input hidden bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-300 flex-1 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="Workspace path...">
       </div>
       <div class="flex items-center gap-2.5 self-end">
         <button class="delete-btn text-red-400 hover:text-red-300 border border-red-950/80 bg-red-950/20 hover:bg-red-950/40 font-medium px-3.5 py-1.5 rounded-lg transition-all text-xs active:scale-95 flex items-center gap-1.5" title="Delete this target's .hoversourcerc file">
@@ -103,31 +104,31 @@
         </h2>
         <div class="space-y-4">
           <div>
-            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Overlay Theme</label>
-            <select class="theme-select w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+            <label for="theme-select" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Overlay Theme</label>
+            <select id="theme-select" class="theme-select w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
               <option value="dark">Dark Theme</option>
               <option value="light">Light Theme</option>
               <option value="system">Follow System</option>
             </select>
           </div>
           <div>
-            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Preferred Editor</label>
-            <select class="editor-select w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+            <label for="editor-select" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Preferred Editor</label>
+            <select id="editor-select" class="editor-select w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
               <option value="vscode">VS Code (code -g)</option>
               <option value="cursor">Cursor (cursor -g)</option>
             </select>
           </div>
           <div>
-            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Snapping Threshold (px)</label>
-            <input type="number" class="snapping-threshold-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="0" max="100">
+            <label for="snapping-threshold" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Snapping Threshold (px)</label>
+            <input id="snapping-threshold" type="number" class="snapping-threshold-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="0" max="100">
           </div>
           <div>
-            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">De-snapping Threshold (px)</label>
-            <input type="number" class="desnapping-threshold-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="0" max="100">
+            <label for="desnapping-threshold" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">De-snapping Threshold (px)</label>
+            <input id="desnapping-threshold" type="number" class="desnapping-threshold-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="0" max="100">
           </div>
           <div>
-            <label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Max Inspection Depth (layers)</label>
-            <input type="number" class="max-depth-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="8" max="100" title="Limits how many parent layers HoverSource climbs to resolve layout details and source code paths. Min: 8, Max: 100.">
+            <label for="max-depth" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Max Inspection Depth (layers)</label>
+            <input id="max-depth" type="number" class="max-depth-input w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none" min="8" max="100" title="Limits how many parent layers HoverSource climbs to resolve layout details and source code paths. Min: 8, Max: 100.">
           </div>
           <div class="bg-slate-950/40 border border-slate-800 rounded-lg p-3 space-y-3">
             <label class="flex items-center gap-2.5 cursor-pointer">
@@ -172,7 +173,8 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
-              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+              <label for="shortcut-toggleUI-key" class="sr-only">Toggle Tooltip UI Key</label>
+              <input id="shortcut-toggleUI-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
           <!-- toggleMinimal -->
@@ -185,7 +187,8 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
-              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+              <label for="shortcut-toggleMinimal-key" class="sr-only">Toggle Minimal Mode Key</label>
+              <input id="shortcut-toggleMinimal-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
           <!-- toggleFreeze -->
@@ -198,7 +201,8 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
-              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+              <label for="shortcut-toggleFreeze-key" class="sr-only">Toggle Freeze State Key</label>
+              <input id="shortcut-toggleFreeze-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
           <!-- toggleMode -->
@@ -211,7 +215,8 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
-              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+              <label for="shortcut-toggleMode-key" class="sr-only">Toggle Mode Key</label>
+              <input id="shortcut-toggleMode-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
           <!-- copyMetadata -->
@@ -224,7 +229,8 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
-              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+              <label for="shortcut-copyMetadata-key" class="sr-only">Copy AI Metadata Key</label>
+              <input id="shortcut-copyMetadata-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
           <!-- copyAllLayers -->
@@ -237,7 +243,8 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
-              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+              <label for="shortcut-copyAllLayers-key" class="sr-only">Copy All Layers Specs Key</label>
+              <input id="shortcut-copyAllLayers-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
           <!-- openDashboard -->
@@ -250,7 +257,8 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
-              <input type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+              <label for="shortcut-openDashboard-key" class="sr-only">Open Dashboard Key</label>
+              <input id="shortcut-openDashboard-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
           <!-- layerPickerScroll -->

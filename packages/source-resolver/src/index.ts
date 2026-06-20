@@ -26,14 +26,16 @@ export class SourceResolver {
   constructor() {
     // Register default adapters
     this.fiberAdapter = new ReactFiberAdapter();
-    this.adapters.push(this.fiberAdapter);
-    this.adapters.push(new ReactInvasiveAdapter());
-    this.adapters.push(new VueAdapter());
-    this.adapters.push(new SvelteAdapter());
-    this.adapters.push(new PreactAdapter());
-    this.adapters.push(new SolidAdapter());
-    this.adapters.push(new AstroAdapter());
-    this.adapters.push(new AngularAdapter());
+    this.adapters.push(
+      this.fiberAdapter,
+      new ReactInvasiveAdapter(),
+      new VueAdapter(),
+      new SvelteAdapter(),
+      new PreactAdapter(),
+      new SolidAdapter(),
+      new AstroAdapter(),
+      new AngularAdapter()
+    );
     this.setupMutationObserver();
   }
 

@@ -92,8 +92,9 @@ describe("ReactInvasiveAdapter", () => {
     const mockElement = {
       tagName: "BUTTON",
       classList: [],
-      hasAttribute: (name: string) => name === "data-hoversource-loc",
-      getAttribute: (name: string) => name === "data-hoversource-loc" ? "src/components/MyComponent.tsx:10:4" : null
+      dataset: {
+        hoversourceLoc: "src/components/MyComponent.tsx:10:4"
+      }
     } as any;
 
     verifyResolution(adapter, mockElement, {

@@ -808,41 +808,113 @@ async function installSolidInvasive(projectRoot: string) {
   });
 }
 
-async function installReactInvasive(projectRoot: string) {
-  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE REACT SETUP <<<\x1b[0m`);
-  console.log(`Invasive mode works by adding \x1b[32m@hoversource/babel-plugin-react\x1b[0m to your project.`);
-  console.log(`This plugin injects 'data-hoversource-loc' HTML attributes (file paths, line numbers, column numbers)`);
-  console.log(`directly into DOM elements during compilation, enabling templates resolution in React/Next.js/RSC.`);
-  console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
-  console.log(`  1. Install '@hoversource/babel-plugin-react' as a devDependency in your package.json.`);
-  console.log(`  2. Modify your vite.config.ts / vite.config.js OR next.config.js / next.config.mjs / next.config.ts / .babelrc to register the plugin.\x1b[0m`);
-  
-  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
-  if (answer.trim().toLowerCase() !== "y") {
-    console.log(`[HoverSource] Installation aborted.`);
+function checkIsNextjs(projectRoot: string): boolean {
+  const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
+  if (!fs.existsSync(pkgPath)) {
+    return false;
+  }
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    return "next" in allDeps;
+  } catch (err) {
+    console.warn(`[HoverSource] Warning: Failed to parse package.json. Defaulting to Vite setup.`, err);
+    return false;
+  }
+}
+
+async function installReactInvasiveNpm(projectRoot: string, pluginPath: string): Promise<void> {
+  try {
+    await runNpmCommand(["install", "-D", pluginPath], projectRoot);
+    console.log(`[HoverSource] Successfully installed @hoversource/babel-plugin-react.`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to install package:`, err);
+    throw err;
+  }
+}
+
+function registerReactInvasiveNextjs(projectRoot: string): void {
+  console.log(`[HoverSource] Detected Next.js project. Registering plugin in .babelrc...`);
+  const babelrcPath = validateSafePath(path.join(projectRoot, ".babelrc"));
+  let babelConfig: any = {
+    presets: ["next/babel"],
+    plugins: ["@hoversource/babel-plugin-react"]
+  };
+
+  if (fs.existsSync(babelrcPath)) {
+    try {
+      const content = fs.readFileSync(babelrcPath, "utf-8");
+      babelConfig = JSON.parse(content);
+      if (!babelConfig.plugins) {
+        babelConfig.plugins = [];
+      }
+      if (!babelConfig.plugins.includes("@hoversource/babel-plugin-react")) {
+        babelConfig.plugins.push("@hoversource/babel-plugin-react");
+      }
+    } catch (err) {
+      console.warn(`[HoverSource] Warning: Failed to parse existing .babelrc. Overwriting...`, err);
+    }
+  }
+
+  fs.writeFileSync(babelrcPath, JSON.stringify(babelConfig, null, 2), "utf-8");
+  console.log(`[HoverSource] Successfully registered plugin in .babelrc.`);
+}
+
+function registerReactInvasiveVite(projectRoot: string): void {
+  let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
+  if (!fs.existsSync(configPath)) {
+    configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
+  }
+
+  if (!fs.existsSync(configPath)) {
+    console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
+    console.log(`Please register 'vitePluginReactHoverSource()' manually in your Vite config.`);
     return;
   }
 
-  console.log(`[HoverSource] Setting up React invasive mode...`);
+  console.log(`[HoverSource] Registering plugin in ${path.basename(configPath)}...`);
+  let configContent = fs.readFileSync(configPath, "utf-8");
 
-  // 1. Install devDependency
-  console.log(`[HoverSource] Installing @hoversource/babel-plugin-react...`);
+  // Check if already registered
+  if (configContent.includes("vitePluginReactHoverSource")) {
+    console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
+    return;
+  }
+
+  // Insert import
+  configContent = `import { vitePluginReactHoverSource } from "@hoversource/babel-plugin-react";\n` + configContent;
+
+  // Insert plugin call inside plugins array
+  if (configContent.includes("plugins:")) {
+    configContent = configContent.replace(/plugins:\s*\[/, `plugins: [\n    vitePluginReactHoverSource(),`);
+    fs.writeFileSync(configPath, configContent, "utf-8");
+    console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
+  } else {
+    fs.writeFileSync(configPath, configContent, "utf-8");
+    console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
+    console.log(`Please manually add 'vitePluginReactHoverSource()' to your plugins array.`);
+  }
+}
+
+async function installReactInvasive(projectRoot: string) {
+  console.log(`\n\x1b[36m[HoverSource] >>> REACT INVASIVE SETUP <<<\x1b[0m`);
+  console.log("This will configure HoverSource compile-time JSX location tagging for React/Next.js projects.");
+  console.log("It installs '@hoversource/babel-plugin-react' to inject 'data-hoversource-loc' attribute on JSX nodes.");
+  
+  const proceed = await askQuestion("\n\x1b[35mConfigure React invasive mode? (y/N): \x1b[0m");
+  if (proceed.trim().toLowerCase() !== "y") {
+    console.log("React setup cancelled.");
+    return;
+  }
+
+  console.log("Installing devDependency '@hoversource/babel-plugin-react'...");
   const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
   if (!fs.existsSync(pkgPath)) {
     console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
     return;
   }
 
-  let isNextjs = false;
-  try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-    if ("next" in allDeps) {
-      isNextjs = true;
-    }
-  } catch (err) {
-    console.warn(`[HoverSource] Warning: Failed to parse package.json. Defaulting to Vite setup.`);
-  }
+  const isNextjs = checkIsNextjs(projectRoot);
 
   // Resolve local plugin path
   const pluginPath = path.resolve(__dirname, "../../babel-plugin-react");
@@ -851,74 +923,12 @@ async function installReactInvasive(projectRoot: string) {
     return;
   }
 
-  try {
-    await runNpmCommand(["install", "-D", pluginPath], projectRoot);
-    console.log(`[HoverSource] Successfully installed @hoversource/babel-plugin-react.`);
-  } catch (err) {
-    console.error(`[HoverSource] Failed to install package:`, err);
-    throw err;
-  }
+  await installReactInvasiveNpm(projectRoot, pluginPath);
 
   if (isNextjs) {
-    console.log(`[HoverSource] Detected Next.js project. Registering plugin in .babelrc...`);
-    const babelrcPath = validateSafePath(path.join(projectRoot, ".babelrc"));
-    let babelConfig: any = {
-      presets: ["next/babel"],
-      plugins: ["@hoversource/babel-plugin-react"]
-    };
-
-    if (fs.existsSync(babelrcPath)) {
-      try {
-        const content = fs.readFileSync(babelrcPath, "utf-8");
-        babelConfig = JSON.parse(content);
-        if (!babelConfig.plugins) {
-          babelConfig.plugins = [];
-        }
-        if (!babelConfig.plugins.includes("@hoversource/babel-plugin-react")) {
-          babelConfig.plugins.push("@hoversource/babel-plugin-react");
-        }
-      } catch (err) {
-        console.warn(`[HoverSource] Warning: Failed to parse existing .babelrc. Overwriting...`);
-      }
-    }
-
-    fs.writeFileSync(babelrcPath, JSON.stringify(babelConfig, null, 2), "utf-8");
-    console.log(`[HoverSource] Successfully registered plugin in .babelrc.`);
+    registerReactInvasiveNextjs(projectRoot);
   } else {
-    // Vite setup
-    let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
-    if (!fs.existsSync(configPath)) {
-      configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
-    }
-
-    if (!fs.existsSync(configPath)) {
-      console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
-      console.log(`Please register 'vitePluginReactHoverSource()' manually in your Vite config.`);
-      return;
-    }
-
-    console.log(`[HoverSource] Registering plugin in ${path.basename(configPath)}...`);
-    let configContent = fs.readFileSync(configPath, "utf-8");
-
-    // Check if already registered
-    if (configContent.includes("vitePluginReactHoverSource")) {
-      console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
-      return;
-    }
-
-    // Insert import
-    configContent = `import { vitePluginReactHoverSource } from "@hoversource/babel-plugin-react";\n` + configContent;
-
-    // Insert plugin call inside plugins array
-    if (configContent.includes("plugins:")) {
-      configContent = configContent.replace(/plugins:\s*\[/, `plugins: [\n    vitePluginReactHoverSource(),`);
-      fs.writeFileSync(configPath, configContent, "utf-8");
-      console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
-    } else {
-      fs.writeFileSync(configPath, configContent, "utf-8");
-      console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
-      console.log(`Please manually add 'vitePluginReactHoverSource()' to your plugins array.`);
-    }
+    registerReactInvasiveVite(projectRoot);
   }
 }
 
@@ -996,25 +1006,7 @@ async function installAngularInvasive(projectRoot: string) {
   console.log(`[HoverSource] Successfully appended locator hook to ${path.basename(mainPath)}.`);
 }
 
-async function uninstallInvasive(projectRoot: string) {
-  console.log(`\n\x1b[36m[HoverSource] >>> UNINSTALL INVASIVE PLUGINS <<<\x1b[0m`);
-  
-  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to uninstall HoverSource invasive plugins? (y/N): \x1b[0m`);
-  if (answer.trim().toLowerCase() !== "y") {
-    console.log(`[HoverSource] Aborted.`);
-    return;
-  }
-
-  // 1. Remove from package.json
-  console.log(`[HoverSource] Uninstalling packages...`);
-  try {
-    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector", "solid-devtools", "ngx-locatorjs", "@hoversource/babel-plugin-react"], projectRoot);
-    console.log(`[HoverSource] Packages uninstalled.`);
-  } catch (err) {
-    console.error(`[HoverSource] Failed to uninstall packages:`, err);
-  }
-
-  // 2. Remove from Vite config
+function cleanViteConfig(projectRoot: string): void {
   let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
   if (!fs.existsSync(configPath)) {
     configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
@@ -1036,8 +1028,9 @@ async function uninstallInvasive(projectRoot: string) {
     fs.writeFileSync(configPath, configContent, "utf-8");
     console.log(`[HoverSource] Cleared Vite plugin registrations.`);
   }
+}
 
-  // 3. Remove from .babelrc
+function cleanBabelrc(projectRoot: string): void {
   let babelrcPath = validateSafePath(path.join(projectRoot, ".babelrc"));
   if (fs.existsSync(babelrcPath)) {
     console.log(`[HoverSource] Cleaning ${path.basename(babelrcPath)}...`);
@@ -1067,8 +1060,9 @@ async function uninstallInvasive(projectRoot: string) {
       console.warn(`[HoverSource] Warning: Failed to clean up .babelrc:`, err);
     }
   }
+}
 
-  // 4. Remove from main.ts
+function cleanAngularMain(projectRoot: string): void {
   let mainPath = validateSafePath(path.join(projectRoot, "src", "main.ts"));
   if (!fs.existsSync(mainPath)) {
     mainPath = validateSafePath(path.join(projectRoot, "main.ts"));
@@ -1082,6 +1076,34 @@ async function uninstallInvasive(projectRoot: string) {
     fs.writeFileSync(mainPath, mainContent, "utf-8");
     console.log(`[HoverSource] Cleared Angular main.ts hooks.`);
   }
+}
+
+async function uninstallInvasive(projectRoot: string) {
+  console.log(`\n\x1b[36m[HoverSource] >>> UNINSTALL INVASIVE PLUGINS <<<\x1b[0m`);
+  
+  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to uninstall HoverSource invasive plugins? (y/N): \x1b[0m`);
+  if (answer.trim().toLowerCase() !== "y") {
+    console.log(`[HoverSource] Aborted.`);
+    return;
+  }
+
+  // 1. Remove from package.json
+  console.log(`[HoverSource] Uninstalling packages...`);
+  try {
+    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector", "solid-devtools", "ngx-locatorjs", "@hoversource/babel-plugin-react"], projectRoot);
+    console.log(`[HoverSource] Packages uninstalled.`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to uninstall packages:`, err);
+  }
+
+  // 2. Remove from Vite config
+  cleanViteConfig(projectRoot);
+
+  // 3. Remove from .babelrc
+  cleanBabelrc(projectRoot);
+
+  // 4. Remove from main.ts
+  cleanAngularMain(projectRoot);
 
   console.log(`[HoverSource] Uninstallation complete.`);
 }

@@ -21,7 +21,7 @@ export default function babelPluginReactHoverSource(): PluginObj {
           relativePath = filename.slice(projectRoot.length).replace(/^[/\\]/, "");
         }
         // Normalize slashes to forward slashes
-        relativePath = relativePath.replace(/\\/g, "/");
+        relativePath = relativePath.replaceAll("\\", "/");
 
         const line = location.start.line;
         const column = location.start.column + 1; // 1-based column

@@ -105,8 +105,8 @@ export class InspectorAdapter implements InteractionMode {
         
         parentItems.forEach((item) => {
           if (item.classList.contains("hs-parent-active")) {
-            const idxStr = (item as HTMLElement).dataset?.index ?? item.getAttribute("data-index");
-            if (idxStr !== null && idxStr !== undefined) {
+            const idxStr = (item as HTMLElement).dataset.index;
+            if (idxStr !== undefined) {
               const idx = Number.parseInt(idxStr, 10);
               const fx = this.currentSourceInfo.visualContext.parentEffects[idx];
               if (fx?.element) {
@@ -604,8 +604,8 @@ export class InspectorAdapter implements InteractionMode {
       const drawDefaultHighlights = () => {
         this.controller.clearParentHighlights();
         parentItems.forEach((item) => {
-          const idxStr = (item as HTMLElement).dataset?.index ?? item.getAttribute("data-index");
-          if (idxStr !== null && idxStr !== undefined) {
+          const idxStr = (item as HTMLElement).dataset.index;
+          if (idxStr !== undefined) {
             const idx = Number.parseInt(idxStr, 10);
             const fx = info.visualContext?.parentEffects[idx];
             const shouldHighlight = fx?.element && (fx.property === "mask-image" || fx.property === "clip-path");
@@ -625,8 +625,8 @@ export class InspectorAdapter implements InteractionMode {
 
       parentItems.forEach((item) => {
         item.addEventListener("mouseenter", () => {
-          const idxStr = (item as HTMLElement).dataset?.index ?? item.getAttribute("data-index");
-          if (idxStr !== null && idxStr !== undefined) {
+          const idxStr = (item as HTMLElement).dataset.index;
+          if (idxStr !== undefined) {
             const idx = Number.parseInt(idxStr, 10);
             const fx = info.visualContext?.parentEffects[idx];
             if (fx?.element) {
@@ -773,6 +773,24 @@ export class InspectorAdapter implements InteractionMode {
     this.controller.copyToClipboard(text);
   }
 
+  private getElementAttributes(elNode: HTMLElement): string[] {
+    const attrs: string[] = [];
+    if (elNode.id) {
+      attrs.push(`id="${elNode.id}"`);
+    }
+    if (elNode.className && typeof elNode.className === "string") {
+      const classes = Array.from(elNode.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+      if (classes.length > 0) {
+        attrs.push(`class="${classes.join(" ")}"`);
+      }
+    }
+    const href = elNode.getAttribute("href");
+    if (href) {
+      attrs.push(`href="${href}"`);
+    }
+    return attrs;
+  }
+
   private formatMinifiedHtmlNode(node: Node, indent: string): string {
     if (node.nodeType === 3) { // Text node
       const text = node.nodeValue?.trim();
@@ -782,23 +800,7 @@ export class InspectorAdapter implements InteractionMode {
     if (node.nodeType === 1) { // Element node
       const elNode = node as HTMLElement;
       const tagName = elNode.tagName.toLowerCase();
-      
-      // Gather attributes
-      const attrs: string[] = [];
-      if (elNode.id) {
-        attrs.push(`id="${elNode.id}"`);
-      }
-      if (elNode.className && typeof elNode.className === 'string') {
-        const classes = Array.from(elNode.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-        if (classes.length > 0) {
-          attrs.push(`class="${classes.join(' ')}"`);
-        }
-      }
-      
-      if (elNode.getAttribute("href")) {
-        attrs.push(`href="${elNode.getAttribute("href")}"`);
-      }
-      
+      const attrs = this.getElementAttributes(elNode);
       const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
       const children = Array.from(elNode.childNodes);
       

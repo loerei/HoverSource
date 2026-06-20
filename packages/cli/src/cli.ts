@@ -660,14 +660,14 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
 
 function cleanArgument(arg: string): string {
   const first = arg[0];
-  if ((first === '"' || first === "'") && arg[arg.length - 1] === first) {
+  if ((first === '"' || first === "'") && arg.endsWith(first)) {
     return arg.slice(1, -1).replace(/\\(.)/g, "$1");
   }
   return arg;
 }
 
 function parseCommand(cmdString: string): { command: string; args: string[] } {
-  const matches = cmdString.match(/[^"'\s]+|"[^"\\]*(?:\\.[^"\\]*)*"|'[^'\\]*(?:\\.[^'\\]*)*'/g) || [];
+  const matches = cmdString.match(/[^"'\s]+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g) || [];
   const parts = matches.map(cleanArgument);
   return {
     command: parts[0] || "",

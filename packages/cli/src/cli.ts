@@ -139,32 +139,33 @@ function resolveSubcommand(
   return { execCommand: `npm run ${subcommand}`, isElectron };
 }
 
-export async function isPortFree(port: number): Promise<boolean> {
-  const probeHost = (host: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const server = net.createServer();
-      server.unref();
-      server.on("error", (err: any) => {
-        if (err.code === "EADDRINUSE") {
-          resolve(false);
-        } else {
-          // Other errors (e.g. EADDRNOTAVAIL for IPv6 on some systems) do not mean the port is in use
-          resolve(true);
-        }
-      });
-      server.listen(port, host, () => {
-        server.close(() => resolve(true));
-      });
+function probeHostPort(port: number, host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.on("error", (err: any) => {
+      if (err.code === "EADDRINUSE") {
+        resolve(false);
+      } else {
+        // Other errors (e.g. EADDRNOTAVAIL for IPv6 on some systems) do not mean the port is in use
+        resolve(true);
+      }
     });
-  };
+    server.listen(port, host, () => {
+      server.close();
+      resolve(true);
+    });
+  });
+}
 
-  const free127 = await probeHost("127.0.0.1");
+export async function isPortFree(port: number): Promise<boolean> {
+  const free127 = await probeHostPort(port, "127.0.0.1");
   if (!free127) return false;
 
-  const free000 = await probeHost("0.0.0.0");
+  const free000 = await probeHostPort(port, "0.0.0.0");
   if (!free000) return false;
 
-  const freeIPv6 = await probeHost("::");
+  const freeIPv6 = await probeHostPort(port, "::");
   if (!freeIPv6) return false;
 
   return true;
@@ -1155,7 +1156,7 @@ async function main() {
   await startCdpInjectionWatch(debugPort, scriptWithPort);
 }
 
-if (typeof process.env.VITEST === "undefined") {
+if (process.env.VITEST === undefined) {
   try {
     await main();
   } catch (err) {

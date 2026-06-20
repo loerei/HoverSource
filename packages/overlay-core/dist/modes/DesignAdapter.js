@@ -1,6 +1,6 @@
 import { SourceResolver } from "@hoversource/source-resolver";
 function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 3000;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
 }
 export class DesignAdapter {
     id = "design";

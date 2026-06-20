@@ -1,7 +1,7 @@
 import { SourceResolver } from "@hoversource/source-resolver";
 import { inspectVisualContext } from "../inspector.js";
 function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 3000;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
 }
 export class InspectorAdapter {
     id = "inspector";

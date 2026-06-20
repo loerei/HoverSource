@@ -15,53 +15,83 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Helper functions to prevent Path Injection (S8707) and Command Injection (S8701)
+export function validateSafePath(p: string): string {
+  const pathRegex = new RegExp("^[a-zA-Z0-9_\\-\\s./\\\\:]+$");
+  if (p.includes("..") || !pathRegex.test(p)) {
+    throw new Error(`[HoverSource] Security Error: Path contains invalid characters or traversal sequence: ${p}`);
+  }
+  return p;
+}
+
+export function validateSafeCommand(cmd: string): string {
+  const cmdRegex = new RegExp("^[a-zA-Z0-9_\\-\\s./\\\\:'\"]+$");
+  if (/[;&|<>$\n\r]/.test(cmd) || !cmdRegex.test(cmd)) {
+    throw new Error(`[HoverSource] Security Error: Command contains invalid characters: ${cmd}`);
+  }
+  return cmd;
+}
+
+function parseLongOption(arg: string, args: Record<string, string | boolean>): void {
+  const eqIdx = arg.indexOf("=");
+  if (eqIdx === -1) {
+    args[arg.slice(2)] = true;
+  } else {
+    const key = arg.slice(2, eqIdx);
+    const value = arg.slice(eqIdx + 1);
+    args[key] = value;
+  }
+}
+
+function parseShortOption(arg: string, args: Record<string, string | boolean>, argv: string[], indexRef: { index: number }): void {
+  const char = arg.slice(1);
+  const eqIdx = char.indexOf("=");
+  const optionChar = eqIdx === -1 ? char : char.slice(0, eqIdx);
+  const val = eqIdx === -1 ? undefined : char.slice(eqIdx + 1);
+
+  const optionMap: Record<string, string> = {
+    p: "port",
+    t: "target",
+    e: "exec",
+    r: "root"
+  };
+
+  const simpleFlags: Record<string, string> = {
+    d: "dashboard",
+    h: "help",
+    v: "vue",
+    s: "solid",
+    a: "angular"
+  };
+
+  if (optionChar in simpleFlags) {
+    args[simpleFlags[optionChar]] = true;
+  } else if (optionChar in optionMap) {
+    const key = optionMap[optionChar];
+    if (val !== undefined) {
+      args[key] = val;
+    } else {
+      const nextArg = argv[indexRef.index + 1];
+      if (nextArg !== undefined && !nextArg.startsWith("-")) {
+        indexRef.index++;
+        args[key] = nextArg;
+      }
+    }
+  }
+}
+
 // Helper to parse arguments
 function getArgs() {
   const args: Record<string, string | boolean> = {};
   let subcommand: string | undefined;
-  for (let i = 2; i < process.argv.length; i++) {
-    const arg = process.argv[i];
+  const indexRef = { index: 2 };
+
+  for (; indexRef.index < process.argv.length; indexRef.index++) {
+    const arg = process.argv[indexRef.index];
     if (arg.startsWith("--")) {
-      const eqIdx = arg.indexOf("=");
-      if (eqIdx === -1) {
-        // boolean flag
-        args[arg.slice(2)] = true;
-      } else {
-        const key = arg.slice(2, eqIdx);
-        const value = arg.slice(eqIdx + 1);
-        args[key] = value;
-      }
+      parseLongOption(arg, args);
     } else if (arg.startsWith("-")) {
-      const char = arg.slice(1);
-      const eqIdx = char.indexOf("=");
-      const optionChar = eqIdx === -1 ? char : char.slice(0, eqIdx);
-      const val = eqIdx === -1 ? undefined : char.slice(eqIdx + 1);
-
-      const optionMap: Record<string, string> = {
-        p: "port",
-        t: "target",
-        e: "exec",
-        r: "root"
-      };
-
-      if (optionChar === "d") {
-        args["dashboard"] = true;
-      } else if (optionChar === "h") {
-        args["help"] = true;
-      } else if (optionChar === "v") {
-        args["vue"] = true;
-      } else if (optionChar === "s") {
-        args["solid"] = true;
-      } else if (optionChar === "a") {
-        args["angular"] = true;
-      } else if (optionChar in optionMap) {
-        const key = optionMap[optionChar];
-        if (val !== undefined) {
-          args[key] = val;
-        } else if (i + 1 < process.argv.length && !process.argv[i + 1].startsWith("-")) {
-          args[key] = process.argv[++i];
-        }
-      }
+      parseShortOption(arg, args, process.argv, indexRef);
     } else if (!subcommand) {
       subcommand = arg; // e.g. "start", "dev"
     }
@@ -78,7 +108,7 @@ function resolveSubcommand(
   subcommand: string,
   projectRoot: string
 ): { execCommand: string; isElectron: boolean } | undefined {
-  const pkgPath = path.join(projectRoot, "package.json");
+  const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
   if (!fs.existsSync(pkgPath)) {
     console.error(`[HoverSource] No package.json found in ${projectRoot}`);
     return undefined;
@@ -611,10 +641,10 @@ function runExecMode(execCommand: string, projectRoot: string, debugPort: number
     ...process.env,
     ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${debugPort}`,
   };
-  const child = spawn(execCommand, [], {
+  const child = spawn(validateSafeCommand(execCommand), [], {
     shell: true,
     env: childEnv,
-    cwd: projectRoot,
+    cwd: validateSafePath(projectRoot),
     stdio: "inherit",
   });
   child.on("error", (err) => {
@@ -639,7 +669,9 @@ async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string)
         console.log(`[HoverSource] Lost connection or target closed. Re-watching...`);
         isInjected = false;
       }
-      console.debug("[HoverSource] Ignored poll injection error:", err.message);
+      if (process.env.DEBUG) {
+        console.debug("[HoverSource] Ignored poll injection error:", err.message);
+      }
     }
   };
 
@@ -661,7 +693,7 @@ function runNpmCommand(args: string[], cwd: string): Promise<void> {
     }
 
     if (npmCliJs) {
-      execFile(process.execPath, [npmCliJs, ...args], { cwd }, (err) => {
+      execFile(process.execPath, [npmCliJs, ...args], { cwd: validateSafePath(cwd) }, (err) => {
         if (err) reject(err);
         else resolve();
       });
@@ -670,7 +702,7 @@ function runNpmCommand(args: string[], cwd: string): Promise<void> {
       const npmBinName = isWin ? "npm.cmd" : "npm";
       const candidate = path.join(nodeDir, npmBinName);
       const npmBin = fs.existsSync(candidate) ? candidate : "npm";
-      exec(`"${npmBin}" ${args.join(" ")}`, { cwd }, (err) => {
+      exec(`"${npmBin}" ${args.join(" ")}`, { cwd: validateSafePath(cwd) }, (err) => {
         if (err) reject(err);
         else resolve();
       });
@@ -721,9 +753,9 @@ async function installVitePluginInvasive(
   }
 
   // 2. Modify vite config
-  let configPath = path.join(projectRoot, "vite.config.ts");
+  let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
   if (!fs.existsSync(configPath)) {
-    configPath = path.join(projectRoot, "vite.config.js");
+    configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
   }
 
   if (!fs.existsSync(configPath)) {
@@ -795,7 +827,7 @@ async function installAngularInvasive(projectRoot: string) {
 
   // 1. Install ngx-locatorjs
   console.log(`[HoverSource] Installing ngx-locatorjs...`);
-  const pkgPath = path.join(projectRoot, "package.json");
+  const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
   if (!fs.existsSync(pkgPath)) {
     console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
     return;
@@ -814,7 +846,7 @@ async function installAngularInvasive(projectRoot: string) {
   try {
     const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
     await new Promise<void>((resolve, reject) => {
-      exec(`${npxCmd} locatorjs-config`, { cwd: projectRoot }, (err) => {
+      exec(`${npxCmd} locatorjs-config`, { cwd: validateSafePath(projectRoot) }, (err) => {
         if (err) reject(err);
         else resolve();
       });
@@ -825,9 +857,9 @@ async function installAngularInvasive(projectRoot: string) {
   }
 
   // 3. Modify main.ts
-  let mainPath = path.join(projectRoot, "src", "main.ts");
+  let mainPath = validateSafePath(path.join(projectRoot, "src", "main.ts"));
   if (!fs.existsSync(mainPath)) {
-    mainPath = path.join(projectRoot, "main.ts");
+    mainPath = validateSafePath(path.join(projectRoot, "main.ts"));
   }
 
   if (!fs.existsSync(mainPath)) {
@@ -869,9 +901,9 @@ async function uninstallInvasive(projectRoot: string) {
   }
 
   // 2. Remove from Vite config
-  let configPath = path.join(projectRoot, "vite.config.ts");
+  let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
   if (!fs.existsSync(configPath)) {
-    configPath = path.join(projectRoot, "vite.config.js");
+    configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
   }
 
   if (fs.existsSync(configPath)) {
@@ -890,9 +922,9 @@ async function uninstallInvasive(projectRoot: string) {
   }
 
   // 3. Remove from main.ts
-  let mainPath = path.join(projectRoot, "src", "main.ts");
+  let mainPath = validateSafePath(path.join(projectRoot, "src", "main.ts"));
   if (!fs.existsSync(mainPath)) {
-    mainPath = path.join(projectRoot, "main.ts");
+    mainPath = validateSafePath(path.join(projectRoot, "main.ts"));
   }
 
   if (fs.existsSync(mainPath)) {
@@ -944,7 +976,8 @@ async function main() {
     printHelp();
     process.exit(0);
   }
-  const projectRoot = path.resolve((args.root as string) || process.cwd());
+  const rawRoot = (args.root as string) || process.cwd();
+  const projectRoot = path.resolve(validateSafePath(rawRoot));
 
   if (subcommand === "install") {
     if (args.vue) {
@@ -975,6 +1008,9 @@ async function main() {
   const shouldOpenDashboard = !!args.dashboard;
   const targetUrl = args.target as string | undefined;
   let execCommand = args.exec as string | undefined;
+  if (execCommand) {
+    validateSafeCommand(execCommand);
+  }
 
   let patchRestorer: (() => void) | undefined;
   const cleanup = () => {
@@ -1056,7 +1092,7 @@ async function main() {
     process.exit(1);
   }
 
-  const scriptContent = fs.readFileSync(scriptPath, "utf-8");
+  const scriptContent = fs.readFileSync(validateSafePath(scriptPath), "utf-8");
   // Prepend companion port so overlay can connect back regardless of configured port
   const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
   const scriptWithPort = portBootstrap + scriptContent;

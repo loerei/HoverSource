@@ -452,10 +452,10 @@ function removePatchState(filePath: string) {
 function restoreLeftoverPatches() {
   if (!fs.existsSync(PATCH_STATE_FILE)) return;
   try {
-    const state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8"));
+    const state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8")) as Record<string, string>;
     for (const [filePath, originalContent] of Object.entries(state)) {
       if (fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, originalContent as string, "utf-8");
+        fs.writeFileSync(filePath, originalContent, "utf-8");
         console.log(`[HoverSource] [Self-Healing] Restored leftover patch in ${filePath}`);
       }
     }
@@ -658,14 +658,63 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
   openBrowser(`http://localhost:${proxyPort}`);
 }
 
+function parseCommand(cmdString: string): { command: string; args: string[] } {
+  const parts: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  let quoteChar = "";
+
+  for (let i = 0; i < cmdString.length; i++) {
+    const char = cmdString[i];
+    if ((char === '"' || char === "'") && (i === 0 || cmdString[i - 1] !== '\\')) {
+      if (inQuotes && char === quoteChar) {
+        inQuotes = false;
+      } else if (!inQuotes) {
+        inQuotes = true;
+        quoteChar = char;
+      } else {
+        current += char;
+      }
+    } else if (char === " " && !inQuotes) {
+      if (current) {
+        parts.push(current);
+        current = "";
+      }
+    } else {
+      current += char;
+    }
+  }
+  if (current) {
+    parts.push(current);
+  }
+
+  return {
+    command: parts[0] || "",
+    args: parts.slice(1),
+  };
+}
+
+function resolveWindowsCommand(command: string): string {
+  if (process.platform !== "win32") {
+    return command;
+  }
+  const commonCmds = ["npm", "npx", "yarn", "pnpm", "gulp", "tsc"];
+  if (commonCmds.includes(command.toLowerCase())) {
+    return `${command}.cmd`;
+  }
+  return command;
+}
+
 function runExecMode(execCommand: string, projectRoot: string, debugPort: number): void {
   console.log(`[HoverSource] Exec mode: spawning → ${execCommand}`);
   const childEnv = {
     ...process.env,
     ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${debugPort}`,
   };
-  const child = spawn(validateSafeCommand(execCommand), [], {
-    shell: true,
+  const { command, args } = parseCommand(execCommand);
+  const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
+  const child = spawn(resolvedCmd, args, {
+    shell: false,
     env: childEnv,
     cwd: validateSafePath(projectRoot),
     stdio: "inherit",

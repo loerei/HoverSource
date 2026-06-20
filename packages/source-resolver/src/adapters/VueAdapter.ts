@@ -9,49 +9,59 @@ export class VueAdapter implements SourceAdapter {
     return (element as any).__vueParentComponent;
   }
 
-  canResolve(element: HTMLElement): boolean {
-    return !!this.getVueInstance(element) || 
-      (typeof element.hasAttribute === "function" && 
-        (element.hasAttribute("data-v-inspector") || element.hasAttribute("data-v-inspector-file"))
-      );
+  private resolveInvasiveFile(element: HTMLElement, dataset: DOMStringMap): SourceInfo | null {
+    const file = dataset.vInspectorFile;
+    if (file) {
+      const lineStr = dataset.vInspectorLine;
+      const columnStr = dataset.vInspectorColumn;
+      const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
+      const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
+
+      return {
+        fileName: file,
+        lineNumber: Number.isNaN(line) ? undefined : line,
+        columnNumber: Number.isNaN(column) ? undefined : column,
+        componentName: getComponentNameFromFile(file),
+        framework: "Vue",
+        ...getElementMetadata(element)
+      };
+    }
+    return null;
   }
 
-  resolve(element: HTMLElement): SourceInfo | null {
-    // 1. Check if individual invasive inspector attributes are present
-    if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector-file")) {
-      const file = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-file") : null;
-      if (file) {
-        const lineStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-line") : null;
-        const columnStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-column") : null;
-        const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
-        const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
-
+  private resolveInvasiveCombined(element: HTMLElement, dataset: DOMStringMap): SourceInfo | null {
+    const value = dataset.vInspector;
+    if (value) {
+      const parsed = parseColonLocation(value);
+      if (parsed) {
         return {
-          fileName: file,
-          lineNumber: !Number.isNaN(line) ? line : undefined,
-          columnNumber: !Number.isNaN(column) ? column : undefined,
-          componentName: getComponentNameFromFile(file),
+          fileName: parsed.fileName,
+          lineNumber: parsed.lineNumber,
+          columnNumber: parsed.columnNumber,
+          componentName: getComponentNameFromFile(parsed.fileName),
           framework: "Vue",
           ...getElementMetadata(element)
         };
       }
     }
+    return null;
+  }
 
-    // 2. Check if single combined invasive inspector attribute is present
-    if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
-      const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
-      if (value) {
-        const parsed = parseColonLocation(value);
-        if (parsed) {
-          return {
-            fileName: parsed.fileName,
-            lineNumber: parsed.lineNumber,
-            columnNumber: parsed.columnNumber,
-            componentName: getComponentNameFromFile(parsed.fileName),
-            framework: "Vue",
-            ...getElementMetadata(element)
-          };
-        }
+  canResolve(element: HTMLElement): boolean {
+    if (this.getVueInstance(element)) return true;
+    return !!(element.dataset && ("vInspector" in element.dataset || "vInspectorFile" in element.dataset));
+  }
+
+  resolve(element: HTMLElement): SourceInfo | null {
+    const dataset = element.dataset;
+    if (dataset) {
+      if ("vInspectorFile" in dataset) {
+        const res = this.resolveInvasiveFile(element, dataset);
+        if (res) return res;
+      }
+      if ("vInspector" in dataset) {
+        const res = this.resolveInvasiveCombined(element, dataset);
+        if (res) return res;
       }
     }
 

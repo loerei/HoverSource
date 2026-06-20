@@ -327,6 +327,40 @@ class OverlayEngine implements OverlayController {
     globalThis.addEventListener("keydown", this.handleKeyDown);
   }
 
+  private handleActionShortcuts(e: KeyboardEvent, shortcuts: any, toggleModeShortcut: any) {
+    if (this.matchShortcut(e, shortcuts.openDashboard)) {
+      e.preventDefault();
+      console.log("[HoverSource] Shortcut matched: openDashboard");
+      this.openDashboardInBrowser();
+      return;
+    }
+    if (this.matchShortcut(e, toggleModeShortcut)) {
+      e.preventDefault();
+      this.switchMode();
+      return;
+    }
+    if (this.matchShortcut(e, shortcuts.toggleMinimal)) {
+      e.preventDefault();
+      this.activeMode.onShortcut('toggleMinimal');
+      return;
+    }
+    if (this.matchShortcut(e, shortcuts.toggleFreeze)) {
+      e.preventDefault();
+      this.activeMode.onShortcut('toggleFreeze');
+      return;
+    }
+    if (this.matchShortcut(e, shortcuts.copyMetadata)) {
+      e.preventDefault();
+      this.activeMode.onShortcut('copyMetadata');
+      return;
+    }
+    if (this.matchShortcut(e, shortcuts.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
+      e.preventDefault();
+      this.activeMode.onShortcut('copyAllLayers');
+      return;
+    }
+  }
+
   private readonly handleKeyDown = (e: KeyboardEvent) => {
     const shortcuts = this.config?.shortcuts;
     if (!shortcuts) return;
@@ -347,26 +381,7 @@ class OverlayEngine implements OverlayController {
     // Hardcoded fallback for toggleMode if not in config
     const toggleModeShortcut = shortcuts.toggleMode || { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
 
-    if (this.matchShortcut(e, shortcuts.openDashboard)) {
-      e.preventDefault();
-      console.log("[HoverSource] Shortcut matched: openDashboard");
-      this.openDashboardInBrowser();
-    } else if (this.matchShortcut(e, toggleModeShortcut)) {
-      e.preventDefault();
-      this.switchMode();
-    } else if (this.matchShortcut(e, shortcuts.toggleMinimal)) {
-      e.preventDefault();
-      this.activeMode.onShortcut('toggleMinimal');
-    } else if (this.matchShortcut(e, shortcuts.toggleFreeze)) {
-      e.preventDefault();
-      this.activeMode.onShortcut('toggleFreeze');
-    } else if (this.matchShortcut(e, shortcuts.copyMetadata)) {
-      e.preventDefault();
-      this.activeMode.onShortcut('copyMetadata');
-    } else if (this.matchShortcut(e, shortcuts.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
-      e.preventDefault();
-      this.activeMode.onShortcut('copyAllLayers');
-    }
+    this.handleActionShortcuts(e, shortcuts, toggleModeShortcut);
   };
 
   private switchMode() {
@@ -502,15 +517,74 @@ class OverlayEngine implements OverlayController {
     this.tooltipBox.style.top = `${y}px`;
   }
 
+  private drawLeader(x1: number, y1: number, rowRect: DOMRect, tooltipRect: DOMRect | null): void {
+    if (this.tooltipBox && this.tooltipBox.style.display !== "none" && tooltipRect) {
+      if (
+        x1 >= tooltipRect.left &&
+        x1 <= tooltipRect.right &&
+        y1 >= tooltipRect.top &&
+        y1 <= tooltipRect.bottom
+      ) {
+        return;
+      }
+    }
+
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "hoversource-parent-svg");
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", "100%");
+    this.container!.appendChild(svg);
+    this.parentHighlightElements.push(svg);
+
+    // Determine termination edge based on relative horizontal position
+    let rx = rowRect.left;
+    if (tooltipRect && x1 > (tooltipRect.left + tooltipRect.width / 2)) {
+      rx = rowRect.right;
+    }
+
+    // Tooltip row target point: vertical center of rowRect
+    const ry = rowRect.top + rowRect.height / 2;
+
+    // Draw target dot
+    const dotCircle = document.createElementNS(svgNS, "circle");
+    dotCircle.setAttribute("cx", x1.toString());
+    dotCircle.setAttribute("cy", y1.toString());
+    dotCircle.setAttribute("r", "5");
+    dotCircle.setAttribute("class", "hoversource-leader-dot");
+    svg.appendChild(dotCircle);
+
+    const dotInner = document.createElementNS(svgNS, "circle");
+    dotInner.setAttribute("cx", x1.toString());
+    dotInner.setAttribute("cy", y1.toString());
+    dotInner.setAttribute("r", "1.5");
+    dotInner.setAttribute("fill", "#ffffff");
+    svg.appendChild(dotInner);
+
+    // Draw leader line (diagonal then horizontal) with viewport bounds check
+    const dx = rx - x1;
+    const dir = dx > 0 ? 1 : -1;
+    let x_mid = x1 + dir * 30;
+    if (Math.abs(dx) <= 60) {
+      x_mid = x1 + dx * 0.5;
+    }
+    x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
+
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
+    path.setAttribute("class", "hoversource-leader-line");
+    svg.appendChild(path);
+  }
+
   public drawParentHighlight(fx: any, rowRect?: DOMRect): void {
-    if (!this.container || !fx || !fx.element || typeof fx.element !== "object" || fx.element.nodeType !== 1) return;
+    const parentEl = fx?.element;
+    if (!this.container || !parentEl || typeof parentEl !== "object" || parentEl.nodeType !== 1) return;
 
     // Filter properties to only visual modifier/scrolling ones
     const prop = fx.property;
     const isVisualEffect = prop === "mask-image" || prop === "clip-path" || prop.startsWith("overflow");
     if (!isVisualEffect) return;
 
-    const parentEl = fx.element;
     const rect = parentEl.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
@@ -540,68 +614,11 @@ class OverlayEngine implements OverlayController {
       const x1 = subRect.left + subRect.width / 2;
       const y1 = subRect.top + subRect.height / 2;
 
-      // Check if start point is inside the tooltip box to avoid drawing over it
-      let isInsideTooltip = false;
-      let tooltipRect: DOMRect | null = null;
-      if (this.tooltipBox && this.tooltipBox.style.display !== "none") {
-        tooltipRect = this.tooltipBox.getBoundingClientRect();
-        if (
-          x1 >= tooltipRect.left &&
-          x1 <= tooltipRect.right &&
-          y1 >= tooltipRect.top &&
-          y1 <= tooltipRect.bottom
-        ) {
-          isInsideTooltip = true;
-        }
-      }
+      const tooltipRect = this.tooltipBox && this.tooltipBox.style.display !== "none"
+        ? this.tooltipBox.getBoundingClientRect()
+        : null;
 
-      if (!isInsideTooltip) {
-        const svgNS = "http://www.w3.org/2000/svg";
-        const svg = document.createElementNS(svgNS, "svg");
-        svg.setAttribute("class", "hoversource-parent-svg");
-        svg.setAttribute("width", "100%");
-        svg.setAttribute("height", "100%");
-        this.container.appendChild(svg);
-        this.parentHighlightElements.push(svg);
-
-        // Determine termination edge based on relative horizontal position
-        let rx = rowRect.left;
-        if (tooltipRect && x1 > (tooltipRect.left + tooltipRect.width / 2)) {
-          rx = rowRect.right;
-        }
-
-        // Tooltip row target point: vertical center of rowRect
-        const ry = rowRect.top + rowRect.height / 2;
-
-        // Draw target dot
-        const dotCircle = document.createElementNS(svgNS, "circle");
-        dotCircle.setAttribute("cx", x1.toString());
-        dotCircle.setAttribute("cy", y1.toString());
-        dotCircle.setAttribute("r", "5");
-        dotCircle.setAttribute("class", "hoversource-leader-dot");
-        svg.appendChild(dotCircle);
-
-        const dotInner = document.createElementNS(svgNS, "circle");
-        dotInner.setAttribute("cx", x1.toString());
-        dotInner.setAttribute("cy", y1.toString());
-        dotInner.setAttribute("r", "1.5");
-        dotInner.setAttribute("fill", "#ffffff");
-        svg.appendChild(dotInner);
-
-        // Draw leader line (diagonal then horizontal) with viewport bounds check
-        const dx = rx - x1;
-        const dir = dx > 0 ? 1 : -1;
-        let x_mid = x1 + dir * 30;
-        if (Math.abs(dx) <= 60) {
-          x_mid = x1 + dx * 0.5;
-        }
-        x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
-
-        const path = document.createElementNS(svgNS, "path");
-        path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
-        path.setAttribute("class", "hoversource-leader-line");
-        svg.appendChild(path);
-      }
+      this.drawLeader(x1, y1, rowRect, tooltipRect);
     }
   }
 
@@ -689,36 +706,18 @@ if (typeof document !== "undefined" && !(globalThis as any).__HoverSourceInitial
   console.log("[HoverSource] Overlay injected.");
 }
 
-export function parseMaskGradient(value: string, rect: DOMRect): { left: number; top: number; width: number; height: number } | null {
-  if (!value || !value.includes("linear-gradient")) return null;
-  
-  const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
-  if (matches.length === 0) return null;
-  
-  let stopValue = 0;
-  let stopUnit = "px";
-  for (const m of matches) {
-    const val = parseFloat(m[1]);
-    if (val > 0) {
-      stopValue = val;
-      stopUnit = m[2];
-      break;
-    }
-  }
-  if (stopValue === 0) return null;
-
-  let direction = "to bottom";
-  if (value.includes("to top")) direction = "to top";
-  else if (value.includes("to right")) direction = "to right";
-  else if (value.includes("to left")) direction = "to left";
-
+function calculateGradientBounds(
+  direction: string, 
+  stopValue: number, 
+  stopUnit: string, 
+  rect: DOMRect, 
+  rectBottom: number, 
+  rectRight: number
+): { left: number; top: number; width: number; height: number } {
   let subLeft = rect.left;
   let subTop = rect.top;
   let subWidth = rect.width;
   let subHeight = rect.height;
-
-  const rectBottom = (rect.bottom !== undefined) ? rect.bottom : rect.top + rect.height;
-  const rectRight = (rect.right !== undefined) ? rect.right : rect.left + rect.width;
 
   if (direction === "to bottom") {
     const h = (stopUnit === "px") ? stopValue : rect.height * (stopValue / 100);
@@ -739,19 +738,48 @@ export function parseMaskGradient(value: string, rect: DOMRect): { left: number;
   return { left: subLeft, top: subTop, width: subWidth, height: subHeight };
 }
 
-export function parseClipPathInset(value: string, rect: DOMRect): { left: number; top: number; width: number; height: number } | null {
-  if (!value || !value.includes("inset(")) return null;
+export function parseMaskGradient(value: string, rect: DOMRect): { left: number; top: number; width: number; height: number } | null {
+  if (!value?.includes("linear-gradient")) return null;
   
-  const insetMatch = value.match(/inset\(([^)]+)\)/);
+  const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
+  if (matches.length === 0) return null;
+  
+  let stopValue = 0;
+  let stopUnit = "px";
+  for (const m of matches) {
+    const val = Number.parseFloat(m[1]);
+    if (val > 0) {
+      stopValue = val;
+      stopUnit = m[2];
+      break;
+    }
+  }
+  if (stopValue === 0) return null;
+
+  let direction = "to bottom";
+  if (value.includes("to top")) direction = "to top";
+  else if (value.includes("to right")) direction = "to right";
+  else if (value.includes("to left")) direction = "to left";
+
+  const rectBottom = rect.bottom ?? (rect.top + rect.height);
+  const rectRight = rect.right ?? (rect.left + rect.width);
+
+  return calculateGradientBounds(direction, stopValue, stopUnit, rect, rectBottom, rectRight);
+}
+
+export function parseClipPathInset(value: string, rect: DOMRect): { left: number; top: number; width: number; height: number } | null {
+  if (!value?.includes("inset(")) return null;
+  
+  const insetMatch = /inset\(([^)]+)\)/.exec(value);
   if (!insetMatch) return null;
   
-  let content = insetMatch[1].split("round")[0].trim();
+  const content = insetMatch[1].split("round")[0].trim();
   const tokens = content.split(/\s+/).filter(t => t.length > 0);
   if (tokens.length === 0) return null;
 
   const parseVal = (token: string, size: number): number => {
-    const num = parseFloat(token);
-    if (isNaN(num)) return 0;
+    const num = Number.parseFloat(token);
+    if (Number.isNaN(num)) return 0;
     if (token.includes("%")) return size * (num / 100);
     return num;
   };

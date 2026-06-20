@@ -2,6 +2,15 @@ import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js
 import { SourceResolver, ParentVisualEffect } from "@hoversource/source-resolver";
 import { inspectVisualContext } from "../inspector.js";
 
+interface TooltipLabels {
+  copyLabel: string;
+  copyAllLabel: string;
+  freezeLabel: string;
+  minimalLabel: string;
+  dbLabel: string;
+  modeLabel: string;
+}
+
 function getCompanionPort(): number {
   return (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
 }
@@ -96,11 +105,11 @@ export class InspectorAdapter implements InteractionMode {
         
         parentItems.forEach((item) => {
           if (item.classList.contains("hs-parent-active")) {
-            const indexAttr = item.getAttribute("data-index");
-            if (indexAttr !== null) {
-              const idx = parseInt(indexAttr, 10);
+            const idxStr = (item as HTMLElement).dataset?.index ?? item.getAttribute("data-index");
+            if (idxStr !== null && idxStr !== undefined) {
+              const idx = Number.parseInt(idxStr, 10);
               const fx = this.currentSourceInfo.visualContext.parentEffects[idx];
-              if (fx && fx.element) {
+              if (fx?.element) {
                 activeItems.push({ item: item as HTMLElement, fx });
               }
             }
@@ -291,13 +300,9 @@ export class InspectorAdapter implements InteractionMode {
   private renderMinimalTooltip(
     element: HTMLElement,
     info: any,
-    copyLabel: string,
-    copyAllLabel: string,
-    freezeLabel: string,
-    minimalLabel: string,
-    dbLabel: string,
-    modeLabel: string
+    labels: TooltipLabels
   ): string {
+    const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
     const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
     const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
 
@@ -490,13 +495,9 @@ export class InspectorAdapter implements InteractionMode {
   private renderDetailedTooltip(
     element: HTMLElement,
     info: any,
-    copyLabel: string,
-    copyAllLabel: string,
-    freezeLabel: string,
-    minimalLabel: string,
-    dbLabel: string,
-    modeLabel: string
+    labels: TooltipLabels
   ): string {
+    const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
     const computed = globalThis.getComputedStyle(element);
     const shadow = computed.boxShadow;
     const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
@@ -587,9 +588,11 @@ export class InspectorAdapter implements InteractionMode {
     const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
     const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
 
+    const labels: TooltipLabels = { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel };
+
     const innerHtml = this.minimalMode
-      ? this.renderMinimalTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel)
-      : this.renderDetailedTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel);
+      ? this.renderMinimalTooltip(element, info, labels)
+      : this.renderDetailedTooltip(element, info, labels);
 
     const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
     this.controller.drawTooltip(html, e);
@@ -601,11 +604,11 @@ export class InspectorAdapter implements InteractionMode {
       const drawDefaultHighlights = () => {
         this.controller.clearParentHighlights();
         parentItems.forEach((item) => {
-          const indexAttr = item.getAttribute("data-index");
-          if (indexAttr !== null) {
-            const idx = parseInt(indexAttr, 10);
+          const idxStr = (item as HTMLElement).dataset?.index ?? item.getAttribute("data-index");
+          if (idxStr !== null && idxStr !== undefined) {
+            const idx = Number.parseInt(idxStr, 10);
             const fx = info.visualContext?.parentEffects[idx];
-            const shouldHighlight = fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path");
+            const shouldHighlight = fx?.element && (fx.property === "mask-image" || fx.property === "clip-path");
             if (shouldHighlight) {
               const rowRect = item.getBoundingClientRect();
               this.controller.drawParentHighlight(fx, rowRect);
@@ -622,11 +625,11 @@ export class InspectorAdapter implements InteractionMode {
 
       parentItems.forEach((item) => {
         item.addEventListener("mouseenter", () => {
-          const indexAttr = item.getAttribute("data-index");
-          if (indexAttr !== null) {
-            const idx = parseInt(indexAttr, 10);
+          const idxStr = (item as HTMLElement).dataset?.index ?? item.getAttribute("data-index");
+          if (idxStr !== null && idxStr !== undefined) {
+            const idx = Number.parseInt(idxStr, 10);
             const fx = info.visualContext?.parentEffects[idx];
-            if (fx && fx.element) {
+            if (fx?.element) {
               const rowRect = item.getBoundingClientRect();
               
               // Clear active class from all rows
@@ -727,6 +730,7 @@ export class InspectorAdapter implements InteractionMode {
     const classList = Array.from(element.classList).filter((c: string) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
     const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
 
+    const directionStr = data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : "";
     let text = `* **Component**: \`${data.component}\`
 * **Element**: ${selectorLabel}
 * **File Path**: \`${data.file || "Unknown"}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
@@ -737,7 +741,7 @@ export class InspectorAdapter implements InteractionMode {
   - Background: \`${data.styles.backgroundColor}\`
   - Box Shadow: \`${data.styles.boxShadow}\`
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
-  - Display: \`${data.styles.display}\` ${data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : ""}`;
+  - Display: \`${data.styles.display}\` ${directionStr}`;
 
     if (info.visualContext && info.visualContext.parentEffects.length > 0) {
       const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
@@ -769,6 +773,53 @@ export class InspectorAdapter implements InteractionMode {
     this.controller.copyToClipboard(text);
   }
 
+  private formatMinifiedHtmlNode(node: Node, indent: string): string {
+    if (node.nodeType === 3) { // Text node
+      const text = node.nodeValue?.trim();
+      return text ? `${indent}...` : "";
+    }
+    
+    if (node.nodeType === 1) { // Element node
+      const elNode = node as HTMLElement;
+      const tagName = elNode.tagName.toLowerCase();
+      
+      // Gather attributes
+      const attrs: string[] = [];
+      if (elNode.id) {
+        attrs.push(`id="${elNode.id}"`);
+      }
+      if (elNode.className && typeof elNode.className === 'string') {
+        const classes = Array.from(elNode.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+        if (classes.length > 0) {
+          attrs.push(`class="${classes.join(' ')}"`);
+        }
+      }
+      
+      if (elNode.getAttribute("href")) {
+        attrs.push(`href="${elNode.getAttribute("href")}"`);
+      }
+      
+      const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
+      const children = Array.from(elNode.childNodes);
+      
+      if (children.length === 0) {
+        return `${indent}<${tagName}${attrStr}></${tagName}>`;
+      }
+      
+      const childStrings = children
+        .map(c => this.formatMinifiedHtmlNode(c, indent + "  "))
+        .filter(s => s !== "");
+        
+      if (childStrings.length === 0) {
+        return `${indent}<${tagName}${attrStr}></${tagName}>`;
+      }
+      
+      return `${indent}<${tagName}${attrStr}>\n${childStrings.join("\n")}\n${indent}</${tagName}>`;
+    }
+    
+    return "";
+  }
+
   private getMinifiedHTML(el: HTMLElement): string {
     const clone = el.cloneNode(true) as HTMLElement;
     
@@ -776,54 +827,7 @@ export class InspectorAdapter implements InteractionMode {
     const hsEls = clone.querySelectorAll('.hoversource-container, [class^="hs-"]');
     hsEls.forEach(e => e.remove());
 
-    const formatNode = (node: Node, indent: string): string => {
-      if (node.nodeType === 3) { // Text node
-        const text = node.nodeValue?.trim();
-        return text ? `${indent}...` : "";
-      }
-      
-      if (node.nodeType === 1) { // Element node
-        const elNode = node as HTMLElement;
-        const tagName = elNode.tagName.toLowerCase();
-        
-        // Gather attributes
-        const attrs: string[] = [];
-        if (elNode.id) {
-          attrs.push(`id="${elNode.id}"`);
-        }
-        if (elNode.className && typeof elNode.className === 'string') {
-          const classes = Array.from(elNode.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-          if (classes.length > 0) {
-            attrs.push(`class="${classes.join(' ')}"`);
-          }
-        }
-        
-        if (elNode.getAttribute("href")) {
-          attrs.push(`href="${elNode.getAttribute("href")}"`);
-        }
-        
-        const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
-        const children = Array.from(elNode.childNodes);
-        
-        if (children.length === 0) {
-          return `${indent}<${tagName}${attrStr}></${tagName}>`;
-        }
-        
-        const childStrings = children
-          .map(c => formatNode(c, indent + "  "))
-          .filter(s => s !== "");
-          
-        if (childStrings.length === 0) {
-          return `${indent}<${tagName}${attrStr}></${tagName}>`;
-        }
-        
-        return `${indent}<${tagName}${attrStr}>\n${childStrings.join("\n")}\n${indent}</${tagName}>`;
-      }
-      
-      return "";
-    };
-
-    return formatNode(clone, "");
+    return this.formatMinifiedHtmlNode(clone, "");
   }
 
   private getTargetHTMLToCopy(el: HTMLElement): HTMLElement {

@@ -96,7 +96,7 @@ function getCandidateClassNames(className: string): string[] {
       if (part) candidates.add(part);
     }
     if (subParts.length > 1) {
-      candidates.add(subParts[subParts.length - 1]);
+      candidates.add(subParts.at(-1));
     }
   } else if (className.startsWith("_")) {
     const parts = className.split("_").filter(Boolean);
@@ -104,7 +104,7 @@ function getCandidateClassNames(className: string): string[] {
       candidates.add(part);
     }
     if (parts.length > 1) {
-      candidates.add(parts[parts.length - 2]);
+      candidates.add(parts.at(-2));
     }
   }
   
@@ -116,8 +116,7 @@ function splitSelectorList(selectorListStr: string): string[] {
   let current = "";
   let parenDepth = 0;
   
-  for (let i = 0; i < selectorListStr.length; i++) {
-    const char = selectorListStr[i];
+  for (const char of selectorListStr) {
     if (char === "(") {
       parenDepth++;
       current += char;
@@ -153,6 +152,48 @@ interface SelectorOrigin {
   column: number;
 }
 
+function resolveNestedSelectors(
+  rawSel: string,
+  braceStack: string[][],
+  origins: SelectorOrigin[],
+  line: number,
+  col: number
+): string[] {
+  const newSelectors: string[] = [];
+  if (!rawSel) return newSelectors;
+
+  const splitSels = splitSelectorList(rawSel);
+  const parentList = braceStack.at(-1) ?? [];
+  const activeParentSelectors = parentList.filter(p => !p.trim().startsWith("@"));
+
+  for (const sel of splitSels) {
+    const trimmedSel = sel.trim();
+    if (!trimmedSel) continue;
+
+    if (activeParentSelectors.length > 0) {
+      for (const parentSel of activeParentSelectors) {
+        const resolved = trimmedSel.includes("&")
+          ? trimmedSel.replaceAll("&", parentSel)
+          : `${parentSel} ${trimmedSel}`;
+        newSelectors.push(resolved);
+        origins.push({
+          selector: resolved,
+          line,
+          column: col
+        });
+      }
+    } else {
+      newSelectors.push(trimmedSel);
+      origins.push({
+        selector: trimmedSel,
+        line,
+        column: col
+      });
+    }
+  }
+  return newSelectors;
+}
+
 function parseSelectors(content: string): SelectorOrigin[] {
   const origins: SelectorOrigin[] = [];
   
@@ -167,7 +208,6 @@ function parseSelectors(content: string): SelectorOrigin[] {
   let currentSelector = "";
   let selectorStartLine = 1;
   let selectorStartCol = 1;
-  let inSelectorState = true;
   
   const advancePos = (c: string) => {
     if (c === "\n") {
@@ -237,46 +277,11 @@ function parseSelectors(content: string): SelectorOrigin[] {
     
     if (char === "{") {
       const rawSel = currentSelector.trim();
-      const newSelectors: string[] = [];
+      const newSelectors = resolveNestedSelectors(rawSel, braceStack, origins, selectorStartLine, selectorStartCol);
       
-      if (rawSel) {
-        const splitSels = splitSelectorList(rawSel);
-        const parentList = braceStack.length > 0 ? braceStack[braceStack.length - 1] : [];
-        const activeParentSelectors = parentList.filter(p => !p.trim().startsWith("@"));
-        
-        for (const sel of splitSels) {
-          const trimmedSel = sel.trim();
-          if (!trimmedSel) continue;
-          
-          if (activeParentSelectors.length > 0) {
-            for (const parentSel of activeParentSelectors) {
-              let resolved = "";
-              if (trimmedSel.includes("&")) {
-                resolved = trimmedSel.replaceAll("&", parentSel);
-              } else {
-                resolved = `${parentSel} ${trimmedSel}`;
-              }
-              newSelectors.push(resolved);
-              origins.push({
-                selector: resolved,
-                line: selectorStartLine,
-                column: selectorStartCol
-              });
-            }
-          } else {
-            newSelectors.push(trimmedSel);
-            origins.push({
-              selector: trimmedSel,
-              line: selectorStartLine,
-              column: selectorStartCol
-            });
-          }
-        }
-      }
-      
-      braceStack.push(newSelectors.length > 0 ? newSelectors : (rawSel ? [rawSel] : []));
+      const fallback = rawSel ? [rawSel] : [];
+      braceStack.push(newSelectors.length > 0 ? newSelectors : fallback);
       currentSelector = "";
-      inSelectorState = true;
       advancePos(char);
       continue;
     }
@@ -284,25 +289,21 @@ function parseSelectors(content: string): SelectorOrigin[] {
     if (char === "}") {
       braceStack.pop();
       currentSelector = "";
-      inSelectorState = true;
       advancePos(char);
       continue;
     }
     
     if (char === ";") {
       currentSelector = "";
-      inSelectorState = true;
       advancePos(char);
       continue;
     }
     
-    if (inSelectorState) {
-      if (currentSelector.trim() === "") {
-        selectorStartLine = line;
-        selectorStartCol = column;
-      }
-      currentSelector += char;
+    if (currentSelector.trim() === "") {
+      selectorStartLine = line;
+      selectorStartCol = column;
     }
+    currentSelector += char;
     
     advancePos(char);
   }

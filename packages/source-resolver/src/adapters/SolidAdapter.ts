@@ -5,11 +5,11 @@ export class SolidAdapter implements SourceAdapter {
   name = "solid";
 
   canResolve(element: HTMLElement): boolean {
-    return typeof element.hasAttribute === "function" && element.hasAttribute("data-source-loc");
+    return !!(element.dataset && "sourceLoc" in element.dataset);
   }
 
   resolve(element: HTMLElement): SourceInfo | null {
-    const loc = element.getAttribute("data-source-loc");
+    const loc = element.dataset?.sourceLoc;
     if (!loc) return null;
 
     const parsed = parseColonLocation(loc);

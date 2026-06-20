@@ -32,7 +32,7 @@ export class PreactAdapter implements SourceAdapter {
     let vnode = this.getVNode(element);
 
     while (vnode) {
-      const source = vnode.__source || (vnode.props && vnode.props.__source);
+      const source = vnode.__source || vnode.props?.__source;
       if (source) {
         const componentName = this.findComponentNameFromVNode(vnode);
 

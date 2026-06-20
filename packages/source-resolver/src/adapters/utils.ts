@@ -10,7 +10,7 @@ export function getComponentNameFromFile(
   extensions = [".vue", ".svelte", ".astro", ".tsx", ".jsx", ".ts", ".js"]
 ): string | undefined {
   if (!file) return undefined;
-  const baseName = file.split(/[/\\\\]/).pop();
+  const baseName = file.split(/[/\\]/).pop();
   if (!baseName) return undefined;
 
   for (const ext of extensions) {
@@ -43,8 +43,8 @@ export function parseColonLocation(loc: string | null | undefined): {
 
     return {
       fileName: file,
-      lineNumber: !Number.isNaN(line) ? line : undefined,
-      columnNumber: !Number.isNaN(column) ? column : undefined
+      lineNumber: Number.isNaN(line) ? undefined : line,
+      columnNumber: Number.isNaN(column) ? undefined : column
     };
   }
   return null;

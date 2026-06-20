@@ -1,0 +1,17 @@
+{
+  "name": "@hoversource/babel-plugin-react",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "tsc -b --clean"
+  },
+  "dependencies": {
+    "@babel/core": "^7.23.0"
+  },
+  "devDependencies": {
+    "@types/babel__core": "^7.20.5"
+  }
+}

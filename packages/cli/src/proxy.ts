@@ -1,5 +1,6 @@
 import http from "node:http";
 import { URL } from "node:url";
+import zlib from "node:zlib";
 
 /**
  * Starts a reverse HTTP proxy that forwards requests to `targetUrl` and
@@ -9,13 +10,16 @@ export function startProxy(targetUrl: string, proxyPort: number, overlayScriptUr
   const target = new URL(targetUrl);
 
   const server = http.createServer((req, res) => {
+    const headers = { ...req.headers };
+    delete headers["accept-encoding"];
+
     const options: http.RequestOptions = {
       hostname: target.hostname,
       port: target.port || (target.protocol === "https:" ? 443 : 80),
       path: req.url,
       method: req.method,
       headers: {
-        ...req.headers,
+        ...headers,
         host: target.host,
       },
     };
@@ -35,7 +39,22 @@ export function startProxy(targetUrl: string, proxyPort: number, overlayScriptUr
       const chunks: Buffer[] = [];
       proxyRes.on("data", (chunk: Buffer) => chunks.push(chunk));
       proxyRes.on("end", () => {
-        let body = Buffer.concat(chunks).toString("utf-8");
+        let buffer = Buffer.concat(chunks);
+        const contentEncoding = proxyRes.headers["content-encoding"] || "";
+
+        try {
+          if (contentEncoding.includes("gzip")) {
+            buffer = zlib.gunzipSync(buffer);
+          } else if (contentEncoding.includes("deflate")) {
+            buffer = zlib.inflateSync(buffer);
+          } else if (contentEncoding.includes("br")) {
+            buffer = zlib.brotliDecompressSync(buffer);
+          }
+        } catch (err: any) {
+          console.error(`[HoverSource Proxy] Failed to decompress body:`, err.message);
+        }
+
+        let body = buffer.toString("utf-8");
         const injection = `<script src="${overlayScriptUrl}"></script>`;
 
         if (body.includes("</body>")) {
@@ -48,6 +67,7 @@ export function startProxy(targetUrl: string, proxyPort: number, overlayScriptUr
         const responseHeaders = { ...proxyRes.headers };
         // Recalculate content-length after injection
         delete responseHeaders["content-length"];
+        delete responseHeaders["content-encoding"];
         responseHeaders["content-type"] = "text/html; charset=utf-8";
 
         res.writeHead(proxyRes.statusCode || 200, responseHeaders);

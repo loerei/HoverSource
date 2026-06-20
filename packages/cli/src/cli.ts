@@ -17,7 +17,7 @@ const __dirname = path.dirname(__filename);
 
 // Helper functions to prevent Path Injection (S8707) and Command Injection (S8701)
 export function validateSafePath(p: string): string {
-  const pathRegex = new RegExp("^[a-zA-Z0-9_\\-\\s./\\\\:]+$");
+  const pathRegex = /^[a-zA-Z0-9_\-\s./\\:]+$/;
   if (p.includes("..") || !pathRegex.test(p)) {
     throw new Error(`[HoverSource] Security Error: Path contains invalid characters or traversal sequence: ${p}`);
   }
@@ -25,7 +25,7 @@ export function validateSafePath(p: string): string {
 }
 
 export function validateSafeCommand(cmd: string): string {
-  const cmdRegex = new RegExp("^[a-zA-Z0-9_\\-\\s./\\\\:'\"]+$");
+  const cmdRegex = /^[a-zA-Z0-9_\-\s./\\:'"]+$/;
   if (/[;&|<>$\n\r]/.test(cmd) || !cmdRegex.test(cmd)) {
     throw new Error(`[HoverSource] Security Error: Command contains invalid characters: ${cmd}`);
   }
@@ -68,14 +68,14 @@ function parseShortOption(arg: string, args: Record<string, string | boolean>, a
     args[simpleFlags[optionChar]] = true;
   } else if (optionChar in optionMap) {
     const key = optionMap[optionChar];
-    if (val !== undefined) {
-      args[key] = val;
-    } else {
+    if (val === undefined) {
       const nextArg = argv[indexRef.index + 1];
       if (nextArg !== undefined && !nextArg.startsWith("-")) {
         indexRef.index++;
         args[key] = nextArg;
       }
+    } else {
+      args[key] = val;
     }
   }
 }
@@ -853,7 +853,7 @@ async function installAngularInvasive(projectRoot: string) {
     });
     console.log(`[HoverSource] Generated locatorjs configuration.`);
   } catch (err) {
-    console.warn(`[HoverSource] Warning: Failed to run locatorjs-config. You may need to run 'npx locatorjs-config' manually.`);
+    console.warn(`[HoverSource] Warning: Failed to run locatorjs-config. You may need to run 'npx locatorjs-config' manually.`, err);
   }
 
   // 3. Modify main.ts
@@ -966,19 +966,11 @@ Examples:
   hs install -v                              Install Vue template inspector plugin`);
 }
 
-async function main() {
-  // Self-heal any leftover patches from previous crashed/force-killed runs
-  restoreLeftoverPatches();
-
-  const { args, subcommand } = getArgs();
-
-  if (subcommand === "help" || args.help) {
-    printHelp();
-    process.exit(0);
-  }
-  const rawRoot = (args.root as string) || process.cwd();
-  const projectRoot = path.resolve(validateSafePath(rawRoot));
-
+async function handleSubcommands(
+  subcommand: string | undefined,
+  args: any,
+  projectRoot: string
+): Promise<void> {
   if (subcommand === "install") {
     if (args.vue) {
       await installVueInvasive(projectRoot);
@@ -998,6 +990,23 @@ async function main() {
     await uninstallInvasive(projectRoot);
     process.exit(0);
   }
+}
+
+async function main() {
+  // Self-heal any leftover patches from previous crashed/force-killed runs
+  restoreLeftoverPatches();
+
+  const { args, subcommand } = getArgs();
+
+  if (subcommand === "help" || args.help) {
+    printHelp();
+    process.exit(0);
+  }
+  const rawRoot = (args.root as string) || process.cwd();
+  const projectRoot = path.resolve(validateSafePath(rawRoot));
+
+  await handleSubcommands(subcommand, args, projectRoot);
+
   const config = loadMergedConfig(projectRoot);
   const autoResolve = config.autoResolvePortConflicts === true;
   

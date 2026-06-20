@@ -3,7 +3,7 @@ import { SourceResolver, ParentVisualEffect } from "@hoversource/source-resolver
 import { inspectVisualContext } from "../inspector.js";
 
 function getCompanionPort(): number {
-  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 3000;
+  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
 }
 
 export class InspectorAdapter implements InteractionMode {

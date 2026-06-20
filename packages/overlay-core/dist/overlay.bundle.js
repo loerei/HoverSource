@@ -92,6 +92,31 @@
     }
   };
 
+  // ../source-resolver/dist/adapters/ReactInvasiveAdapter.js
+  var ReactInvasiveAdapter = class {
+    name = "react-invasive";
+    canResolve(element) {
+      return !!(element.dataset && typeof element.dataset.hoversourceLoc === "string");
+    }
+    resolve(element) {
+      const value = element.dataset?.hoversourceLoc;
+      if (value) {
+        const parsed = parseColonLocation(value);
+        if (parsed) {
+          return {
+            fileName: parsed.fileName,
+            lineNumber: parsed.lineNumber,
+            columnNumber: parsed.columnNumber,
+            componentName: getComponentNameFromFile(parsed.fileName),
+            framework: "React",
+            ...getElementMetadata(element)
+          };
+        }
+      }
+      return null;
+    }
+  };
+
   // ../source-resolver/dist/adapters/VueAdapter.js
   var VueAdapter = class {
     name = "vue";
@@ -339,13 +364,7 @@
     nodeCache = /* @__PURE__ */ new WeakMap();
     constructor() {
       this.fiberAdapter = new ReactFiberAdapter();
-      this.adapters.push(this.fiberAdapter);
-      this.adapters.push(new VueAdapter());
-      this.adapters.push(new SvelteAdapter());
-      this.adapters.push(new PreactAdapter());
-      this.adapters.push(new SolidAdapter());
-      this.adapters.push(new AstroAdapter());
-      this.adapters.push(new AngularAdapter());
+      this.adapters.push(this.fiberAdapter, new ReactInvasiveAdapter(), new VueAdapter(), new SvelteAdapter(), new PreactAdapter(), new SolidAdapter(), new AstroAdapter(), new AngularAdapter());
       this.setupMutationObserver();
     }
     setupMutationObserver() {
@@ -582,7 +601,7 @@
 
   // src/modes/InspectorAdapter.ts
   function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 3e3;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
   }
   var InspectorAdapter = class {
     id = "inspector";
@@ -2306,7 +2325,7 @@ Suggested layout insertion (heuristic only):
 
   // src/overlay.ts
   function getCompanionPort2() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 3e3;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
   }
   var OverlayEngine = class _OverlayEngine {
     config = null;

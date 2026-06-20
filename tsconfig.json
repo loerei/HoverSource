@@ -12,6 +12,7 @@
   },
   "files": [],
   "references": [
+    { "path": "packages/babel-plugin-react" },
     { "path": "packages/source-resolver" },
     { "path": "packages/companion-server" },
     { "path": "packages/client-injector" },

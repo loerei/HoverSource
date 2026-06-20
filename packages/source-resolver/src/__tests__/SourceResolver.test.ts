@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { SourceResolver } from "../index.js";
 import { ReactFiberAdapter } from "../adapters/ReactFiberAdapter.js";
+import { ReactInvasiveAdapter } from "../adapters/ReactInvasiveAdapter.js";
 import { VueAdapter } from "../adapters/VueAdapter.js";
 import { SvelteAdapter } from "../adapters/SvelteAdapter.js";
 import { PreactAdapter } from "../adapters/PreactAdapter.js";
@@ -80,6 +81,26 @@ describe("ReactFiberAdapter", () => {
       lineNumber: 42,
       columnNumber: 5,
       componentName: "Button",
+      framework: "React"
+    });
+  });
+});
+
+describe("ReactInvasiveAdapter", () => {
+  it("should resolve React component metadata from data-hoversource-loc attribute in invasive mode", () => {
+    const adapter = new ReactInvasiveAdapter();
+    const mockElement = {
+      tagName: "BUTTON",
+      classList: [],
+      hasAttribute: (name: string) => name === "data-hoversource-loc",
+      getAttribute: (name: string) => name === "data-hoversource-loc" ? "src/components/MyComponent.tsx:10:4" : null
+    } as any;
+
+    verifyResolution(adapter, mockElement, {
+      fileName: "src/components/MyComponent.tsx",
+      lineNumber: 10,
+      columnNumber: 4,
+      componentName: "MyComponent",
       framework: "React"
     });
   });

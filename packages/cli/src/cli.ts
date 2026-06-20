@@ -808,6 +808,120 @@ async function installSolidInvasive(projectRoot: string) {
   });
 }
 
+async function installReactInvasive(projectRoot: string) {
+  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE REACT SETUP <<<\x1b[0m`);
+  console.log(`Invasive mode works by adding \x1b[32m@hoversource/babel-plugin-react\x1b[0m to your project.`);
+  console.log(`This plugin injects 'data-hoversource-loc' HTML attributes (file paths, line numbers, column numbers)`);
+  console.log(`directly into DOM elements during compilation, enabling templates resolution in React/Next.js/RSC.`);
+  console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
+  console.log(`  1. Install '@hoversource/babel-plugin-react' as a devDependency in your package.json.`);
+  console.log(`  2. Modify your vite.config.ts / vite.config.js OR next.config.js / next.config.mjs / next.config.ts / .babelrc to register the plugin.\x1b[0m`);
+  
+  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
+  if (answer.trim().toLowerCase() !== "y") {
+    console.log(`[HoverSource] Installation aborted.`);
+    return;
+  }
+
+  console.log(`[HoverSource] Setting up React invasive mode...`);
+
+  // 1. Install devDependency
+  console.log(`[HoverSource] Installing @hoversource/babel-plugin-react...`);
+  const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
+  if (!fs.existsSync(pkgPath)) {
+    console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
+    return;
+  }
+
+  let isNextjs = false;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    if ("next" in allDeps) {
+      isNextjs = true;
+    }
+  } catch (err) {
+    console.warn(`[HoverSource] Warning: Failed to parse package.json. Defaulting to Vite setup.`);
+  }
+
+  // Resolve local plugin path
+  const pluginPath = path.resolve(__dirname, "../../babel-plugin-react");
+  if (!fs.existsSync(pluginPath)) {
+    console.error(`[HoverSource] Error: Could not find @hoversource/babel-plugin-react package source.`);
+    return;
+  }
+
+  try {
+    await runNpmCommand(["install", "-D", pluginPath], projectRoot);
+    console.log(`[HoverSource] Successfully installed @hoversource/babel-plugin-react.`);
+  } catch (err) {
+    console.error(`[HoverSource] Failed to install package:`, err);
+    throw err;
+  }
+
+  if (isNextjs) {
+    console.log(`[HoverSource] Detected Next.js project. Registering plugin in .babelrc...`);
+    const babelrcPath = validateSafePath(path.join(projectRoot, ".babelrc"));
+    let babelConfig: any = {
+      presets: ["next/babel"],
+      plugins: ["@hoversource/babel-plugin-react"]
+    };
+
+    if (fs.existsSync(babelrcPath)) {
+      try {
+        const content = fs.readFileSync(babelrcPath, "utf-8");
+        babelConfig = JSON.parse(content);
+        if (!babelConfig.plugins) {
+          babelConfig.plugins = [];
+        }
+        if (!babelConfig.plugins.includes("@hoversource/babel-plugin-react")) {
+          babelConfig.plugins.push("@hoversource/babel-plugin-react");
+        }
+      } catch (err) {
+        console.warn(`[HoverSource] Warning: Failed to parse existing .babelrc. Overwriting...`);
+      }
+    }
+
+    fs.writeFileSync(babelrcPath, JSON.stringify(babelConfig, null, 2), "utf-8");
+    console.log(`[HoverSource] Successfully registered plugin in .babelrc.`);
+  } else {
+    // Vite setup
+    let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
+    if (!fs.existsSync(configPath)) {
+      configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
+    }
+
+    if (!fs.existsSync(configPath)) {
+      console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
+      console.log(`Please register 'vitePluginReactHoverSource()' manually in your Vite config.`);
+      return;
+    }
+
+    console.log(`[HoverSource] Registering plugin in ${path.basename(configPath)}...`);
+    let configContent = fs.readFileSync(configPath, "utf-8");
+
+    // Check if already registered
+    if (configContent.includes("vitePluginReactHoverSource")) {
+      console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
+      return;
+    }
+
+    // Insert import
+    configContent = `import { vitePluginReactHoverSource } from "@hoversource/babel-plugin-react";\n` + configContent;
+
+    // Insert plugin call inside plugins array
+    if (configContent.includes("plugins:")) {
+      configContent = configContent.replace(/plugins:\s*\[/, `plugins: [\n    vitePluginReactHoverSource(),`);
+      fs.writeFileSync(configPath, configContent, "utf-8");
+      console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
+    } else {
+      fs.writeFileSync(configPath, configContent, "utf-8");
+      console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
+      console.log(`Please manually add 'vitePluginReactHoverSource()' to your plugins array.`);
+    }
+  }
+}
+
 async function installAngularInvasive(projectRoot: string) {
   console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE ANGULAR SETUP <<<\x1b[0m`);
   console.log(`Invasive mode works by adding \x1b[32mngx-locatorjs\x1b[0m to your project.`);
@@ -894,7 +1008,7 @@ async function uninstallInvasive(projectRoot: string) {
   // 1. Remove from package.json
   console.log(`[HoverSource] Uninstalling packages...`);
   try {
-    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector", "solid-devtools", "ngx-locatorjs"], projectRoot);
+    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector", "solid-devtools", "ngx-locatorjs", "@hoversource/babel-plugin-react"], projectRoot);
     console.log(`[HoverSource] Packages uninstalled.`);
   } catch (err) {
     console.error(`[HoverSource] Failed to uninstall packages:`, err);
@@ -913,15 +1027,48 @@ async function uninstallInvasive(projectRoot: string) {
     // Remove imports
     configContent = configContent.replace(/import Inspector from\s*['"]vite-plugin-vue-inspector['"];?\n?/, "");
     configContent = configContent.replace(/import devtools from\s*['"]solid-devtools\/vite['"];?\n?/, "");
+    configContent = configContent.replace(/import\s*\{\s*vitePluginReactHoverSource\s*\}\s*from\s*['"]@hoversource\/babel-plugin-react['"];?\n?/, "");
     // Remove plugin calls
     configContent = configContent.replace(/Inspector\(\),?\\n?\\s*/, "");
     configContent = configContent.replace(/devtools\(\),?\\n?\\s*/, "");
+    configContent = configContent.replace(/vitePluginReactHoverSource\(\),?\\n?\\s*/, "");
     
     fs.writeFileSync(configPath, configContent, "utf-8");
     console.log(`[HoverSource] Cleared Vite plugin registrations.`);
   }
 
-  // 3. Remove from main.ts
+  // 3. Remove from .babelrc
+  let babelrcPath = validateSafePath(path.join(projectRoot, ".babelrc"));
+  if (fs.existsSync(babelrcPath)) {
+    console.log(`[HoverSource] Cleaning ${path.basename(babelrcPath)}...`);
+    try {
+      const content = fs.readFileSync(babelrcPath, "utf-8");
+      const babelConfig = JSON.parse(content);
+      if (babelConfig.plugins) {
+        babelConfig.plugins = babelConfig.plugins.filter((p: string) => p !== "@hoversource/babel-plugin-react");
+        if (babelConfig.plugins.length === 0) {
+          delete babelConfig.plugins;
+        }
+      }
+      if (
+        Object.keys(babelConfig).length === 0 ||
+        (Object.keys(babelConfig).length === 1 &&
+          Array.isArray(babelConfig.presets) &&
+          babelConfig.presets.length === 1 &&
+          babelConfig.presets[0] === "next/babel")
+      ) {
+        fs.unlinkSync(babelrcPath);
+        console.log(`[HoverSource] Removed .babelrc as it is no longer needed.`);
+      } else {
+        fs.writeFileSync(babelrcPath, JSON.stringify(babelConfig, null, 2), "utf-8");
+        console.log(`[HoverSource] Cleared @hoversource/babel-plugin-react from .babelrc.`);
+      }
+    } catch (err) {
+      console.warn(`[HoverSource] Warning: Failed to clean up .babelrc:`, err);
+    }
+  }
+
+  // 4. Remove from main.ts
   let mainPath = validateSafePath(path.join(projectRoot, "src", "main.ts"));
   if (!fs.existsSync(mainPath)) {
     mainPath = validateSafePath(path.join(projectRoot, "main.ts"));
@@ -946,9 +1093,9 @@ Usage:
   hs [subcommand] [options]
 
 Subcommands:
-  install -v|-s|-a|--vue|--solid|--angular   Install framework integration plugins
-  uninstall                                  Uninstall framework integration plugins
-  [npm-script]                               Run an npm script from package.json with HoverSource enabled (e.g. hs start, hs dev)
+  install -v|-s|-a|--vue|--solid|--angular|--react   Install framework integration plugins
+  uninstall                                          Uninstall framework integration plugins
+  [npm-script]                                       Run an npm script from package.json with HoverSource enabled (e.g. hs start, hs dev)
 
 Options:
   -r, --root=<path>                          Path to the project root directory (default: current directory)
@@ -963,7 +1110,8 @@ Options:
 Examples:
   hs start                                   Run the start script from package.json
   hs -t http://localhost:5173                Launch companion server and proxy targeting localhost:5173
-  hs install -v                              Install Vue template inspector plugin`);
+  hs install -v                              Install Vue template inspector plugin
+  hs install --react                         Install React compiler plugin`);
 }
 
 async function handleSubcommands(
@@ -981,8 +1129,11 @@ async function handleSubcommands(
     } else if (args.angular) {
       await installAngularInvasive(projectRoot);
       process.exit(0);
+    } else if (args.react) {
+      await installReactInvasive(projectRoot);
+      process.exit(0);
     } else {
-      console.log("[HoverSource] Please specify a framework to install, e.g. hs install --vue, --solid, --angular");
+      console.log("[HoverSource] Please specify a framework to install, e.g. hs install --vue, --solid, --angular, --react");
       process.exit(1);
     }
   }

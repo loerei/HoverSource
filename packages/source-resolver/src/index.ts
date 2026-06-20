@@ -1,5 +1,6 @@
 import { SourceAdapter, SourceInfo, AncestorInfo } from "./adapters/types.js";
 import { ReactFiberAdapter } from "./adapters/ReactFiberAdapter.js";
+import { ReactInvasiveAdapter } from "./adapters/ReactInvasiveAdapter.js";
 import { VueAdapter } from "./adapters/VueAdapter.js";
 import { SvelteAdapter } from "./adapters/SvelteAdapter.js";
 import { PreactAdapter } from "./adapters/PreactAdapter.js";
@@ -9,6 +10,7 @@ import { AngularAdapter } from "./adapters/AngularAdapter.js";
 
 export * from "./adapters/types.js";
 export * from "./adapters/ReactFiberAdapter.js";
+export * from "./adapters/ReactInvasiveAdapter.js";
 export * from "./adapters/VueAdapter.js";
 export * from "./adapters/SvelteAdapter.js";
 export * from "./adapters/PreactAdapter.js";
@@ -25,6 +27,7 @@ export class SourceResolver {
     // Register default adapters
     this.fiberAdapter = new ReactFiberAdapter();
     this.adapters.push(this.fiberAdapter);
+    this.adapters.push(new ReactInvasiveAdapter());
     this.adapters.push(new VueAdapter());
     this.adapters.push(new SvelteAdapter());
     this.adapters.push(new PreactAdapter());

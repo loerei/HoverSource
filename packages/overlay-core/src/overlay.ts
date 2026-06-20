@@ -3,7 +3,7 @@ import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 
 function getCompanionPort(): number {
-  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 3000;
+  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
 }
 
 class OverlayEngine implements OverlayController {

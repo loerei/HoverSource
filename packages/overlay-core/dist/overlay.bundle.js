@@ -601,7 +601,7 @@
 
   // src/modes/InspectorAdapter.ts
   function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 3e3;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
   }
   var InspectorAdapter = class {
     id = "inspector";
@@ -2325,7 +2325,7 @@ Suggested layout insertion (heuristic only):
 
   // src/overlay.ts
   function getCompanionPort2() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 3e3;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
   }
   var OverlayEngine = class _OverlayEngine {
     config = null;

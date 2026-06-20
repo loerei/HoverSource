@@ -5,7 +5,7 @@ export type SnapBoundaryH = "Left-Edge" | "Right-Edge" | "Center-Axis";
 export type SnapBoundaryV = "Top-Edge" | "Bottom-Edge" | "Center-Axis";
 
 function getCompanionPort(): number {
-  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 3000;
+  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
 }
 
 export class DesignAdapter implements InteractionMode {

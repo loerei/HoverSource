@@ -9,10 +9,14 @@
   },
   "scripts": {
     "build": "tsc -b",
-    "clean": "tsc -b --clean"
+    "clean": "tsc -b --clean",
+    "test": "vitest run src"
   },
   "dependencies": {
     "@hoversource/companion-server": "*",
     "@hoversource/client-injector": "*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.8"
   }
 }

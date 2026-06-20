@@ -139,15 +139,50 @@ function resolveSubcommand(
   return { execCommand: `npm run ${subcommand}`, isElectron };
 }
 
-function findFreePort(startPort: number): Promise<number> {
+function probeHostPort(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const server = net.createServer();
-    server.listen(startPort, "127.0.0.1", () => {
-      const port = (server.address() as net.AddressInfo).port;
-      server.close(() => resolve(port));
+    server.unref();
+    server.on("error", (err: any) => {
+      if (err.code === "EADDRINUSE") {
+        resolve(false);
+      } else {
+        // Other errors (e.g. EADDRNOTAVAIL for IPv6 on some systems) do not mean the port is in use
+        resolve(true);
+      }
     });
-    server.on("error", () => resolve(findFreePort(startPort + 1)));
+    server.listen(port, host, () => {
+      server.close();
+      resolve(true);
+    });
   });
+}
+
+export async function isPortFree(port: number): Promise<boolean> {
+  const free127 = await probeHostPort(port, "127.0.0.1");
+  if (!free127) return false;
+
+  const free000 = await probeHostPort(port, "0.0.0.0");
+  if (!free000) return false;
+
+  const freeIPv6 = await probeHostPort(port, "::");
+  if (!freeIPv6) return false;
+
+  return true;
+}
+
+export async function findFreePort(startPort: number, excludePort?: number): Promise<number> {
+  let port = startPort;
+  while (true) {
+    if (port === excludePort) {
+      port++;
+      continue;
+    }
+    if (await isPortFree(port)) {
+      return port;
+    }
+    port++;
+  }
 }
 
 /**
@@ -155,13 +190,15 @@ function findFreePort(startPort: number): Promise<number> {
  * to shut down and wait for the port to free up so we can reuse it.
  * Returns the port we should actually bind to.
  */
-async function resolveCompanionPort(requestedPort: number): Promise<number> {
+export async function resolveCompanionPort(requestedPort: number, targetPort?: number): Promise<number> {
+  // If requestedPort collides with targetPort, shift it to next free port starting from 7300 upwards (excluding targetPort)
+  if (targetPort !== undefined && requestedPort === targetPort) {
+    console.log(`[HoverSource] Requested companion port ${requestedPort} conflicts with target application port ${targetPort}. Shifting...`);
+    return findFreePort(7300, targetPort);
+  }
+
   // Try to bind immediately — port is free
-  const free = await new Promise<boolean>((resolve) => {
-    const probe = net.createServer();
-    probe.listen(requestedPort, "127.0.0.1", () => { probe.close(() => resolve(true)); });
-    probe.on("error", () => resolve(false));
-  });
+  const free = await isPortFree(requestedPort);
   if (free) return requestedPort;
 
   // Port taken — check if it's an HS companion
@@ -192,11 +229,7 @@ async function resolveCompanionPort(requestedPort: number): Promise<number> {
     await new Promise((r) => setTimeout(r, 700));
 
     // Double check if the port was successfully freed
-    const isNowFree = await new Promise<boolean>((resolve) => {
-      const probe = net.createServer();
-      probe.listen(requestedPort, "127.0.0.1", () => { probe.close(() => resolve(true)); });
-      probe.on("error", () => resolve(false));
-    });
+    const isNowFree = await isPortFree(requestedPort);
 
     if (isNowFree) {
       return requestedPort;
@@ -206,8 +239,8 @@ async function resolveCompanionPort(requestedPort: number): Promise<number> {
   }
 
   // Something else owns this port — find the next free one
-  console.log(`[HoverSource] Port ${requestedPort} in use by another process, using ${requestedPort + 1}.`);
-  return findFreePort(requestedPort + 1);
+  console.log(`[HoverSource] Port ${requestedPort} in use by another process, using next free port.`);
+  return findFreePort(requestedPort + 1, targetPort);
 }
 
 function openBrowser(url: string) {
@@ -268,17 +301,7 @@ function getPidUsingPort(port: number): Promise<number | undefined> {
   });
 }
 
-function isPortFree(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(false));
-    server.once("listening", () => {
-      server.close();
-      resolve(true);
-    });
-    server.listen(port, "127.0.0.1");
-  });
-}
+
 
 function getProcessName(pid: number): Promise<string | undefined> {
   return new Promise((resolve) => {
@@ -618,7 +641,7 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
   } catch (err) {
     console.debug("[HoverSource] Failed to parse target port:", err);
   }
-  const requestedProxyPort = Number.parseInt((args["proxy-port"] as string) || String(targetPort + 1), 10);
+  const requestedProxyPort = Number.parseInt((args["proxy-port"] as string) || String(10000 + targetPort), 10);
   const proxyPort = await findFreePort(requestedProxyPort);
   if (proxyPort !== requestedProxyPort) {
     console.log(`[HoverSource] Proxy port ${requestedProxyPort} in use, using ${proxyPort} instead.`);
@@ -1121,11 +1144,11 @@ Subcommands:
 
 Options:
   -r, --root=<path>                          Path to the project root directory (default: current directory)
-  -p, --port=<port>                          Port for the companion server (default: 3000)
+  -p, --port=<port>                          Port for the companion server (default: 7300)
   --debug-port=<port>                        Debug port for remote debugging (default: 9222)
   -t, --target=<url>                         Proxy mode target URL (for web/browser apps)
   -e, --exec=<command>                       Exec mode command wrapper (for Electron apps)
-  --proxy-port=<port>                        Port for the local proxy server (default: target port + 1)
+  --proxy-port=<port>                        Port for the local proxy server (default: 10000 + target port)
   -d, --dashboard                            Open the HoverSource dashboard in browser on startup
   -h, --help                                 Display this help message
 
@@ -1226,12 +1249,21 @@ async function main() {
   const config = loadMergedConfig(projectRoot);
   const autoResolve = config.autoResolvePortConflicts === true;
   
-  const requestedPort = Number.parseInt((args.port as string) || process.env.HOVERSOURCE_PORT || "3000", 10);
-  const serverPort = await resolveCompanionPort(requestedPort);
+  const targetUrl = args.target as string | undefined;
+  let targetPort: number | undefined;
+  if (targetUrl) {
+    try {
+      targetPort = Number.parseInt(new URL(targetUrl).port || "3000", 10);
+    } catch (err) {
+      console.debug("[HoverSource] Failed to parse target port:", err);
+    }
+  }
+
+  const requestedPort = Number.parseInt((args.port as string) || process.env.HOVERSOURCE_PORT || "7300", 10);
+  const serverPort = await resolveCompanionPort(requestedPort, targetPort);
 
   let debugPort = Number.parseInt((args["debug-port"] as string) || process.env.HOVERSOURCE_DEBUG_PORT || "9222", 10);
   const shouldOpenDashboard = !!args.dashboard;
-  const targetUrl = args.target as string | undefined;
   let execCommand = args.exec as string | undefined;
   if (execCommand) {
     validateSafeCommand(execCommand);
@@ -1297,9 +1329,11 @@ async function main() {
   await startCdpInjectionWatch(debugPort, scriptWithPort);
 }
 
-try {
-  await main();
-} catch (err) {
-  console.error("[HoverSource] CLI crashed:", err);
-  process.exit(1);
+if (process.env.VITEST === undefined) {
+  try {
+    await main();
+  } catch (err) {
+    console.error("[HoverSource] CLI crashed:", err);
+    process.exit(1);
+  }
 }

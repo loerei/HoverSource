@@ -1,7 +1,7 @@
 import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 3000;
+    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
 }
 class OverlayEngine {
     config = null;

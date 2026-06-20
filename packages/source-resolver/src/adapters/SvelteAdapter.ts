@@ -10,7 +10,7 @@ export class SvelteAdapter implements SourceAdapter {
 
   resolve(element: HTMLElement): SourceInfo | null {
     const meta = (element as any).__svelte_meta;
-    if (!meta || !meta.loc) return null;
+    if (!meta?.loc) return null;
 
     const { file, line, column } = meta.loc;
 

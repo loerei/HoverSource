@@ -213,7 +213,7 @@ export class DesignAdapter implements InteractionMode {
     this.updateTargetAtPosition(newX, newY);
 
     const HSconfig = this.controller.getConfig();
-    const deSnapThreshold = HSconfig?.desnappingThreshold !== undefined ? HSconfig.desnappingThreshold : 15;
+    const deSnapThreshold = HSconfig?.desnappingThreshold ?? 15;
 
     if (this.isSnappedH || this.isSnappedV) {
       if (shouldReleaseSnap(newX, newY, this.snapMouseX, this.snapMouseY, deSnapThreshold)) {
@@ -355,7 +355,7 @@ export class DesignAdapter implements InteractionMode {
     mouseX: number
   ): void {
     const HSconfig = this.controller.getConfig();
-    const snapThreshold = HSconfig?.snappingThreshold !== undefined ? HSconfig.snappingThreshold : 15;
+    const snapThreshold = HSconfig?.snappingThreshold ?? 15;
 
     if (bestH) {
       this.anchorHElement = bestH.element;
@@ -383,7 +383,7 @@ export class DesignAdapter implements InteractionMode {
     mouseY: number
   ): void {
     const HSconfig = this.controller.getConfig();
-    const snapThreshold = HSconfig?.snappingThreshold !== undefined ? HSconfig.snappingThreshold : 15;
+    const snapThreshold = HSconfig?.snappingThreshold ?? 15;
 
     if (bestV) {
       this.anchorVElement = bestV.element;
@@ -643,6 +643,51 @@ export class DesignAdapter implements InteractionMode {
     return `<span style="color: #10b981; font-weight:bold;">${selector} @ ${boundary || "None"} (${sign}${offset}px)</span>`;
   }
 
+  private buildTooltipHtml(
+    info: any,
+    fileBase: string,
+    hStatus: string,
+    vStatus: string,
+    hintHtml: string,
+    vueHint: string
+  ): string {
+    const classList = Array.from(this.targetElement!.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+    const classStr = classList.length > 0 ? '.' + classList.join(".") : "";
+    const idStr = this.targetElement!.id ? '#' + this.targetElement!.id : "";
+    const tagLower = this.targetElement!.tagName.toLowerCase();
+
+    return `
+      <div class="hoversource-title" style="color: #10b981;">
+        <span>Design Mode ${this.isFrozen ? "[FROZEN]" : ""}</span>
+        <span class="hoversource-framework" style="background: #064e3b; color: #34d399;">Active</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Anchor Element: </span>
+        <span class="hoversource-value">${tagLower}${idStr}${classStr}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Anchor File: </span>
+        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
+      </div>
+      <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
+        <span class="hoversource-label">H-Anchor: </span>
+        ${hStatus}
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">V-Anchor: </span>
+        ${vStatus}
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Nudge Offsets (dX, dY): </span>
+        <span class="hoversource-value">${this.dX}px, ${this.dY}px</span>
+      </div>
+      ${vueHint}
+      <div class="hoversource-shortcut-hint" style="margin-top: 8px;">
+        ${hintHtml}
+      </div>
+    `;
+  }
+
   private renderTooltip(e: PointerEvent): void {
     if (!this.targetElement) return;
 
@@ -692,37 +737,7 @@ export class DesignAdapter implements InteractionMode {
       `;
     }
 
-    const html = `
-      <div class="hoversource-title" style="color: #10b981;">
-        <span>Design Mode ${this.isFrozen ? "[FROZEN]" : ""}</span>
-        <span class="hoversource-framework" style="background: #064e3b; color: #34d399;">Active</span>
-      </div>
-      <div class="hoversource-section">
-        <span class="hoversource-label">Anchor Element: </span>
-        <span class="hoversource-value">${this.targetElement.tagName.toLowerCase()}${this.targetElement.id ? '#' + this.targetElement.id : ""}${this.targetElement.classList.length > 0 ? '.' + Array.from(this.targetElement.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-")).join(".") : ""}</span>
-      </div>
-      <div class="hoversource-section">
-        <span class="hoversource-label">Anchor File: </span>
-        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
-      </div>
-      <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
-        <span class="hoversource-label">H-Anchor: </span>
-        ${hStatus}
-      </div>
-      <div class="hoversource-section">
-        <span class="hoversource-label">V-Anchor: </span>
-        ${vStatus}
-      </div>
-      <div class="hoversource-section">
-        <span class="hoversource-label">Nudge Offsets (dX, dY): </span>
-        <span class="hoversource-value">${this.dX}px, ${this.dY}px</span>
-      </div>
-      ${vueHint}
-      <div class="hoversource-shortcut-hint" style="margin-top: 8px;">
-        ${hintHtml}
-      </div>
-    `;
-
+    const html = this.buildTooltipHtml(info, fileBase, hStatus, vStatus, hintHtml, vueHint);
     this.controller.drawTooltip(html, e);
   }
 

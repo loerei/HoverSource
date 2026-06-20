@@ -495,6 +495,23 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
   });
 }
 
+function updateRecentProjectsOnDelete(globalPath: string, target: string | null, customPath: string | null, localProjectRoot: string): void {
+  if (!fs.existsSync(globalPath)) return;
+  try {
+    const globalData = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
+    if (globalData.recentProjects) {
+      const pathToRemove = target === "local" ? localProjectRoot : (customPath || "");
+      const normalized = normalizeProjectPath(pathToRemove);
+      globalData.recentProjects = globalData.recentProjects
+        .map((p: string) => normalizeProjectPath(p))
+        .filter((p: string) => p !== normalized);
+      fs.writeFileSync(globalPath, JSON.stringify(globalData, null, 2), "utf-8");
+    }
+  } catch (e: any) {
+    console.warn(`[HoverSource] Failed to update recent list on config delete`, e);
+  }
+}
+
 function handleConfigDelete(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -522,21 +539,7 @@ function handleConfigDelete(
 
     const globalPath = getGlobalConfigPath();
     if (removeRecent || target === "custom") {
-      if (fs.existsSync(globalPath)) {
-        try {
-          const globalData = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
-          if (globalData.recentProjects) {
-            const pathToRemove = target === "local" ? config.projectRoot : (customPath || "");
-            const normalized = normalizeProjectPath(pathToRemove);
-            globalData.recentProjects = globalData.recentProjects
-              .map((p: string) => normalizeProjectPath(p))
-              .filter((p: string) => p !== normalized);
-            fs.writeFileSync(globalPath, JSON.stringify(globalData, null, 2), "utf-8");
-          }
-        } catch (e: any) {
-          console.warn(`[HoverSource] Failed to update recent list on config delete`, e);
-        }
-      }
+      updateRecentProjectsOnDelete(globalPath, target, customPath, config.projectRoot);
     }
 
     // Broadcast configuration hot-reload trigger to active app pages with the new merged config
@@ -688,6 +691,63 @@ function handleOpenInIde(req: http.IncomingMessage, res: http.ServerResponse, ur
   });
 }
 
+function routeRequest(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  config: ServerConfig,
+  staticResolver: StaticContextResolver
+): void {
+  const path = url.pathname;
+  const method = req.method;
+
+  if (path === "/ping") {
+    handlePing(req, res);
+    return;
+  }
+  if (path === "/shutdown") {
+    handleShutdown(req, res);
+    return;
+  }
+  if (path === "/hoversource-overlay.js") {
+    handleOverlayScript(req, res, config);
+    return;
+  }
+  if (path === "/dashboard") {
+    handleDashboard(req, res);
+    return;
+  }
+  if (path === "/open-dashboard") {
+    handleOpenDashboard(req, res, config);
+    return;
+  }
+  if (path === "/config") {
+    if (method === "GET") {
+      handleConfigGet(req, res, url, config);
+    } else if (method === "POST") {
+      handleConfigPost(req, res, config);
+    } else if (method === "DELETE") {
+      handleConfigDelete(req, res, url, config);
+    }
+    return;
+  }
+  if (path === "/validate-line" && method === "GET") {
+    handleValidateLine(req, res, url, config);
+    return;
+  }
+  if (path === "/static-context" && method === "GET") {
+    handleStaticContext(req, res, url, config, staticResolver);
+    return;
+  }
+  if (path === "/open-in-ide") {
+    handleOpenInIde(req, res, url, config);
+    return;
+  }
+
+  res.writeHead(404, { "Content-Type": "text/plain" });
+  res.end("Not Found");
+}
+
 export function startCompanionServer(config: ServerConfig): http.Server {
   const staticResolver = new StaticContextResolver();
   const server = http.createServer((req, res) => {
@@ -703,75 +763,7 @@ export function startCompanionServer(config: ServerConfig): http.Server {
     }
 
     const url = new URL(req.url || "", `http://localhost:${config.port}`);
-
-    // Health check
-    if (url.pathname === "/ping") {
-      handlePing(req, res);
-      return;
-    }
-
-    // Graceful shutdown
-    if (url.pathname === "/shutdown") {
-      handleShutdown(req, res);
-      return;
-    }
-
-    // Serve overlay bundle with companion port embedded
-    if (url.pathname === "/hoversource-overlay.js") {
-      handleOverlayScript(req, res, config);
-      return;
-    }
-
-    // Serve Dashboard WebUI
-    if (url.pathname === "/dashboard") {
-      handleDashboard(req, res);
-      return;
-    }
-
-    // Open Dashboard in System Browser
-    if (url.pathname === "/open-dashboard") {
-      handleOpenDashboard(req, res, config);
-      return;
-    }
-
-    // GET config
-    if (url.pathname === "/config" && req.method === "GET") {
-      handleConfigGet(req, res, url, config);
-      return;
-    }
-
-    // POST config
-    if (url.pathname === "/config" && req.method === "POST") {
-      handleConfigPost(req, res, config);
-      return;
-    }
-
-    // DELETE config
-    if (url.pathname === "/config" && req.method === "DELETE") {
-      handleConfigDelete(req, res, url, config);
-      return;
-    }
-
-    // GET validate-line
-    if (url.pathname === "/validate-line" && req.method === "GET") {
-      handleValidateLine(req, res, url, config);
-      return;
-    }
-
-    // GET static-context
-    if (url.pathname === "/static-context" && req.method === "GET") {
-      handleStaticContext(req, res, url, config, staticResolver);
-      return;
-    }
-
-    // Open file in Editor/IDE
-    if (url.pathname === "/open-in-ide") {
-      handleOpenInIde(req, res, url, config);
-      return;
-    }
-
-    res.writeHead(404, { "Content-Type": "text/plain" });
-    res.end("Not Found");
+    routeRequest(req, res, url, config, staticResolver);
   });
 
   server.on("error", (err: NodeJS.ErrnoException) => {

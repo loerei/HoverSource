@@ -658,36 +658,17 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
   openBrowser(`http://localhost:${proxyPort}`);
 }
 
+function cleanArgument(arg: string): string {
+  const first = arg[0];
+  if ((first === '"' || first === "'") && arg.endsWith(first)) {
+    return arg.slice(1, -1).replace(/\\(.)/g, "$1");
+  }
+  return arg;
+}
+
 function parseCommand(cmdString: string): { command: string; args: string[] } {
-  const parts: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  let quoteChar = "";
-
-  for (let i = 0; i < cmdString.length; i++) {
-    const char = cmdString[i];
-    if ((char === '"' || char === "'") && (i === 0 || cmdString[i - 1] !== '\\')) {
-      if (inQuotes && char === quoteChar) {
-        inQuotes = false;
-      } else if (!inQuotes) {
-        inQuotes = true;
-        quoteChar = char;
-      } else {
-        current += char;
-      }
-    } else if (char === " " && !inQuotes) {
-      if (current) {
-        parts.push(current);
-        current = "";
-      }
-    } else {
-      current += char;
-    }
-  }
-  if (current) {
-    parts.push(current);
-  }
-
+  const matches = cmdString.match(/[^"'\s]+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g) || [];
+  const parts = matches.map(cleanArgument);
   return {
     command: parts[0] || "",
     args: parts.slice(1),
@@ -695,12 +676,11 @@ function parseCommand(cmdString: string): { command: string; args: string[] } {
 }
 
 function resolveWindowsCommand(command: string): string {
-  if (process.platform !== "win32") {
-    return command;
-  }
-  const commonCmds = ["npm", "npx", "yarn", "pnpm", "gulp", "tsc"];
-  if (commonCmds.includes(command.toLowerCase())) {
-    return `${command}.cmd`;
+  if (process.platform === "win32") {
+    const commonCmds = ["npm", "npx", "yarn", "pnpm", "gulp", "tsc"];
+    if (commonCmds.includes(command.toLowerCase())) {
+      return `${command}.cmd`;
+    }
   }
   return command;
 }

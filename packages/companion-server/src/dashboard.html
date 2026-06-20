@@ -532,8 +532,8 @@
         desnappingThresholdInput.addEventListener('input', checkChanges);
         maxDepthInput.addEventListener('input', checkChanges);
         maxDepthInput.addEventListener('blur', () => {
-          let val = parseInt(maxDepthInput.value, 10);
-          if (isNaN(val)) val = 32;
+          let val = Number.parseInt(maxDepthInput.value, 10);
+          if (Number.isNaN(val)) val = 32;
           if (val < 8) val = 8;
           if (val > 100) val = 100;
           maxDepthInput.value = val;
@@ -571,9 +571,9 @@
         autoResolveCheckbox.checked = !!loadedConfig.autoResolvePortConflicts;
         layerPickerCheckbox.checked = loadedConfig.layerPickerEnabled !== false;
         editorSelect.value = loadedConfig.editor || 'vscode';
-        snappingThresholdInput.value = loadedConfig.snappingThreshold !== undefined ? loadedConfig.snappingThreshold : 15;
-        desnappingThresholdInput.value = loadedConfig.desnappingThreshold !== undefined ? loadedConfig.desnappingThreshold : 15;
-        maxDepthInput.value = loadedConfig.maxTraversalDepth !== undefined ? loadedConfig.maxTraversalDepth : 32;
+        snappingThresholdInput.value = loadedConfig.snappingThreshold ?? 15;
+        desnappingThresholdInput.value = loadedConfig.desnappingThreshold ?? 15;
+        maxDepthInput.value = loadedConfig.maxTraversalDepth ?? 32;
         
         setupShortcutUI('toggleUI', loadedConfig.shortcuts.toggleUI);
         setupShortcutUI('toggleMinimal', loadedConfig.shortcuts.toggleMinimal);
@@ -707,9 +707,9 @@
         toggleMode: getShortcutFromUI('toggleMode')
       };
 
-      const snapVal = parseInt(snappingThresholdInput.value, 10);
-      const deSnapVal = parseInt(desnappingThresholdInput.value, 10);
-      const depthVal = parseInt(maxDepthInput.value, 10);
+      const snapVal = Number.parseInt(snappingThresholdInput.value, 10);
+      const deSnapVal = Number.parseInt(desnappingThresholdInput.value, 10);
+      const depthVal = Number.parseInt(maxDepthInput.value, 10);
 
       return {
         theme: themeSelect.value,
@@ -717,9 +717,9 @@
         editor: editorSelect.value,
         autoResolvePortConflicts: autoResolveCheckbox.checked,
         layerPickerEnabled: layerPickerCheckbox.checked,
-        snappingThreshold: isNaN(snapVal) ? 15 : snapVal,
-        desnappingThreshold: isNaN(deSnapVal) ? 15 : deSnapVal,
-        maxTraversalDepth: isNaN(depthVal) ? 32 : (depthVal < 8 ? 8 : (depthVal > 100 ? 100 : depthVal)),
+        snappingThreshold: Number.isNaN(snapVal) ? 15 : snapVal,
+        desnappingThreshold: Number.isNaN(deSnapVal) ? 15 : deSnapVal,
+        maxTraversalDepth: Number.isNaN(depthVal) ? 32 : Math.min(100, Math.max(8, depthVal)),
         shortcuts,
         layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll')
       };

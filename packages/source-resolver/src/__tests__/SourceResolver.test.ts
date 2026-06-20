@@ -134,8 +134,9 @@ describe("VueAdapter", () => {
     const mockElement = {
       tagName: "BUTTON",
       classList: [],
-      hasAttribute: (name: string) => name === "data-v-inspector",
-      getAttribute: (name: string) => name === "data-v-inspector" ? "/src/components/MyButton.vue:24:8" : null
+      dataset: {
+        vInspector: "/src/components/MyButton.vue:24:8"
+      }
     } as any;
 
     verifyResolution(adapter, mockElement, {
@@ -152,12 +153,10 @@ describe("VueAdapter", () => {
     const mockElement = {
       tagName: "BUTTON",
       classList: [],
-      hasAttribute: (name: string) => name === "data-v-inspector-file",
-      getAttribute: (name: string) => {
-        if (name === "data-v-inspector-file") return "/src/components/Header.vue";
-        if (name === "data-v-inspector-line") return "42";
-        if (name === "data-v-inspector-column") return "12";
-        return null;
+      dataset: {
+        vInspectorFile: "/src/components/Header.vue",
+        vInspectorLine: "42",
+        vInspectorColumn: "12"
       }
     } as any;
 
@@ -233,8 +232,9 @@ describe("SolidAdapter", () => {
     const mockElement = {
       tagName: "DIV",
       classList: [],
-      hasAttribute: (name: string) => name === "data-source-loc",
-      getAttribute: (name: string) => name === "data-source-loc" ? "/src/components/SolidCounter.tsx:25:8" : null
+      dataset: {
+        sourceLoc: "/src/components/SolidCounter.tsx:25:8"
+      }
     } as any;
 
     verifyResolution(adapter, mockElement, {
@@ -253,11 +253,9 @@ describe("AstroAdapter", () => {
     const mockElement = {
       tagName: "MAIN",
       classList: [],
-      hasAttribute: (name: string) => name === "data-astro-source-file",
-      getAttribute: (name: string) => {
-        if (name === "data-astro-source-file") return "/src/pages/index.astro";
-        if (name === "data-astro-source-loc") return "12:5";
-        return null;
+      dataset: {
+        astroSourceFile: "/src/pages/index.astro",
+        astroSourceLoc: "12:5"
       }
     } as any;
 
@@ -300,13 +298,11 @@ describe("AngularAdapter", () => {
     const mockElement = {
       tagName: "DIV",
       classList: [],
-      hasAttribute: (name: string) => name === "data-ng-source-file",
-      getAttribute: (name: string) => {
-        if (name === "data-ng-source-file") return "/src/app/app.component.ts";
-        if (name === "data-ng-source-line") return "10";
-        if (name === "data-ng-source-column") return "2";
-        if (name === "data-ng-component") return "AppComponent";
-        return null;
+      dataset: {
+        ngSourceFile: "/src/app/app.component.ts",
+        ngSourceLine: "10",
+        ngSourceColumn: "2",
+        ngComponent: "AppComponent"
       }
     } as any;
 
@@ -347,24 +343,24 @@ describe("SourceResolver", () => {
     const mockSolid = {
       tagName: "DIV",
       classList: [],
-      hasAttribute: (name: string) => name === "data-source-loc",
-      getAttribute: (name: string) => name === "data-source-loc" ? "SolidFile.tsx:15:2" : null
+      dataset: {
+        sourceLoc: "SolidFile.tsx:15:2"
+      }
     } as any;
     const mockAstro = {
       tagName: "DIV",
       classList: [],
-      hasAttribute: (name: string) => name === "data-astro-source-file",
-      getAttribute: (name: string) => {
-        if (name === "data-astro-source-file") return "AstroFile.astro";
-        if (name === "data-astro-source-loc") return "20:4";
-        return null;
+      dataset: {
+        astroSourceFile: "AstroFile.astro",
+        astroSourceLoc: "20:4"
       }
     } as any;
     const mockAngular = {
       tagName: "DIV",
       classList: [],
-      hasAttribute: (name: string) => name === "data-ng-source-file",
-      getAttribute: (name: string) => name === "data-ng-source-file" ? "AngularFile.ts" : null
+      dataset: {
+        ngSourceFile: "AngularFile.ts"
+      }
     } as any;
 
     const reactResult = resolver.resolve(mockReact);

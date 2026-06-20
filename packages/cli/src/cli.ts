@@ -992,6 +992,49 @@ async function handleSubcommands(
   }
 }
 
+function findScriptPath(projectRoot: string): string {
+  const pathsToTry = [
+    path.resolve(__dirname, "../../overlay-core/dist/overlay.bundle.js"),
+    path.resolve(__dirname, "../node_modules/@hoversource/overlay-core/dist/overlay.bundle.js"),
+    path.resolve(projectRoot, "node_modules/@hoversource/overlay-core/dist/overlay.bundle.js")
+  ];
+
+  for (const p of pathsToTry) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+
+  console.error(`[HoverSource] Critical Error: Could not locate overlay.bundle.js.`);
+  console.error(`Please run 'npm run build' inside the HoverSource directory before launching.`);
+  process.exit(1);
+}
+
+function setupCleanup(cleanup: () => void): void {
+  process.on("exit", cleanup);
+  process.on("SIGINT", () => { cleanup(); process.exit(0); });
+  process.on("SIGTERM", () => { cleanup(); process.exit(0); });
+}
+
+function resolveExecCommand(
+  subcommand: string | undefined,
+  execCommand: string | undefined,
+  targetUrl: string | undefined,
+  projectRoot: string
+): string | undefined {
+  if (subcommand && !execCommand && !targetUrl) {
+    const resolved = resolveSubcommand(subcommand, projectRoot);
+    if (!resolved) {
+      process.exit(1);
+    }
+    if (resolved.isElectron) {
+      console.log(`[HoverSource] Detected Electron project, using exec mode.`);
+    }
+    return resolved.execCommand;
+  }
+  return execCommand;
+}
+
 async function main() {
   // Self-heal any leftover patches from previous crashed/force-killed runs
   restoreLeftoverPatches();
@@ -1032,19 +1075,9 @@ async function main() {
       }
     }
   };
-  process.on("exit", cleanup);
-  process.on("SIGINT", () => { cleanup(); process.exit(0); });
-  process.on("SIGTERM", () => { cleanup(); process.exit(0); });
+  setupCleanup(cleanup);
 
-  // Resolve subcommand (e.g. "hs start" → "npm run start")
-  if (subcommand && !execCommand && !targetUrl) {
-    const resolved = resolveSubcommand(subcommand, projectRoot);
-    if (!resolved) { process.exit(1); }
-    execCommand = resolved.execCommand;
-    if (resolved.isElectron) {
-      console.log(`[HoverSource] Detected Electron project, using exec mode.`);
-    }
-  }
+  execCommand = resolveExecCommand(subcommand, execCommand, targetUrl, projectRoot);
 
   console.log(`[HoverSource] Initializing...`);
 
@@ -1081,26 +1114,7 @@ async function main() {
   }
 
   // 3. Locate bundled overlay script
-  const pathsToTry = [
-    path.resolve(__dirname, "../../overlay-core/dist/overlay.bundle.js"),
-    path.resolve(__dirname, "../node_modules/@hoversource/overlay-core/dist/overlay.bundle.js"),
-    path.resolve(projectRoot, "node_modules/@hoversource/overlay-core/dist/overlay.bundle.js")
-  ];
-
-  let scriptPath = "";
-  for (const p of pathsToTry) {
-    if (fs.existsSync(p)) {
-      scriptPath = p;
-      break;
-    }
-  }
-
-  if (!scriptPath) {
-    console.error(`[HoverSource] Critical Error: Could not locate overlay.bundle.js.`);
-    console.error(`Please run 'npm run build' inside the HoverSource directory before launching.`);
-    process.exit(1);
-  }
-
+  const scriptPath = findScriptPath(projectRoot);
   const scriptContent = fs.readFileSync(validateSafePath(scriptPath), "utf-8");
   // Prepend companion port so overlay can connect back regardless of configured port
   const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;

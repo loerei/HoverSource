@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
+import zlib from "node:zlib";
 import { startProxy } from "../proxy.js";
 
 describe("Proxy Server Integration", () => {
@@ -26,6 +27,37 @@ describe("Proxy Server Integration", () => {
           "Content-Security-Policy": "default-src 'self'",
         });
         res.end("Target Plain Text");
+      } else if (req.url === "/cookies") {
+        res.writeHead(200, {
+          "Content-Type": "text/plain",
+          "Set-Cookie": [
+            "session=123; Domain=example.com; Secure; HttpOnly",
+            "theme=dark; domain=another.org",
+          ],
+        });
+        res.end("Cookies set");
+      } else if (req.url === "/sri") {
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end('<html><body><script src="app.js" integrity="sha384-abc" crossorigin="anonymous"></script></body></html>');
+      } else if (req.url === "/compressed") {
+        const acceptEncoding = req.headers["accept-encoding"] || "";
+        const body = '<html><body><script src="app.js" integrity="sha384-xyz"></script></body></html>';
+        
+        // Return compressed if client/proxy accepted gzip, and record the headers sent by the proxy
+        if (acceptEncoding.includes("gzip")) {
+          res.writeHead(200, {
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Encoding": "gzip",
+            "X-Received-Accept-Encoding": String(acceptEncoding),
+          });
+          res.end(zlib.gzipSync(Buffer.from(body, "utf-8")));
+        } else {
+          res.writeHead(200, {
+            "Content-Type": "text/html; charset=utf-8",
+            "X-Received-Accept-Encoding": String(acceptEncoding),
+          });
+          res.end(body);
+        }
       } else {
         res.writeHead(404, { "Content-Type": "text/plain" });
         res.end("Not Found");
@@ -128,5 +160,54 @@ describe("Proxy Server Integration", () => {
     expect(resConfig.status).toBe(200);
     expect(resConfig.headers["content-type"]).toBe("application/json");
     expect(resConfig.body).toContain("mock config");
+  });
+
+  it("should rewrite Set-Cookie headers in proxy responses", async () => {
+    const res = await getUrl("/cookies");
+    expect(res.status).toBe(200);
+    expect(res.headers["set-cookie"]).toEqual([
+      "session=123; HttpOnly",
+      "theme=dark",
+    ]);
+  });
+
+  it("should strip integrity attributes from HTML response", async () => {
+    const res = await getUrl("/sri");
+    expect(res.status).toBe(200);
+    expect(res.body).not.toContain("integrity=");
+    expect(res.body).toContain(`<script src="${overlayScriptUrl}"></script>`);
+  });
+
+  it("should decompress gzip response from target, modify it, and strip integrity", async () => {
+    const reqOptions = {
+      hostname: "127.0.0.1",
+      port: proxyPort,
+      path: "/compressed",
+      headers: {
+        "accept-encoding": "gzip, deflate, br, zstd",
+      },
+    };
+
+    const res = await new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>((resolve, reject) => {
+      http.get(reqOptions, (res) => {
+        let data = "";
+        res.on("data", (chunk) => {
+          data += chunk;
+        });
+        res.on("end", () => {
+          resolve({
+            status: res.statusCode || 0,
+            headers: res.headers,
+            body: data,
+          });
+        });
+      }).on("error", reject);
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-encoding"]).toBeUndefined();
+    expect(res.headers["x-received-accept-encoding"]).toBe("gzip, deflate, br");
+    expect(res.body).not.toContain("integrity=");
+    expect(res.body).toContain(`<script src="${overlayScriptUrl}"></script>`);
   });
 });

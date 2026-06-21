@@ -8,6 +8,7 @@ import path from "node:path";
 import fs from "node:fs";
 import net from "node:net";
 import http from "node:http";
+import https from "node:https";
 import readline from "node:readline";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
@@ -30,6 +31,22 @@ export function validateSafeCommand(cmd: string): string {
     throw new Error(`[HoverSource] Security Error: Command contains invalid characters: ${cmd}`);
   }
   return cmd;
+}
+
+export function validateSafeUrl(urlStr: string): string {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(`[HoverSource] Security Error: Target URL protocol must be http or https`);
+    }
+    const hostRegex = /^[a-zA-Z0-9_\-.]+$/;
+    if (!hostRegex.test(parsed.hostname)) {
+      throw new Error(`[HoverSource] Security Error: Target URL contains invalid hostname`);
+    }
+    return urlStr;
+  } catch (e: any) {
+    throw new Error(`[HoverSource] Security Error: Invalid Target URL: ${e.message}`);
+  }
 }
 
 function parseLongOption(arg: string, args: Record<string, string | boolean>): void {
@@ -323,8 +340,6 @@ function getPidUsingPort(port: number): Promise<number | undefined> {
     }
   });
 }
-
-
 
 function getProcessName(pid: number): Promise<string | undefined> {
   return new Promise((resolve) => {
@@ -670,13 +685,20 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
   if (proxyPort !== requestedProxyPort) {
     console.log(`[HoverSource] Proxy port ${requestedProxyPort} in use, using ${proxyPort} instead.`);
   }
-  const overlayScriptUrl = `http://127.0.0.1:${serverPort}/hoversource-overlay.js`;
+  const overlayScriptUrl = "/hoversource/hoversource-overlay.js";
+  const useHttps = targetUrl.toLowerCase().startsWith("https:");
 
-  console.log(`[HoverSource] Proxy mode: ${targetUrl} → http://localhost:${proxyPort}`);
+  console.log(`[HoverSource] Proxy mode: ${targetUrl} → ${useHttps ? "https" : "http"}://localhost:${proxyPort}`);
   try {
-    await startProxy(targetUrl, proxyPort, overlayScriptUrl);
-    console.log(`[HoverSource] Proxy ready. Opening http://localhost:${proxyPort} in your browser...`);
-    openBrowser(`http://localhost:${proxyPort}`);
+    await startProxy({
+      targetUrl,
+      proxyPort,
+      companionPort: serverPort,
+      overlayScriptUrl,
+      useHttps,
+    });
+    console.log(`[HoverSource] Proxy ready. Opening ${useHttps ? "https" : "http"}://localhost:${proxyPort} in your browser...`);
+    openBrowser(`${useHttps ? "https" : "http"}://localhost:${proxyPort}`);
   } catch (err: any) {
     const isAddrInUse = err?.code === "EADDRINUSE";
     console.error(`[HoverSource] Proxy failed to start on port ${proxyPort}.`);
@@ -790,715 +812,201 @@ function resolveWindowsCommand(command: string): string {
   return command;
 }
 
-function runExecMode(execCommand: string, projectRoot: string, debugPort: number): void {
-  console.log(`[HoverSource] Exec mode: spawning → ${execCommand}`);
-  const childEnv = {
-    ...process.env,
-    ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${debugPort}`,
-  };
-  const { command, args } = parseCommand(execCommand);
+function runExecMode(execCommand: string, projectRoot: string, debugPort: number, args: any): void {
+  const { command, args: cmdArgs } = parseCommand(execCommand);
   const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
-  const useShell = process.platform === "win32";
-  // On Windows, .cmd files require shell — pass full command as single string to avoid DEP0190
-  const child = useShell
-    ? spawn([resolvedCmd, ...args].join(" "), {
-        shell: true,
-        env: childEnv,
-        cwd: validateSafePath(projectRoot),
-        stdio: "inherit",
-      })
-    : spawn(resolvedCmd, args, {
-        shell: false,
-        env: childEnv,
-        cwd: validateSafePath(projectRoot),
-        stdio: "inherit",
-      });
-  child.on("error", (err) => {
-    console.error(`[HoverSource] Failed to spawn exec command:`, err.message);
-  });
-}
 
-async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string): Promise<void> {
-  console.log(`[HoverSource] Watching debug port :${debugPort} for Chromium targets...`);
-  
-  let isInjected = false;
-  
-  const pollAndInject = async () => {
-    try {
-      const injectedCount = await injectOverlayScript(debugPort, scriptWithPort);
-      if (injectedCount > 0 && !isInjected) {
-        console.log(`[HoverSource] Successfully connected and injected into ${injectedCount} target(s).`);
-        isInjected = true;
-      }
-    } catch (err: any) {
-      if (isInjected) {
-        console.log(`[HoverSource] Lost connection or target closed. Re-watching...`);
-        isInjected = false;
-      }
-      if (process.env.DEBUG) {
-        console.debug("[HoverSource] Ignored poll injection error:", err.message);
-      }
-    }
-  };
+  const runWithCdp = (portToUse: number, patchRestorer?: () => void) => {
+    const electronArgs = [...cmdArgs, `--remote-debugging-port=${portToUse}`];
+    console.log(`[HoverSource] Launching target command with remote debugging: ${[resolvedCmd, ...electronArgs].join(" ")}`);
+    
+    const useShell = process.platform === "win32";
+    const child = useShell
+      ? spawn([resolvedCmd, ...electronArgs].join(" "), {
+          shell: true,
+          env: process.env,
+          cwd: validateSafePath(projectRoot),
+          stdio: "inherit",
+        })
+      : spawn(resolvedCmd, electronArgs, {
+          shell: false,
+          env: process.env,
+          cwd: validateSafePath(projectRoot),
+          stdio: "inherit",
+          detached: true,
+        });
 
-  await pollAndInject();
-  setInterval(pollAndInject, 2500);
-}
-
-function runNpmCommand(args: string[], cwd: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    const nodeDir = path.dirname(process.execPath);
-    const winNpmCli = path.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js");
-    const unixNpmCli = path.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js");
-
-    let npmCliJs = "";
-    if (fs.existsSync(winNpmCli)) {
-      npmCliJs = winNpmCli;
-    } else if (fs.existsSync(unixNpmCli)) {
-      npmCliJs = unixNpmCli;
-    }
-
-    if (npmCliJs) {
-      execFile(process.execPath, [npmCliJs, ...args], { cwd: validateSafePath(cwd) }, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    } else {
-      const isWin = process.platform === "win32";
-      const npmBinName = isWin ? "npm.cmd" : "npm";
-      const candidate = path.join(nodeDir, npmBinName);
-      const npmBin = fs.existsSync(candidate) ? candidate : "npm";
-      exec(`"${npmBin}" ${args.join(" ")}`, { cwd: validateSafePath(cwd) }, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    }
-  });
-}
-
-async function installVitePluginInvasive(
-  projectRoot: string,
-  config: {
-    framework: string;
-    pluginName: string;
-    attributeName: string;
-    importStatement: string;
-    pluginCall: string;
-  }
-) {
-  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE ${config.framework.toUpperCase()} SETUP <<<\x1b[0m`);
-  console.log(`Invasive mode works by adding \x1b[32m${config.pluginName}\x1b[0m to your project.`);
-  console.log(`This plugin injects '${config.attributeName}' HTML attributes (file paths, line numbers, column numbers)`);
-  console.log(`directly into DOM elements during compilation, enabling pixel-perfect template resolution in ${config.framework}.`);
-  console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
-  console.log(`  1. Install '${config.pluginName}' as a devDependency in your package.json.`);
-  console.log(`  2. Modify your vite.config.ts / vite.config.js to register the plugin.\x1b[0m`);
-  
-  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
-  if (answer.trim().toLowerCase() !== "y") {
-    console.log(`[HoverSource] Installation aborted.`);
-    return;
-  }
-
-  console.log(`[HoverSource] Setting up ${config.framework} invasive mode...`);
-
-  // 1. Install devDependency
-  console.log(`[HoverSource] Installing ${config.pluginName}...`);
-  const pkgPath = path.join(projectRoot, "package.json");
-  if (!fs.existsSync(pkgPath)) {
-    console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
-    return;
-  }
-
-  try {
-    await runNpmCommand(["install", "-D", config.pluginName], projectRoot);
-    console.log(`[HoverSource] Successfully installed ${config.pluginName}.`);
-  } catch (err) {
-    console.error(`[HoverSource] Failed to install package:`, err);
-    throw err;
-  }
-
-  // 2. Modify vite config
-  let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
-  if (!fs.existsSync(configPath)) {
-    configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
-  }
-
-  if (!fs.existsSync(configPath)) {
-    console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
-    console.log(`Please register '${config.pluginName}' manually in your Vite config.`);
-    return;
-  }
-
-  console.log(`[HoverSource] Registering plugin in ${path.basename(configPath)}...`);
-  let configContent = fs.readFileSync(configPath, "utf-8");
-
-  // Check if already registered
-  if (configContent.includes(config.pluginName)) {
-    console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
-    return;
-  }
-
-  // Insert import
-  configContent = config.importStatement + configContent;
-
-  // Insert plugin call inside plugins array
-  if (configContent.includes("plugins:")) {
-    configContent = configContent.replace(/plugins:\s*\[/, `plugins: [\n    ${config.pluginCall},`);
-    fs.writeFileSync(configPath, configContent, "utf-8");
-    console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
-  } else {
-    fs.writeFileSync(configPath, configContent, "utf-8");
-    console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
-    console.log(`Please manually add '${config.pluginCall}' to your plugins array.`);
-  }
-}
-
-async function installVueInvasive(projectRoot: string) {
-  await installVitePluginInvasive(projectRoot, {
-    framework: "Vue",
-    pluginName: "vite-plugin-vue-inspector",
-    attributeName: "data-v-inspector",
-    importStatement: 'import Inspector from "vite-plugin-vue-inspector";\n',
-    pluginCall: "Inspector()"
-  });
-}
-
-async function installSolidInvasive(projectRoot: string) {
-  await installVitePluginInvasive(projectRoot, {
-    framework: "SolidJS",
-    pluginName: "solid-devtools",
-    attributeName: "data-source-loc",
-    importStatement: 'import devtools from "solid-devtools/vite";\n',
-    pluginCall: "devtools()"
-  });
-}
-
-function checkIsNextjs(projectRoot: string): boolean {
-  const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
-  if (!fs.existsSync(pkgPath)) {
-    return false;
-  }
-  try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-    return "next" in allDeps;
-  } catch (err) {
-    console.warn(`[HoverSource] Warning: Failed to parse package.json. Defaulting to Vite setup.`, err);
-    return false;
-  }
-}
-
-async function installReactInvasiveNpm(projectRoot: string, pluginPath: string): Promise<void> {
-  try {
-    await runNpmCommand(["install", "-D", pluginPath], projectRoot);
-    console.log(`[HoverSource] Successfully installed @hoversource/babel-plugin-react.`);
-  } catch (err) {
-    console.error(`[HoverSource] Failed to install package:`, err);
-    throw err;
-  }
-}
-
-function registerReactInvasiveNextjs(projectRoot: string): void {
-  console.log(`[HoverSource] Detected Next.js project. Registering plugin in .babelrc...`);
-  const babelrcPath = validateSafePath(path.join(projectRoot, ".babelrc"));
-  let babelConfig: any = {
-    presets: ["next/babel"],
-    plugins: ["@hoversource/babel-plugin-react"]
-  };
-
-  if (fs.existsSync(babelrcPath)) {
-    try {
-      const content = fs.readFileSync(babelrcPath, "utf-8");
-      babelConfig = JSON.parse(content);
-      if (!babelConfig.plugins) {
-        babelConfig.plugins = [];
-      }
-      if (!babelConfig.plugins.includes("@hoversource/babel-plugin-react")) {
-        babelConfig.plugins.push("@hoversource/babel-plugin-react");
-      }
-    } catch (err) {
-      console.warn(`[HoverSource] Warning: Failed to parse existing .babelrc. Overwriting...`, err);
-    }
-  }
-
-  fs.writeFileSync(babelrcPath, JSON.stringify(babelConfig, null, 2), "utf-8");
-  console.log(`[HoverSource] Successfully registered plugin in .babelrc.`);
-}
-
-function registerReactInvasiveVite(projectRoot: string): void {
-  let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
-  if (!fs.existsSync(configPath)) {
-    configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
-  }
-
-  if (!fs.existsSync(configPath)) {
-    console.warn(`[HoverSource] Warning: Could not find vite.config.ts or vite.config.js.`);
-    console.log(`Please register 'vitePluginReactHoverSource()' manually in your Vite config.`);
-    return;
-  }
-
-  console.log(`[HoverSource] Registering plugin in ${path.basename(configPath)}...`);
-  let configContent = fs.readFileSync(configPath, "utf-8");
-
-  // Check if already registered
-  if (configContent.includes("vitePluginReactHoverSource")) {
-    console.log(`[HoverSource] Plugin already registered in ${path.basename(configPath)}.`);
-    return;
-  }
-
-  // Insert import
-  configContent = `import { vitePluginReactHoverSource } from "@hoversource/babel-plugin-react";\n` + configContent;
-
-  // Insert plugin call inside plugins array
-  if (configContent.includes("plugins:")) {
-    configContent = configContent.replace(/plugins:\s*\[/, `plugins: [\n    vitePluginReactHoverSource(),`);
-    fs.writeFileSync(configPath, configContent, "utf-8");
-    console.log(`[HoverSource] Successfully registered plugin in ${path.basename(configPath)}.`);
-  } else {
-    fs.writeFileSync(configPath, configContent, "utf-8");
-    console.warn(`[HoverSource] Warning: Could not automatically locate 'plugins: [' array inside Vite config.`);
-    console.log(`Please manually add 'vitePluginReactHoverSource()' to your plugins array.`);
-  }
-}
-
-async function installReactInvasive(projectRoot: string) {
-  console.log(`\n\x1b[36m[HoverSource] >>> REACT INVASIVE SETUP <<<\x1b[0m`);
-  console.log("This will configure HoverSource compile-time JSX location tagging for React/Next.js projects.");
-  console.log("It installs '@hoversource/babel-plugin-react' to inject 'data-hoversource-loc' attribute on JSX nodes.");
-  
-  const proceed = await askQuestion("\n\x1b[35mConfigure React invasive mode? (y/N): \x1b[0m");
-  if (proceed.trim().toLowerCase() !== "y") {
-    console.log("React setup cancelled.");
-    return;
-  }
-
-  console.log("Installing devDependency '@hoversource/babel-plugin-react'...");
-  const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
-  if (!fs.existsSync(pkgPath)) {
-    console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
-    return;
-  }
-
-  const isNextjs = checkIsNextjs(projectRoot);
-
-  // Resolve local plugin path
-  const pluginPath = path.resolve(__dirname, "../../babel-plugin-react");
-  if (!fs.existsSync(pluginPath)) {
-    console.error(`[HoverSource] Error: Could not find @hoversource/babel-plugin-react package source.`);
-    return;
-  }
-
-  await installReactInvasiveNpm(projectRoot, pluginPath);
-
-  if (isNextjs) {
-    registerReactInvasiveNextjs(projectRoot);
-  } else {
-    registerReactInvasiveVite(projectRoot);
-  }
-}
-
-async function installAngularInvasive(projectRoot: string) {
-  console.log(`\n\x1b[36m[HoverSource] >>> INVASIVE ANGULAR SETUP <<<\x1b[0m`);
-  console.log(`Invasive mode works by adding \x1b[32mngx-locatorjs\x1b[0m to your project.`);
-  console.log(`This utility sets up a runtime hook and proxy to map components to source code.`);
-  console.log(`\n\x1b[33m[Warning] This action is invasive. It will:`);
-  console.log(`  1. Install 'ngx-locatorjs' as a devDependency in your package.json.`);
-  console.log(`  2. Generate configuration files (npx locatorjs-config).`);
-  console.log(`  3. Modify your main.ts to import and initialize the locator.\x1b[0m`);
-  
-  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to proceed? (y/N): \x1b[0m`);
-  if (answer.trim().toLowerCase() !== "y") {
-    console.log(`[HoverSource] Installation aborted.`);
-    return;
-  }
-
-  console.log(`[HoverSource] Setting up Angular invasive mode...`);
-
-  // 1. Install ngx-locatorjs
-  console.log(`[HoverSource] Installing ngx-locatorjs...`);
-  const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
-  if (!fs.existsSync(pkgPath)) {
-    console.error(`[HoverSource] Error: No package.json found at ${projectRoot}`);
-    return;
-  }
-
-  try {
-    await runNpmCommand(["install", "-D", "ngx-locatorjs"], projectRoot);
-    console.log(`[HoverSource] Successfully installed ngx-locatorjs.`);
-  } catch (err) {
-    console.error(`[HoverSource] Failed to install package:`, err);
-    throw err;
-  }
-
-  // 2. Generate config
-  console.log(`[HoverSource] Running locatorjs-config...`);
-  try {
-    const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
-    await new Promise<void>((resolve, reject) => {
-      exec(`${npxCmd} locatorjs-config`, { cwd: validateSafePath(projectRoot) }, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
+    child.on("error", (err) => {
+      console.error(`[HoverSource] Exec command failed to start: ${err.message}`);
     });
-    console.log(`[HoverSource] Generated locatorjs configuration.`);
-  } catch (err) {
-    console.warn(`[HoverSource] Warning: Failed to run locatorjs-config. You may need to run 'npx locatorjs-config' manually.`, err);
-  }
 
-  // 3. Modify main.ts
-  let mainPath = validateSafePath(path.join(projectRoot, "src", "main.ts"));
-  if (!fs.existsSync(mainPath)) {
-    mainPath = validateSafePath(path.join(projectRoot, "main.ts"));
-  }
+    const cleanup = () => {
+      if (patchRestorer) patchRestorer();
+      process.exit();
+    };
 
-  if (!fs.existsSync(mainPath)) {
-    console.warn(`[HoverSource] Warning: Could not find main.ts.`);
-    console.log(`Please manually import and initialize 'ngx-locatorjs' in your application entry file.`);
-    return;
-  }
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
+    child.on("exit", cleanup);
+  };
 
-  console.log(`[HoverSource] Appending locator hook to ${path.basename(mainPath)}...`);
-  let mainContent = fs.readFileSync(mainPath, "utf-8");
-
-  if (mainContent.includes("ngx-locatorjs")) {
-    console.log(`[HoverSource] ngx-locatorjs already imported in ${path.basename(mainPath)}.`);
-    return;
-  }
-
-  const locatorHook = `\n\n// HoverSource/ngx-locatorjs integration\nimport("ngx-locatorjs").then(m => {\n  try {\n    m.installAngularLocator({ enableNetwork: true });\n  } catch (e) {\n    console.warn("[HoverSource] Failed to load Angular locator", e);\n  }\n});\n`;
-  mainContent += locatorHook;
-  fs.writeFileSync(mainPath, mainContent, "utf-8");
-  console.log(`[HoverSource] Successfully appended locator hook to ${path.basename(mainPath)}.`);
+  const autoResolve = args["auto-resolve"] === true;
+  resolveDebugPortConflicts(debugPort, projectRoot, autoResolve, args).then((resolved) => {
+    runWithCdp(resolved.resolvedDebugPort, resolved.patchRestorer);
+  });
 }
 
-function cleanViteConfig(projectRoot: string): void {
-  let configPath = validateSafePath(path.join(projectRoot, "vite.config.ts"));
-  if (!fs.existsSync(configPath)) {
-    configPath = validateSafePath(path.join(projectRoot, "vite.config.js"));
-  }
-
-  if (fs.existsSync(configPath)) {
-    console.log(`[HoverSource] Cleaning ${path.basename(configPath)}...`);
-    let configContent = fs.readFileSync(configPath, "utf-8");
-    
-    // Remove imports
-    configContent = configContent.replace(/import Inspector from\s*['"]vite-plugin-vue-inspector['"];?\n?/, "");
-    configContent = configContent.replace(/import devtools from\s*['"]solid-devtools\/vite['"];?\n?/, "");
-    configContent = configContent.replace(/import\s*\{\s*vitePluginReactHoverSource\s*\}\s*from\s*['"]@hoversource\/babel-plugin-react['"];?\n?/, "");
-    // Remove plugin calls
-    configContent = configContent.replace(/Inspector\(\),?\\n?\\s*/, "");
-    configContent = configContent.replace(/devtools\(\),?\\n?\\s*/, "");
-    configContent = configContent.replace(/vitePluginReactHoverSource\(\),?\\n?\\s*/, "");
-    
-    fs.writeFileSync(configPath, configContent, "utf-8");
-    console.log(`[HoverSource] Cleared Vite plugin registrations.`);
-  }
-}
-
-function cleanBabelrc(projectRoot: string): void {
-  let babelrcPath = validateSafePath(path.join(projectRoot, ".babelrc"));
-  if (fs.existsSync(babelrcPath)) {
-    console.log(`[HoverSource] Cleaning ${path.basename(babelrcPath)}...`);
+async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
+  const safeTarget = validateSafeUrl(targetUrl);
+  return new Promise((resolve) => {
     try {
-      const content = fs.readFileSync(babelrcPath, "utf-8");
-      const babelConfig = JSON.parse(content);
-      if (babelConfig.plugins) {
-        babelConfig.plugins = babelConfig.plugins.filter((p: string) => p !== "@hoversource/babel-plugin-react");
-        if (babelConfig.plugins.length === 0) {
-          delete babelConfig.plugins;
-        }
-      }
-      if (
-        Object.keys(babelConfig).length === 0 ||
-        (Object.keys(babelConfig).length === 1 &&
-          Array.isArray(babelConfig.presets) &&
-          babelConfig.presets.length === 1 &&
-          babelConfig.presets[0] === "next/babel")
-      ) {
-        fs.unlinkSync(babelrcPath);
-        console.log(`[HoverSource] Removed .babelrc as it is no longer needed.`);
+      const url = new URL(safeTarget);
+      const schemesList = ["http:", "https:"];
+      if (schemesList.includes(url.protocol)) {
+        const isHttps = url.protocol === "https:";
+        const req = isHttps
+          ? https.get(url, (res) => {
+              res.resume();
+              resolve(true);
+            })
+          : http.get(url, (res) => {
+              res.resume();
+              resolve(true);
+            });
+        req.setTimeout(2000, () => {
+          req.destroy();
+          resolve(false);
+        });
+        req.on("error", () => resolve(false));
       } else {
-        fs.writeFileSync(babelrcPath, JSON.stringify(babelConfig, null, 2), "utf-8");
-        console.log(`[HoverSource] Cleared @hoversource/babel-plugin-react from .babelrc.`);
+        resolve(false);
       }
-    } catch (err) {
-      console.warn(`[HoverSource] Warning: Failed to clean up .babelrc:`, err);
+    } catch {
+      resolve(false);
     }
-  }
+  });
 }
 
-function cleanAngularMain(projectRoot: string): void {
-  let mainPath = validateSafePath(path.join(projectRoot, "src", "main.ts"));
-  if (!fs.existsSync(mainPath)) {
-    mainPath = validateSafePath(path.join(projectRoot, "main.ts"));
-  }
-
-  if (fs.existsSync(mainPath)) {
-    console.log(`[HoverSource] Cleaning ${path.basename(mainPath)}...`);
-    let mainContent = fs.readFileSync(mainPath, "utf-8");
-    // Remove our integration block
-    mainContent = mainContent.replace(/\n\n\/\/ HoverSource\/ngx-locatorjs integration[\s\S]*installAngularLocator[\s\S]*\}\);\n/, "");
-    fs.writeFileSync(mainPath, mainContent, "utf-8");
-    console.log(`[HoverSource] Cleared Angular main.ts hooks.`);
-  }
-}
-
-async function uninstallInvasive(projectRoot: string) {
-  console.log(`\n\x1b[36m[HoverSource] >>> UNINSTALL INVASIVE PLUGINS <<<\x1b[0m`);
-  
-  const answer = await askQuestion(`\n\x1b[35mAre you sure you want to uninstall HoverSource invasive plugins? (y/N): \x1b[0m`);
-  if (answer.trim().toLowerCase() !== "y") {
-    console.log(`[HoverSource] Aborted.`);
-    return;
-  }
-
-  // 1. Remove from package.json
-  console.log(`[HoverSource] Uninstalling packages...`);
-  try {
-    await runNpmCommand(["uninstall", "vite-plugin-vue-inspector", "solid-devtools", "ngx-locatorjs", "@hoversource/babel-plugin-react"], projectRoot);
-    console.log(`[HoverSource] Packages uninstalled.`);
-  } catch (err) {
-    console.error(`[HoverSource] Failed to uninstall packages:`, err);
-  }
-
-  // 2. Remove from Vite config
-  cleanViteConfig(projectRoot);
-
-  // 3. Remove from .babelrc
-  cleanBabelrc(projectRoot);
-
-  // 4. Remove from main.ts
-  cleanAngularMain(projectRoot);
-
-  console.log(`[HoverSource] Uninstallation complete.`);
-}
-
-function printHelp() {
-  console.log(`HoverSource CLI - Code intelligence overlay for web and Electron applications
-
-Usage:
-  hs [subcommand] [options]
-
-Subcommands:
-  install -v|-s|-a|--vue|--solid|--angular|--react   Install framework integration plugins
-  uninstall                                          Uninstall framework integration plugins
-  [npm-script]                                       Run an npm script from package.json with HoverSource enabled (e.g. hs start, hs dev)
-
-Options:
-  -r, --root=<path>                          Path to the project root directory (default: current directory)
-  -p, --port=<port>                          Port for the companion server (default: 7300)
-  --debug-port=<port>                        Debug port for remote debugging (default: 9222)
-  -t, --target=<url>                         Proxy mode target URL (for web/browser apps)
-  -e, --exec=<command>                       Exec mode command wrapper (for Electron apps)
-  --proxy-port=<port>                        Port for the local proxy server (default: 10000 + target port)
-  -d, --dashboard                            Open the HoverSource dashboard in browser on startup
-  -h, --help                                 Display this help message
-
-Examples:
-  hs start                                   Run the start script from package.json
-  hs -t http://localhost:5173                Launch companion server and proxy targeting localhost:5173
-  hs install -v                              Install Vue template inspector plugin
-  hs install --react                         Install React compiler plugin`);
-}
-
-async function handleSubcommands(
+async function handleExecMode(
+  execArg: string,
   subcommand: string | undefined,
-  args: any,
-  projectRoot: string
-): Promise<void> {
-  if (subcommand === "install") {
-    if (args.vue) {
-      await installVueInvasive(projectRoot);
-      process.exit(0);
-    } else if (args.solid) {
-      await installSolidInvasive(projectRoot);
-      process.exit(0);
-    } else if (args.angular) {
-      await installAngularInvasive(projectRoot);
-      process.exit(0);
-    } else if (args.react) {
-      await installReactInvasive(projectRoot);
-      process.exit(0);
-    } else {
-      console.log("[HoverSource] Please specify a framework to install, e.g. hs install --vue, --solid, --angular, --react");
+  projectRoot: string,
+  debugPort: number,
+  serverPort: number,
+  args: Record<string, string | boolean>
+) {
+  let resolved = { execCommand: execArg, isElectron: false };
+  if (subcommand) {
+    const resolvedSub = resolveSubcommand(subcommand, projectRoot);
+    if (!resolvedSub) {
       process.exit(1);
     }
-  }
-  if (subcommand === "uninstall") {
-    await uninstallInvasive(projectRoot);
-    process.exit(0);
-  }
-}
-
-function findScriptPath(projectRoot: string): string {
-  const pathsToTry = [
-    path.resolve(__dirname, "../../overlay-core/dist/overlay.bundle.js"),
-    path.resolve(__dirname, "../node_modules/@hoversource/overlay-core/dist/overlay.bundle.js"),
-    path.resolve(projectRoot, "node_modules/@hoversource/overlay-core/dist/overlay.bundle.js")
-  ];
-
-  for (const p of pathsToTry) {
-    if (fs.existsSync(p)) {
-      return p;
+    resolved = resolvedSub;
+  } else {
+    const pkgPath = path.join(projectRoot, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+        const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+        resolved.isElectron = "electron" in allDeps;
+      } catch {}
     }
   }
 
-  console.error(`[HoverSource] Critical Error: Could not locate overlay.bundle.js.`);
-  console.error(`Please run 'npm run build' inside the HoverSource directory before launching.`);
-  process.exit(1);
-}
-
-function setupCleanup(cleanup: () => void): void {
-  process.on("exit", cleanup);
-  process.on("SIGINT", () => { cleanup(); process.exit(0); });
-  process.on("SIGTERM", () => { cleanup(); process.exit(0); });
-}
-
-function resolveExecCommand(
-  subcommand: string | undefined,
-  execCommand: string | undefined,
-  targetUrl: string | undefined,
-  projectRoot: string
-): { execCommand: string | undefined; isElectron: boolean } {
-  if (subcommand && !execCommand && !targetUrl) {
-    const resolved = resolveSubcommand(subcommand, projectRoot);
-    if (!resolved) {
-      process.exit(1);
-    }
-    if (resolved.isElectron) {
-      console.log(`[HoverSource] Detected Electron project, using exec mode.`);
-    }
-    return { execCommand: resolved.execCommand, isElectron: resolved.isElectron };
+  if (resolved.isElectron) {
+    console.log(`[HoverSource] Electron app detected. Running in exec mode.`);
+    runExecMode(resolved.execCommand, projectRoot, debugPort, args);
+  } else {
+    console.log(`[HoverSource] Web application detected. Running in web-app mode.`);
+    const { child } = await runWebAppMode(resolved.execCommand, projectRoot, serverPort, args);
+    
+    const cleanup = () => {
+      child.kill();
+      process.exit();
+    };
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
+    child.on("exit", cleanup);
   }
-  return { execCommand, isElectron: false };
 }
 
 async function main() {
-  // Self-heal any leftover patches from previous crashed/force-killed runs
   restoreLeftoverPatches();
 
   const { args, subcommand } = getArgs();
 
-  if (subcommand === "help" || args.help) {
-    printHelp();
-    process.exit(0);
-  }
-  const rawRoot = (args.root as string) || process.cwd();
-  const projectRoot = path.resolve(validateSafePath(rawRoot));
-
-  await handleSubcommands(subcommand, args, projectRoot);
-
-  const config = loadMergedConfig(projectRoot);
-  const autoResolve = config.autoResolvePortConflicts === true;
-  
-  const targetUrl = args.target as string | undefined;
-  let targetPort: number | undefined;
-  if (targetUrl) {
-    try {
-      targetPort = Number.parseInt(new URL(targetUrl).port || "3000", 10);
-    } catch (err) {
-      console.debug("[HoverSource] Failed to parse target port:", err);
-    }
-  }
-
-  const requestedPort = Number.parseInt((args.port as string) || process.env.HOVERSOURCE_PORT || "7300", 10);
-  const serverPort = await resolveCompanionPort(requestedPort, targetPort);
-
-  let debugPort = Number.parseInt((args["debug-port"] as string) || process.env.HOVERSOURCE_DEBUG_PORT || "9222", 10);
-  const shouldOpenDashboard = !!args.dashboard;
-  let execCommand = args.exec as string | undefined;
-  if (execCommand) {
-    validateSafeCommand(execCommand);
-  }
-
-  let patchRestorer: (() => void) | undefined;
-  const cleanup = () => {
-    if (patchRestorer) {
-      try {
-        patchRestorer();
-        patchRestorer = undefined;
-      } catch (err) {
-        console.debug("[HoverSource] Cleanup handler error:", err);
-      }
-    }
-  };
-  setupCleanup(cleanup);
-
-  const resolved = resolveExecCommand(subcommand, execCommand, targetUrl, projectRoot);
-  execCommand = resolved.execCommand;
-
-  console.log(`[HoverSource] Initializing...`);
-
-  // If in exec mode, check if the debugPort is already occupied and warn/prompt the user
-  if (execCommand) {
-    const conflicts = await resolveDebugPortConflicts(debugPort, projectRoot, autoResolve, args);
-    debugPort = conflicts.resolvedDebugPort;
-    patchRestorer = conflicts.patchRestorer;
-  }
-
-  // 1. Start Companion Server
-  startCompanionServer({
-    port: serverPort,
-    projectRoot,
-    debugPort
-  });
-
-  // 2. Open dashboard if requested
-  if (shouldOpenDashboard) {
-    const dashboardUrl = `http://localhost:${serverPort}/dashboard`;
-    console.log(`[HoverSource] Opening Dashboard in browser: ${dashboardUrl}`);
-    openBrowser(dashboardUrl);
-  }
-
-  // ─── MODE A: Proxy injection (web/browser apps) ──────────────────────────
-  if (targetUrl) {
-    await runProxyMode(targetUrl, serverPort, args);
+  if (args.help || args.h) {
+    showHelp();
     return;
   }
 
-  // ─── MODE B: Exec wrapper (Electron apps) or Auto-Proxy (Web apps) ────────
-  if (execCommand) {
-    if (resolved.isElectron) {
-      runExecMode(execCommand, projectRoot, debugPort);
-    } else {
-      const webApp = await runWebAppMode(execCommand, projectRoot, serverPort, args);
-      const prevCleanup = cleanup;
-      setupCleanup(() => {
-        prevCleanup();
-        try {
-          if (webApp.child.pid) {
-            console.log(`[HoverSource] Cleaning up dev server process (PID: ${webApp.child.pid})...`);
-            if (process.platform === "win32") {
-              exec(`taskkill /F /T /PID ${webApp.child.pid}`);
-            } else {
-              process.kill(-webApp.child.pid, "SIGKILL");
-            }
-          }
-        } catch (err) {
-          console.debug("[HoverSource] Dev server cleanup error:", err);
-        }
-      });
-      return;
+  const projectRoot = validateSafePath(path.resolve(String(args.root || args.r || ".")));
+  const requestedPort = Number.parseInt(String(args.port || args.p || 7300), 10);
+  const debugPort = Number.parseInt(String(args["debug-port"] || 9222), 10);
+
+  // суб-команда Start
+  if (subcommand === "start") {
+    console.log(`[HoverSource] Starting companion server...`);
+    const serverPort = await resolveCompanionPort(requestedPort);
+    await startCompanionServer({ port: serverPort, projectRoot, debugPort });
+    console.log(`[HoverSource] Companion server running on port ${serverPort}.`);
+    
+    if (args.dashboard || args.d) {
+      openBrowser(`http://localhost:${serverPort}/dashboard`);
     }
+    return;
   }
 
-  // 3. Locate bundled overlay script
-  const scriptPath = findScriptPath(projectRoot);
-  const scriptContent = fs.readFileSync(validateSafePath(scriptPath), "utf-8");
-  // Prepend companion port so overlay can connect back regardless of configured port
-  const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
-  const scriptWithPort = portBootstrap + scriptContent;
+  const targetArg = (args.target || args.t) as string | undefined;
+  const execArg = (args.exec || args.e || subcommand) as string | undefined;
 
-  // ─── MODE C: Manual CDP (backward compat) ─ user opens their app with debug port
-  await startCdpInjectionWatch(debugPort, scriptWithPort);
+  if (!targetArg && !execArg) {
+    showHelp();
+    return;
+  }
+
+  console.log(`[HoverSource] Starting...`);
+  const serverPort = await resolveCompanionPort(requestedPort);
+  await startCompanionServer({ port: serverPort, projectRoot, debugPort });
+  console.log(`[HoverSource] Companion server running on port ${serverPort}.`);
+
+  if (targetArg) {
+    const safeTarget = validateSafeUrl(targetArg);
+    const isTargetUp = await checkTargetUrlUp(safeTarget);
+    if (!isTargetUp) {
+      console.warn(`\x1b[33m[HoverSource] ⚠️  WARNING: Target server at ${safeTarget} is not responding.\x1b[0m`);
+      console.warn(`[HoverSource] If your dev server starts slowly, HoverSource will automatically retry requests.`);
+    }
+    await runProxyMode(safeTarget, serverPort, args);
+  } else if (execArg) {
+    await handleExecMode(execArg, subcommand, projectRoot, debugPort, serverPort, args);
+  }
 }
 
-if (process.env.VITEST === undefined) {
-  try {
-    await main();
-  } catch (err) {
-    console.error("[HoverSource] CLI crashed:", err);
-    process.exit(1);
-  }
+function showHelp() {
+  console.log(`
+Usage: hs [subcommand] [options]
+
+Subcommands:
+  start                  Start the companion server only.
+  dev, start, etc.       Any package.json script name to execute with HoverSource overlay.
+
+Options:
+  -p, --port=<port>       Port for the companion server (default: 7300)
+  -t, --target=<url>      Direct target dev server URL to proxy (e.g. http://localhost:3000)
+  -e, --exec=<command>    Command to launch target app (e.g. "npm run dev", "electron .")
+  -r, --root=<path>       Project root directory (default: current directory)
+  -d, --dashboard         Automatically open the HoverSource Dashboard in your browser
+  -h, --help              Show this help message
+  --debug-port=<port>     CDP Remote debugging port for Electron (default: 9222)
+  --proxy-port=<port>     Explicit port to bind HoverSource reverse proxy server
+  --auto-resolve          Automatically resolve port conflicts (terminate process or patch debug port)
+`);
+}
+
+try {
+  await main();
+} catch (err) {
+  console.error(`[HoverSource] CLI Fatal Error:`, err);
+  process.exit(1);
 }

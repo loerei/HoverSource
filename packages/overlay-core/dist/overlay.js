@@ -1,7 +1,12 @@
 import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
-function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
+function getCompanionBaseUrl() {
+    const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
+    if (isProxy) {
+        return "/hoversource";
+    }
+    const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
+    return `http://127.0.0.1:${port}`;
 }
 class OverlayEngine {
     config = null;
@@ -48,7 +53,7 @@ class OverlayEngine {
     }
     async loadConfig() {
         try {
-            const res = await fetch(`http://127.0.0.1:${getCompanionPort()}/config`);
+            const res = await fetch(`${getCompanionBaseUrl()}/config`);
             const data = await res.json();
             this.config = data.config;
             console.log("[HoverSource] Configuration loaded from companion server:", this.config);
@@ -305,24 +310,8 @@ class OverlayEngine {
     initShortcuts() {
         globalThis.addEventListener("keydown", this.handleKeyDown);
     }
-    handleKeyDown = (e) => {
-        const shortcuts = this.config?.shortcuts;
-        if (!shortcuts)
-            return;
-        if (this.matchShortcut(e, shortcuts.toggleUI)) {
-            e.preventDefault();
-            this.uiVisible = !this.uiVisible;
-            if (this.container) {
-                this.container.style.display = this.uiVisible ? "block" : "none";
-            }
-            console.log(`[HoverSource] UI Tooltip Visibility: ${this.uiVisible ? "visible" : "hidden"} (Background tracking active)`);
-            this.activeMode.onUIVisibilityChanged(this.uiVisible);
-            return;
-        }
-        if (this.isTyping(e))
-            return;
-        // Hardcoded fallback for toggleMode if not in config
-        const toggleModeShortcut = shortcuts.toggleMode || { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
+    handleModeShortcuts(e, shortcuts) {
+        const toggleModeShortcut = shortcuts.toggleMode ?? { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
         if (this.matchShortcut(e, shortcuts.openDashboard)) {
             e.preventDefault();
             console.log("[HoverSource] Shortcut matched: openDashboard");
@@ -344,10 +333,28 @@ class OverlayEngine {
             e.preventDefault();
             this.activeMode.onShortcut('copyMetadata');
         }
-        else if (this.matchShortcut(e, shortcuts.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
+        else if (this.matchShortcut(e, shortcuts.copyAllLayers ?? { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
             e.preventDefault();
             this.activeMode.onShortcut('copyAllLayers');
         }
+    }
+    handleKeyDown = (e) => {
+        const shortcuts = this.config?.shortcuts;
+        if (!shortcuts)
+            return;
+        if (this.matchShortcut(e, shortcuts.toggleUI)) {
+            e.preventDefault();
+            this.uiVisible = !this.uiVisible;
+            if (this.container) {
+                this.container.style.display = this.uiVisible ? "block" : "none";
+            }
+            console.log(`[HoverSource] UI Tooltip Visibility: ${this.uiVisible ? "visible" : "hidden"} (Background tracking active)`);
+            this.activeMode.onUIVisibilityChanged(this.uiVisible);
+            return;
+        }
+        if (this.isTyping(e))
+            return;
+        this.handleModeShortcuts(e, shortcuts);
     };
     switchMode() {
         this.activeMode.deactivate();
@@ -355,7 +362,7 @@ class OverlayEngine {
         this.activeMode.activate(this);
     }
     openDashboardInBrowser() {
-        fetch(`http://127.0.0.1:${getCompanionPort()}/open-dashboard`)
+        fetch(`${getCompanionBaseUrl()}/open-dashboard`)
             .then(r => r.json())
             .then(data => {
             if (data.success) {
@@ -376,9 +383,10 @@ class OverlayEngine {
             return false;
         const targetKey = shortcut.key.toLowerCase();
         const keyMatch = e.key.toLowerCase() === targetKey;
-        const codeMatch = e.code && (e.code.toLowerCase() === targetKey ||
-            e.code.toLowerCase() === `key${targetKey}` ||
-            e.code.toLowerCase() === `digit${targetKey}`);
+        const codeMatch = e.code &&
+            (e.code.toLowerCase() === targetKey ||
+                e.code.toLowerCase() === `key${targetKey}` ||
+                e.code.toLowerCase() === `digit${targetKey}`);
         return keyMatch || !!codeMatch;
     }
     isTyping(e) {
@@ -473,8 +481,68 @@ class OverlayEngine {
         this.tooltipBox.style.left = `${x}px`;
         this.tooltipBox.style.top = `${y}px`;
     }
+    drawLeaderLine(subRect, rowRect) {
+        if (!this.container)
+            return;
+        // Start point: EXACT CENTER of the sub-border
+        const x1 = subRect.left + subRect.width / 2;
+        const y1 = subRect.top + subRect.height / 2;
+        // Check if start point is inside the tooltip box to avoid drawing over it
+        let isInsideTooltip = false;
+        let tooltipRect = null;
+        if (this.tooltipBox && this.tooltipBox.style.display !== "none") {
+            tooltipRect = this.tooltipBox.getBoundingClientRect();
+            if (x1 >= tooltipRect.left &&
+                x1 <= tooltipRect.right &&
+                y1 >= tooltipRect.top &&
+                y1 <= tooltipRect.bottom) {
+                isInsideTooltip = true;
+            }
+        }
+        if (!isInsideTooltip) {
+            const svgNS = "http://www.w3.org/2000/svg";
+            const svg = document.createElementNS(svgNS, "svg");
+            svg.setAttribute("class", "hoversource-parent-svg");
+            svg.setAttribute("width", "100%");
+            svg.setAttribute("height", "100%");
+            this.container.appendChild(svg);
+            this.parentHighlightElements.push(svg);
+            // Determine termination edge based on relative horizontal position
+            let rx = rowRect.left;
+            if (tooltipRect && x1 > (tooltipRect.left + tooltipRect.width / 2)) {
+                rx = rowRect.right;
+            }
+            // Tooltip row target point: vertical center of rowRect
+            const ry = rowRect.top + rowRect.height / 2;
+            // Draw target dot
+            const dotCircle = document.createElementNS(svgNS, "circle");
+            dotCircle.setAttribute("cx", x1.toString());
+            dotCircle.setAttribute("cy", y1.toString());
+            dotCircle.setAttribute("r", "5");
+            dotCircle.setAttribute("class", "hoversource-leader-dot");
+            svg.appendChild(dotCircle);
+            const dotInner = document.createElementNS(svgNS, "circle");
+            dotInner.setAttribute("cx", x1.toString());
+            dotInner.setAttribute("cy", y1.toString());
+            dotInner.setAttribute("r", "1.5");
+            dotInner.setAttribute("fill", "#ffffff");
+            svg.appendChild(dotInner);
+            // Draw leader line (diagonal then horizontal) with viewport bounds check
+            const dx = rx - x1;
+            const dir = dx > 0 ? 1 : -1;
+            let x_mid = x1 + dir * 30;
+            if (Math.abs(dx) <= 60) {
+                x_mid = x1 + dx * 0.5;
+            }
+            x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
+            const path = document.createElementNS(svgNS, "path");
+            path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
+            path.setAttribute("class", "hoversource-leader-line");
+            svg.appendChild(path);
+        }
+    }
     drawParentHighlight(fx, rowRect) {
-        if (!this.container || !fx || !fx.element || typeof fx.element !== "object" || fx.element.nodeType !== 1)
+        if (!this.container || fx?.element?.nodeType !== 1)
             return;
         // Filter properties to only visual modifier/scrolling ones
         const prop = fx.property;
@@ -508,62 +576,7 @@ class OverlayEngine {
         this.parentHighlightElements.push(frame);
         // 2. SVG overlay for leader line
         if (rowRect) {
-            // Start point: EXACT CENTER of the sub-border
-            const x1 = subRect.left + subRect.width / 2;
-            const y1 = subRect.top + subRect.height / 2;
-            // Check if start point is inside the tooltip box to avoid drawing over it
-            let isInsideTooltip = false;
-            let tooltipRect = null;
-            if (this.tooltipBox && this.tooltipBox.style.display !== "none") {
-                tooltipRect = this.tooltipBox.getBoundingClientRect();
-                if (x1 >= tooltipRect.left &&
-                    x1 <= tooltipRect.right &&
-                    y1 >= tooltipRect.top &&
-                    y1 <= tooltipRect.bottom) {
-                    isInsideTooltip = true;
-                }
-            }
-            if (!isInsideTooltip) {
-                const svgNS = "http://www.w3.org/2000/svg";
-                const svg = document.createElementNS(svgNS, "svg");
-                svg.setAttribute("class", "hoversource-parent-svg");
-                svg.setAttribute("width", "100%");
-                svg.setAttribute("height", "100%");
-                this.container.appendChild(svg);
-                this.parentHighlightElements.push(svg);
-                // Determine termination edge based on relative horizontal position
-                let rx = rowRect.left;
-                if (tooltipRect && x1 > (tooltipRect.left + tooltipRect.width / 2)) {
-                    rx = rowRect.right;
-                }
-                // Tooltip row target point: vertical center of rowRect
-                const ry = rowRect.top + rowRect.height / 2;
-                // Draw target dot
-                const dotCircle = document.createElementNS(svgNS, "circle");
-                dotCircle.setAttribute("cx", x1.toString());
-                dotCircle.setAttribute("cy", y1.toString());
-                dotCircle.setAttribute("r", "5");
-                dotCircle.setAttribute("class", "hoversource-leader-dot");
-                svg.appendChild(dotCircle);
-                const dotInner = document.createElementNS(svgNS, "circle");
-                dotInner.setAttribute("cx", x1.toString());
-                dotInner.setAttribute("cy", y1.toString());
-                dotInner.setAttribute("r", "1.5");
-                dotInner.setAttribute("fill", "#ffffff");
-                svg.appendChild(dotInner);
-                // Draw leader line (diagonal then horizontal) with viewport bounds check
-                const dx = rx - x1;
-                const dir = dx > 0 ? 1 : -1;
-                let x_mid = x1 + dir * 30;
-                if (Math.abs(dx) <= 60) {
-                    x_mid = x1 + dx * 0.5;
-                }
-                x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
-                const path = document.createElementNS(svgNS, "path");
-                path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
-                path.setAttribute("class", "hoversource-leader-line");
-                svg.appendChild(path);
-            }
+            this.drawLeaderLine(subRect, rowRect);
         }
     }
     clearParentHighlights() {
@@ -588,7 +601,7 @@ class OverlayEngine {
                 const originalText = hint.innerHTML;
                 hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
                 setTimeout(() => {
-                    hint.innerHTML = originalText || "";
+                    hint.innerHTML = originalText;
                 }, 1500);
             }
         }
@@ -624,7 +637,7 @@ class OverlayEngine {
     }
 }
 globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
-    let url = `http://127.0.0.1:${getCompanionPort()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
+    let url = `${getCompanionBaseUrl()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
         url += `&tagName=${encodeURIComponent(tagName)}`;
     if (classList)
@@ -646,37 +659,13 @@ if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
     OverlayEngine.launch();
     console.log("[HoverSource] Overlay injected.");
 }
-export function parseMaskGradient(value, rect) {
-    if (!value || !value.includes("linear-gradient"))
-        return null;
-    const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
-    if (matches.length === 0)
-        return null;
-    let stopValue = 0;
-    let stopUnit = "px";
-    for (const m of matches) {
-        const val = parseFloat(m[1]);
-        if (val > 0) {
-            stopValue = val;
-            stopUnit = m[2];
-            break;
-        }
-    }
-    if (stopValue === 0)
-        return null;
-    let direction = "to bottom";
-    if (value.includes("to top"))
-        direction = "to top";
-    else if (value.includes("to right"))
-        direction = "to right";
-    else if (value.includes("to left"))
-        direction = "to left";
+function calculateMaskBounds(direction, stopValue, stopUnit, rect) {
     let subLeft = rect.left;
     let subTop = rect.top;
     let subWidth = rect.width;
     let subHeight = rect.height;
-    const rectBottom = (rect.bottom !== undefined) ? rect.bottom : rect.top + rect.height;
-    const rectRight = (rect.right !== undefined) ? rect.right : rect.left + rect.width;
+    const rectBottom = rect.bottom === undefined ? rect.top + rect.height : rect.bottom;
+    const rectRight = rect.right === undefined ? rect.left + rect.width : rect.right;
     if (direction === "to bottom") {
         const h = (stopUnit === "px") ? stopValue : rect.height * (stopValue / 100);
         subHeight = Math.min(h, rect.height);
@@ -697,10 +686,37 @@ export function parseMaskGradient(value, rect) {
     }
     return { left: subLeft, top: subTop, width: subWidth, height: subHeight };
 }
-export function parseClipPathInset(value, rect) {
-    if (!value || !value.includes("inset("))
+export function parseMaskGradient(value, rect) {
+    if (!value?.includes("linear-gradient"))
         return null;
-    const insetMatch = value.match(/inset\(([^)]+)\)/);
+    const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
+    if (matches.length === 0)
+        return null;
+    let stopValue = 0;
+    let stopUnit = "px";
+    for (const m of matches) {
+        const val = Number.parseFloat(m[1]);
+        if (val > 0) {
+            stopValue = val;
+            stopUnit = m[2];
+            break;
+        }
+    }
+    if (stopValue === 0)
+        return null;
+    let direction = "to bottom";
+    if (value.includes("to top"))
+        direction = "to top";
+    else if (value.includes("to right"))
+        direction = "to right";
+    else if (value.includes("to left"))
+        direction = "to left";
+    return calculateMaskBounds(direction, stopValue, stopUnit, rect);
+}
+export function parseClipPathInset(value, rect) {
+    if (!value?.includes("inset("))
+        return null;
+    const insetMatch = /inset\(([^)]+)\)/.exec(value);
     if (!insetMatch)
         return null;
     let content = insetMatch[1].split("round")[0].trim();
@@ -708,8 +724,8 @@ export function parseClipPathInset(value, rect) {
     if (tokens.length === 0)
         return null;
     const parseVal = (token, size) => {
-        const num = parseFloat(token);
-        if (isNaN(num))
+        const num = Number.parseFloat(token);
+        if (Number.isNaN(num))
             return 0;
         if (token.includes("%"))
             return size * (num / 100);

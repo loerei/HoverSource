@@ -10,7 +10,7 @@
   function getComponentNameFromFile(file, extensions = [".vue", ".svelte", ".astro", ".tsx", ".jsx", ".ts", ".js"]) {
     if (!file)
       return void 0;
-    const baseName = file.split(/[/\\\\]/).pop();
+    const baseName = file.split(/[/\\]/).pop();
     if (!baseName)
       return void 0;
     for (const ext of extensions) {
@@ -36,8 +36,8 @@
       const column = Number.parseInt(columnStr, 10);
       return {
         fileName: file,
-        lineNumber: !Number.isNaN(line) ? line : void 0,
-        columnNumber: !Number.isNaN(column) ? column : void 0
+        lineNumber: Number.isNaN(line) ? void 0 : line,
+        columnNumber: Number.isNaN(column) ? void 0 : column
       };
     }
     return null;
@@ -123,41 +123,58 @@
     getVueInstance(element) {
       return element.__vueParentComponent;
     }
-    canResolve(element) {
-      return !!this.getVueInstance(element) || typeof element.hasAttribute === "function" && (element.hasAttribute("data-v-inspector") || element.hasAttribute("data-v-inspector-file"));
+    resolveInvasiveFile(element, dataset) {
+      const file = dataset.vInspectorFile;
+      if (file) {
+        const lineStr = dataset.vInspectorLine;
+        const columnStr = dataset.vInspectorColumn;
+        const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
+        const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
+        return {
+          fileName: file,
+          lineNumber: Number.isNaN(line) ? void 0 : line,
+          columnNumber: Number.isNaN(column) ? void 0 : column,
+          componentName: getComponentNameFromFile(file),
+          framework: "Vue",
+          ...getElementMetadata(element)
+        };
+      }
+      return null;
     }
-    resolve(element) {
-      if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector-file")) {
-        const file = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-file") : null;
-        if (file) {
-          const lineStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-line") : null;
-          const columnStr = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector-column") : null;
-          const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
-          const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
+    resolveInvasiveCombined(element, dataset) {
+      const value = dataset.vInspector;
+      if (value) {
+        const parsed = parseColonLocation(value);
+        if (parsed) {
           return {
-            fileName: file,
-            lineNumber: !Number.isNaN(line) ? line : void 0,
-            columnNumber: !Number.isNaN(column) ? column : void 0,
-            componentName: getComponentNameFromFile(file),
+            fileName: parsed.fileName,
+            lineNumber: parsed.lineNumber,
+            columnNumber: parsed.columnNumber,
+            componentName: getComponentNameFromFile(parsed.fileName),
             framework: "Vue",
             ...getElementMetadata(element)
           };
         }
       }
-      if (typeof element.hasAttribute === "function" && element.hasAttribute("data-v-inspector")) {
-        const value = typeof element.getAttribute === "function" ? element.getAttribute("data-v-inspector") : null;
-        if (value) {
-          const parsed = parseColonLocation(value);
-          if (parsed) {
-            return {
-              fileName: parsed.fileName,
-              lineNumber: parsed.lineNumber,
-              columnNumber: parsed.columnNumber,
-              componentName: getComponentNameFromFile(parsed.fileName),
-              framework: "Vue",
-              ...getElementMetadata(element)
-            };
-          }
+      return null;
+    }
+    canResolve(element) {
+      if (this.getVueInstance(element))
+        return true;
+      return !!(element.dataset && ("vInspector" in element.dataset || "vInspectorFile" in element.dataset));
+    }
+    resolve(element) {
+      const dataset = element.dataset;
+      if (dataset) {
+        if ("vInspectorFile" in dataset) {
+          const res = this.resolveInvasiveFile(element, dataset);
+          if (res)
+            return res;
+        }
+        if ("vInspector" in dataset) {
+          const res = this.resolveInvasiveCombined(element, dataset);
+          if (res)
+            return res;
         }
       }
       let instance = this.getVueInstance(element);
@@ -186,7 +203,7 @@
     }
     resolve(element) {
       const meta = element.__svelte_meta;
-      if (!meta || !meta.loc)
+      if (!meta?.loc)
         return null;
       const { file, line, column } = meta.loc;
       return {
@@ -226,7 +243,7 @@
     resolve(element) {
       let vnode = this.getVNode(element);
       while (vnode) {
-        const source = vnode.__source || vnode.props && vnode.props.__source;
+        const source = vnode.__source || vnode.props?.__source;
         if (source) {
           const componentName = this.findComponentNameFromVNode(vnode);
           return {
@@ -248,10 +265,10 @@
   var SolidAdapter = class {
     name = "solid";
     canResolve(element) {
-      return typeof element.hasAttribute === "function" && element.hasAttribute("data-source-loc");
+      return !!(element.dataset && "sourceLoc" in element.dataset);
     }
     resolve(element) {
-      const loc = element.getAttribute("data-source-loc");
+      const loc = element.dataset?.sourceLoc;
       if (!loc)
         return null;
       const parsed = parseColonLocation(loc);
@@ -273,13 +290,13 @@
   var AstroAdapter = class {
     name = "astro";
     canResolve(element) {
-      return typeof element.hasAttribute === "function" && element.hasAttribute("data-astro-source-file");
+      return !!(element.dataset && "astroSourceFile" in element.dataset);
     }
     resolve(element) {
-      const file = element.getAttribute("data-astro-source-file");
+      const file = element.dataset?.astroSourceFile;
       if (!file)
         return null;
-      const loc = element.getAttribute("data-astro-source-loc");
+      const loc = element.dataset.astroSourceLoc;
       let line = void 0;
       let column = void 0;
       if (loc) {
@@ -287,9 +304,9 @@
         if (parts.length === 2) {
           const l = Number.parseInt(parts[0], 10);
           const c = Number.parseInt(parts[1], 10);
-          if (!Number.isNaN(l))
+          if (Number.isInteger(l))
             line = l;
-          if (!Number.isNaN(c))
+          if (Number.isInteger(c))
             column = c;
         }
       }
@@ -311,26 +328,29 @@
       return element.__ngContext__;
     }
     canResolve(element) {
-      return !!this.getNgContext(element) || typeof element.hasAttribute === "function" && element.hasAttribute("data-ng-source-file");
+      return !!this.getNgContext(element) || element.dataset && "ngSourceFile" in element.dataset;
+    }
+    resolveInvasive(element) {
+      const file = element.dataset.ngSourceFile;
+      if (!file)
+        return null;
+      const lineStr = element.dataset.ngSourceLine;
+      const columnStr = element.dataset.ngSourceColumn;
+      const compName = element.dataset.ngComponent;
+      const line = lineStr ? Number.parseInt(lineStr, 10) : Number.NaN;
+      const column = columnStr ? Number.parseInt(columnStr, 10) : Number.NaN;
+      return {
+        fileName: file,
+        lineNumber: Number.isNaN(line) ? void 0 : line,
+        columnNumber: Number.isNaN(column) ? void 0 : column,
+        componentName: compName || void 0,
+        framework: "Angular",
+        ...getElementMetadata(element)
+      };
     }
     resolve(element) {
-      if (typeof element.hasAttribute === "function" && element.hasAttribute("data-ng-source-file")) {
-        const file = element.getAttribute("data-ng-source-file");
-        if (file) {
-          const lineStr = element.getAttribute("data-ng-source-line");
-          const columnStr = element.getAttribute("data-ng-source-column");
-          const compName = element.getAttribute("data-ng-component");
-          const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
-          const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
-          return {
-            fileName: file,
-            lineNumber: !Number.isNaN(line) ? line : void 0,
-            columnNumber: !Number.isNaN(column) ? column : void 0,
-            componentName: compName || void 0,
-            framework: "Angular",
-            ...getElementMetadata(element)
-          };
-        }
+      if (element.dataset && "ngSourceFile" in element.dataset) {
+        return this.resolveInvasive(element);
       }
       const context = this.getNgContext(element);
       if (context) {
@@ -339,7 +359,7 @@
         if (ng && typeof ng.getOwningComponent === "function") {
           try {
             const compInstance = ng.getOwningComponent(element);
-            if (compInstance && compInstance.constructor) {
+            if (compInstance?.constructor) {
               componentName = compInstance.constructor.name;
             }
           } catch {
@@ -474,12 +494,7 @@
     });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
   }
-  function inspectVisualContext(element, maxDepth = 32) {
-    if (contextCache.has(element)) {
-      return contextCache.get(element);
-    }
-    const parentEffects = [];
-    const layoutConstraints = {};
+  function inspectLayoutConstraints(element, layoutConstraints) {
     try {
       const computed = globalThis.getComputedStyle(element);
       if (computed.position && computed.position !== "static") {
@@ -500,6 +515,14 @@
     } catch (e) {
       console.warn("[HoverSource] Failed to compute element layout constraints", e);
     }
+  }
+  function inspectVisualContext(element, maxDepth = 32) {
+    if (contextCache.has(element)) {
+      return contextCache.get(element);
+    }
+    const parentEffects = [];
+    const layoutConstraints = {};
+    inspectLayoutConstraints(element, layoutConstraints);
     let current = element.parentElement;
     let depth = 0;
     const limit = Math.min(maxDepth, 100);
@@ -680,11 +703,11 @@
           const activeItems = [];
           parentItems.forEach((item) => {
             if (item.classList.contains("hs-parent-active")) {
-              const indexAttr = item.getAttribute("data-index");
-              if (indexAttr !== null) {
-                const idx = parseInt(indexAttr, 10);
+              const idxStr = item.dataset.index;
+              if (idxStr !== void 0) {
+                const idx = Number.parseInt(idxStr, 10);
                 const fx = this.currentSourceInfo.visualContext.parentEffects[idx];
-                if (fx && fx.element) {
+                if (fx?.element) {
                   activeItems.push({ item, fx });
                 }
               }
@@ -848,7 +871,8 @@
       parts.push(shortcut.key.toUpperCase());
       return parts.join("+");
     }
-    renderMinimalTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
+    renderMinimalTooltip(element, info, labels) {
+      const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
       const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
       const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
       let vueHint = "";
@@ -1018,7 +1042,8 @@
       }
       return html;
     }
-    renderDetailedTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
+    renderDetailedTooltip(element, info, labels) {
+      const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
       const computed = globalThis.getComputedStyle(element);
       const shadow = computed.boxShadow;
       const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
@@ -1100,7 +1125,8 @@
       })();
       const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
       const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
-      const innerHtml = this.minimalMode ? this.renderMinimalTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) : this.renderDetailedTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel);
+      const labels = { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel };
+      const innerHtml = this.minimalMode ? this.renderMinimalTooltip(element, info, labels) : this.renderDetailedTooltip(element, info, labels);
       const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
       this.controller.drawTooltip(html, e);
       const tooltipBox = this.controller.tooltipBox;
@@ -1109,11 +1135,11 @@
         const drawDefaultHighlights = () => {
           this.controller.clearParentHighlights();
           parentItems.forEach((item) => {
-            const indexAttr = item.getAttribute("data-index");
-            if (indexAttr !== null) {
-              const idx = parseInt(indexAttr, 10);
+            const idxStr = item.dataset.index;
+            if (idxStr !== void 0) {
+              const idx = Number.parseInt(idxStr, 10);
               const fx = info.visualContext?.parentEffects[idx];
-              const shouldHighlight = fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path");
+              const shouldHighlight = fx?.element && (fx.property === "mask-image" || fx.property === "clip-path");
               if (shouldHighlight) {
                 const rowRect = item.getBoundingClientRect();
                 this.controller.drawParentHighlight(fx, rowRect);
@@ -1127,11 +1153,11 @@
         drawDefaultHighlights();
         parentItems.forEach((item) => {
           item.addEventListener("mouseenter", () => {
-            const indexAttr = item.getAttribute("data-index");
-            if (indexAttr !== null) {
-              const idx = parseInt(indexAttr, 10);
+            const idxStr = item.dataset.index;
+            if (idxStr !== void 0) {
+              const idx = Number.parseInt(idxStr, 10);
               const fx = info.visualContext?.parentEffects[idx];
-              if (fx && fx.element) {
+              if (fx?.element) {
                 const rowRect = item.getBoundingClientRect();
                 parentItems.forEach((el) => el.classList.remove("hs-parent-active"));
                 item.classList.add("hs-parent-active");
@@ -1211,6 +1237,7 @@
       const tagName = element.tagName.toLowerCase();
       const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
       const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
+      const directionStr = data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : "";
       let text = `* **Component**: \`${data.component}\`
 * **Element**: ${selectorLabel}
 * **File Path**: \`${data.file || "Unknown"}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
@@ -1221,7 +1248,7 @@
   - Background: \`${data.styles.backgroundColor}\`
   - Box Shadow: \`${data.styles.boxShadow}\`
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
-  - Display: \`${data.styles.display}\` ${data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : ""}`;
+  - Display: \`${data.styles.display}\` ${directionStr}`;
       if (info.visualContext && info.visualContext.parentEffects.length > 0) {
         const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
         text += `
@@ -1257,47 +1284,52 @@ ${attrList}`;
 ` + this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
       this.controller.copyToClipboard(text);
     }
+    getElementAttributes(elNode) {
+      const attrs = [];
+      if (elNode.id) {
+        attrs.push(`id="${elNode.id}"`);
+      }
+      if (elNode.className && typeof elNode.className === "string") {
+        const classes = Array.from(elNode.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+        if (classes.length > 0) {
+          attrs.push(`class="${classes.join(" ")}"`);
+        }
+      }
+      const href = elNode.getAttribute("href");
+      if (href) {
+        attrs.push(`href="${href}"`);
+      }
+      return attrs;
+    }
+    formatMinifiedHtmlNode(node, indent) {
+      if (node.nodeType === 3) {
+        const text = node.nodeValue?.trim();
+        return text ? `${indent}...` : "";
+      }
+      if (node.nodeType === 1) {
+        const elNode = node;
+        const tagName = elNode.tagName.toLowerCase();
+        const attrs = this.getElementAttributes(elNode);
+        const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
+        const children = Array.from(elNode.childNodes);
+        if (children.length === 0) {
+          return `${indent}<${tagName}${attrStr}></${tagName}>`;
+        }
+        const childStrings = children.map((c) => this.formatMinifiedHtmlNode(c, indent + "  ")).filter((s) => s !== "");
+        if (childStrings.length === 0) {
+          return `${indent}<${tagName}${attrStr}></${tagName}>`;
+        }
+        return `${indent}<${tagName}${attrStr}>
+${childStrings.join("\n")}
+${indent}</${tagName}>`;
+      }
+      return "";
+    }
     getMinifiedHTML(el) {
       const clone = el.cloneNode(true);
       const hsEls = clone.querySelectorAll('.hoversource-container, [class^="hs-"]');
       hsEls.forEach((e) => e.remove());
-      const formatNode = (node, indent) => {
-        if (node.nodeType === 3) {
-          const text = node.nodeValue?.trim();
-          return text ? `${indent}...` : "";
-        }
-        if (node.nodeType === 1) {
-          const elNode = node;
-          const tagName = elNode.tagName.toLowerCase();
-          const attrs = [];
-          if (elNode.id) {
-            attrs.push(`id="${elNode.id}"`);
-          }
-          if (elNode.className && typeof elNode.className === "string") {
-            const classes = Array.from(elNode.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-            if (classes.length > 0) {
-              attrs.push(`class="${classes.join(" ")}"`);
-            }
-          }
-          if (elNode.getAttribute("href")) {
-            attrs.push(`href="${elNode.getAttribute("href")}"`);
-          }
-          const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
-          const children = Array.from(elNode.childNodes);
-          if (children.length === 0) {
-            return `${indent}<${tagName}${attrStr}></${tagName}>`;
-          }
-          const childStrings = children.map((c) => formatNode(c, indent + "  ")).filter((s) => s !== "");
-          if (childStrings.length === 0) {
-            return `${indent}<${tagName}${attrStr}></${tagName}>`;
-          }
-          return `${indent}<${tagName}${attrStr}>
-${childStrings.join("\n")}
-${indent}</${tagName}>`;
-        }
-        return "";
-      };
-      return formatNode(clone, "");
+      return this.formatMinifiedHtmlNode(clone, "");
     }
     getTargetHTMLToCopy(el) {
       const parent = el.parentElement;
@@ -1540,7 +1572,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
       this.lastMouseY = newY;
       this.updateTargetAtPosition(newX, newY);
       const HSconfig = this.controller.getConfig();
-      const deSnapThreshold = HSconfig?.desnappingThreshold !== void 0 ? HSconfig.desnappingThreshold : 15;
+      const deSnapThreshold = HSconfig?.desnappingThreshold ?? 15;
       if (this.isSnappedH || this.isSnappedV) {
         if (shouldReleaseSnap(newX, newY, this.snapMouseX, this.snapMouseY, deSnapThreshold)) {
           this.isSnappedH = false;
@@ -1654,7 +1686,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
     }
     assignHorizontalSnap(bestH, mouseX) {
       const HSconfig = this.controller.getConfig();
-      const snapThreshold = HSconfig?.snappingThreshold !== void 0 ? HSconfig.snappingThreshold : 15;
+      const snapThreshold = HSconfig?.snappingThreshold ?? 15;
       if (bestH) {
         this.anchorHElement = bestH.element;
         this.snapBoundaryH = bestH.boundary;
@@ -1677,7 +1709,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
     }
     assignVerticalSnap(bestV, mouseY) {
       const HSconfig = this.controller.getConfig();
-      const snapThreshold = HSconfig?.snappingThreshold !== void 0 ? HSconfig.snappingThreshold : 15;
+      const snapThreshold = HSconfig?.snappingThreshold ?? 15;
       if (bestV) {
         this.anchorVElement = bestV.element;
         this.snapBoundaryV = bestV.boundary;
@@ -1880,6 +1912,42 @@ ${this.getMinifiedHTML(targetElToCopy)}
       const sign = offset >= 0 ? "+" : "";
       return `<span style="color: #10b981; font-weight:bold;">${selector} @ ${boundary || "None"} (${sign}${offset}px)</span>`;
     }
+    buildTooltipHtml(info, fileBase, hStatus, vStatus, hintHtml, vueHint) {
+      const classList = Array.from(this.targetElement.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+      const classStr = classList.length > 0 ? "." + classList.join(".") : "";
+      const idStr = this.targetElement.id ? "#" + this.targetElement.id : "";
+      const tagLower = this.targetElement.tagName.toLowerCase();
+      return `
+      <div class="hoversource-title" style="color: #10b981;">
+        <span>Design Mode ${this.isFrozen ? "[FROZEN]" : ""}</span>
+        <span class="hoversource-framework" style="background: #064e3b; color: #34d399;">Active</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Anchor Element: </span>
+        <span class="hoversource-value">${tagLower}${idStr}${classStr}</span>
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Anchor File: </span>
+        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
+      </div>
+      <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
+        <span class="hoversource-label">H-Anchor: </span>
+        ${hStatus}
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">V-Anchor: </span>
+        ${vStatus}
+      </div>
+      <div class="hoversource-section">
+        <span class="hoversource-label">Nudge Offsets (dX, dY): </span>
+        <span class="hoversource-value">${this.dX}px, ${this.dY}px</span>
+      </div>
+      ${vueHint}
+      <div class="hoversource-shortcut-hint" style="margin-top: 8px;">
+        ${hintHtml}
+      </div>
+    `;
+    }
     renderTooltip(e) {
       if (!this.targetElement)
         return;
@@ -1916,36 +1984,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
         </div>
       `;
       }
-      const html = `
-      <div class="hoversource-title" style="color: #10b981;">
-        <span>Design Mode ${this.isFrozen ? "[FROZEN]" : ""}</span>
-        <span class="hoversource-framework" style="background: #064e3b; color: #34d399;">Active</span>
-      </div>
-      <div class="hoversource-section">
-        <span class="hoversource-label">Anchor Element: </span>
-        <span class="hoversource-value">${this.targetElement.tagName.toLowerCase()}${this.targetElement.id ? "#" + this.targetElement.id : ""}${this.targetElement.classList.length > 0 ? "." + Array.from(this.targetElement.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-")).join(".") : ""}</span>
-      </div>
-      <div class="hoversource-section">
-        <span class="hoversource-label">Anchor File: </span>
-        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
-      </div>
-      <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
-        <span class="hoversource-label">H-Anchor: </span>
-        ${hStatus}
-      </div>
-      <div class="hoversource-section">
-        <span class="hoversource-label">V-Anchor: </span>
-        ${vStatus}
-      </div>
-      <div class="hoversource-section">
-        <span class="hoversource-label">Nudge Offsets (dX, dY): </span>
-        <span class="hoversource-value">${this.dX}px, ${this.dY}px</span>
-      </div>
-      ${vueHint}
-      <div class="hoversource-shortcut-hint" style="margin-top: 8px;">
-        ${hintHtml}
-      </div>
-    `;
+      const html = this.buildTooltipHtml(info, fileBase, hStatus, vStatus, hintHtml, vueHint);
       this.controller.drawTooltip(html, e);
     }
     onShortcut(command) {
@@ -2324,8 +2363,13 @@ Suggested layout insertion (heuristic only):
   }
 
   // src/overlay.ts
-  function getCompanionPort2() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
+  function getCompanionBaseUrl() {
+    const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
+    if (isProxy) {
+      return "/hoversource";
+    }
+    const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
+    return `http://127.0.0.1:${port}`;
   }
   var OverlayEngine = class _OverlayEngine {
     config = null;
@@ -2371,7 +2415,7 @@ Suggested layout insertion (heuristic only):
     }
     async loadConfig() {
       try {
-        const res = await fetch(`http://127.0.0.1:${getCompanionPort2()}/config`);
+        const res = await fetch(`${getCompanionBaseUrl()}/config`);
         const data = await res.json();
         this.config = data.config;
         console.log("[HoverSource] Configuration loaded from companion server:", this.config);
@@ -2626,23 +2670,8 @@ Suggested layout insertion (heuristic only):
     initShortcuts() {
       globalThis.addEventListener("keydown", this.handleKeyDown);
     }
-    handleKeyDown = (e) => {
-      const shortcuts = this.config?.shortcuts;
-      if (!shortcuts)
-        return;
-      if (this.matchShortcut(e, shortcuts.toggleUI)) {
-        e.preventDefault();
-        this.uiVisible = !this.uiVisible;
-        if (this.container) {
-          this.container.style.display = this.uiVisible ? "block" : "none";
-        }
-        console.log(`[HoverSource] UI Tooltip Visibility: ${this.uiVisible ? "visible" : "hidden"} (Background tracking active)`);
-        this.activeMode.onUIVisibilityChanged(this.uiVisible);
-        return;
-      }
-      if (this.isTyping(e))
-        return;
-      const toggleModeShortcut = shortcuts.toggleMode || { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
+    handleModeShortcuts(e, shortcuts) {
+      const toggleModeShortcut = shortcuts.toggleMode ?? { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
       if (this.matchShortcut(e, shortcuts.openDashboard)) {
         e.preventDefault();
         console.log("[HoverSource] Shortcut matched: openDashboard");
@@ -2659,10 +2688,28 @@ Suggested layout insertion (heuristic only):
       } else if (this.matchShortcut(e, shortcuts.copyMetadata)) {
         e.preventDefault();
         this.activeMode.onShortcut("copyMetadata");
-      } else if (this.matchShortcut(e, shortcuts.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
+      } else if (this.matchShortcut(e, shortcuts.copyAllLayers ?? { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
         e.preventDefault();
         this.activeMode.onShortcut("copyAllLayers");
       }
+    }
+    handleKeyDown = (e) => {
+      const shortcuts = this.config?.shortcuts;
+      if (!shortcuts)
+        return;
+      if (this.matchShortcut(e, shortcuts.toggleUI)) {
+        e.preventDefault();
+        this.uiVisible = !this.uiVisible;
+        if (this.container) {
+          this.container.style.display = this.uiVisible ? "block" : "none";
+        }
+        console.log(`[HoverSource] UI Tooltip Visibility: ${this.uiVisible ? "visible" : "hidden"} (Background tracking active)`);
+        this.activeMode.onUIVisibilityChanged(this.uiVisible);
+        return;
+      }
+      if (this.isTyping(e))
+        return;
+      this.handleModeShortcuts(e, shortcuts);
     };
     switchMode() {
       this.activeMode.deactivate();
@@ -2670,7 +2717,7 @@ Suggested layout insertion (heuristic only):
       this.activeMode.activate(this);
     }
     openDashboardInBrowser() {
-      fetch(`http://127.0.0.1:${getCompanionPort2()}/open-dashboard`).then((r) => r.json()).then((data) => {
+      fetch(`${getCompanionBaseUrl()}/open-dashboard`).then((r) => r.json()).then((data) => {
         if (data.success) {
           console.log("[HoverSource] Triggered dashboard browser open.");
         } else {
@@ -2781,8 +2828,59 @@ Suggested layout insertion (heuristic only):
       this.tooltipBox.style.left = `${x}px`;
       this.tooltipBox.style.top = `${y}px`;
     }
+    drawLeaderLine(subRect, rowRect) {
+      if (!this.container)
+        return;
+      const x1 = subRect.left + subRect.width / 2;
+      const y1 = subRect.top + subRect.height / 2;
+      let isInsideTooltip = false;
+      let tooltipRect = null;
+      if (this.tooltipBox && this.tooltipBox.style.display !== "none") {
+        tooltipRect = this.tooltipBox.getBoundingClientRect();
+        if (x1 >= tooltipRect.left && x1 <= tooltipRect.right && y1 >= tooltipRect.top && y1 <= tooltipRect.bottom) {
+          isInsideTooltip = true;
+        }
+      }
+      if (!isInsideTooltip) {
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        svg.setAttribute("class", "hoversource-parent-svg");
+        svg.setAttribute("width", "100%");
+        svg.setAttribute("height", "100%");
+        this.container.appendChild(svg);
+        this.parentHighlightElements.push(svg);
+        let rx = rowRect.left;
+        if (tooltipRect && x1 > tooltipRect.left + tooltipRect.width / 2) {
+          rx = rowRect.right;
+        }
+        const ry = rowRect.top + rowRect.height / 2;
+        const dotCircle = document.createElementNS(svgNS, "circle");
+        dotCircle.setAttribute("cx", x1.toString());
+        dotCircle.setAttribute("cy", y1.toString());
+        dotCircle.setAttribute("r", "5");
+        dotCircle.setAttribute("class", "hoversource-leader-dot");
+        svg.appendChild(dotCircle);
+        const dotInner = document.createElementNS(svgNS, "circle");
+        dotInner.setAttribute("cx", x1.toString());
+        dotInner.setAttribute("cy", y1.toString());
+        dotInner.setAttribute("r", "1.5");
+        dotInner.setAttribute("fill", "#ffffff");
+        svg.appendChild(dotInner);
+        const dx = rx - x1;
+        const dir = dx > 0 ? 1 : -1;
+        let x_mid = x1 + dir * 30;
+        if (Math.abs(dx) <= 60) {
+          x_mid = x1 + dx * 0.5;
+        }
+        x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
+        const path = document.createElementNS(svgNS, "path");
+        path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
+        path.setAttribute("class", "hoversource-leader-line");
+        svg.appendChild(path);
+      }
+    }
     drawParentHighlight(fx, rowRect) {
-      if (!this.container || !fx || !fx.element || typeof fx.element !== "object" || fx.element.nodeType !== 1)
+      if (!this.container || fx?.element?.nodeType !== 1)
         return;
       const prop = fx.property;
       const isVisualEffect = prop === "mask-image" || prop === "clip-path" || prop.startsWith("overflow");
@@ -2811,53 +2909,7 @@ Suggested layout insertion (heuristic only):
       this.container.appendChild(frame);
       this.parentHighlightElements.push(frame);
       if (rowRect) {
-        const x1 = subRect.left + subRect.width / 2;
-        const y1 = subRect.top + subRect.height / 2;
-        let isInsideTooltip = false;
-        let tooltipRect = null;
-        if (this.tooltipBox && this.tooltipBox.style.display !== "none") {
-          tooltipRect = this.tooltipBox.getBoundingClientRect();
-          if (x1 >= tooltipRect.left && x1 <= tooltipRect.right && y1 >= tooltipRect.top && y1 <= tooltipRect.bottom) {
-            isInsideTooltip = true;
-          }
-        }
-        if (!isInsideTooltip) {
-          const svgNS = "http://www.w3.org/2000/svg";
-          const svg = document.createElementNS(svgNS, "svg");
-          svg.setAttribute("class", "hoversource-parent-svg");
-          svg.setAttribute("width", "100%");
-          svg.setAttribute("height", "100%");
-          this.container.appendChild(svg);
-          this.parentHighlightElements.push(svg);
-          let rx = rowRect.left;
-          if (tooltipRect && x1 > tooltipRect.left + tooltipRect.width / 2) {
-            rx = rowRect.right;
-          }
-          const ry = rowRect.top + rowRect.height / 2;
-          const dotCircle = document.createElementNS(svgNS, "circle");
-          dotCircle.setAttribute("cx", x1.toString());
-          dotCircle.setAttribute("cy", y1.toString());
-          dotCircle.setAttribute("r", "5");
-          dotCircle.setAttribute("class", "hoversource-leader-dot");
-          svg.appendChild(dotCircle);
-          const dotInner = document.createElementNS(svgNS, "circle");
-          dotInner.setAttribute("cx", x1.toString());
-          dotInner.setAttribute("cy", y1.toString());
-          dotInner.setAttribute("r", "1.5");
-          dotInner.setAttribute("fill", "#ffffff");
-          svg.appendChild(dotInner);
-          const dx = rx - x1;
-          const dir = dx > 0 ? 1 : -1;
-          let x_mid = x1 + dir * 30;
-          if (Math.abs(dx) <= 60) {
-            x_mid = x1 + dx * 0.5;
-          }
-          x_mid = Math.max(10, Math.min(x_mid, window.innerWidth - 10));
-          const path = document.createElementNS(svgNS, "path");
-          path.setAttribute("d", `M ${x1} ${y1} L ${x_mid} ${ry} L ${rx} ${ry}`);
-          path.setAttribute("class", "hoversource-leader-line");
-          svg.appendChild(path);
-        }
+        this.drawLeaderLine(subRect, rowRect);
       }
     }
     clearParentHighlights() {
@@ -2882,7 +2934,7 @@ Suggested layout insertion (heuristic only):
           const originalText = hint.innerHTML;
           hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
           setTimeout(() => {
-            hint.innerHTML = originalText || "";
+            hint.innerHTML = originalText;
           }, 1500);
         }
       }
@@ -2930,7 +2982,7 @@ Suggested layout insertion (heuristic only):
     }
   };
   globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
-    let url = `http://127.0.0.1:${getCompanionPort2()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
+    let url = `${getCompanionBaseUrl()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
       url += `&tagName=${encodeURIComponent(tagName)}`;
     if (classList)
@@ -2948,37 +3000,13 @@ Suggested layout insertion (heuristic only):
     OverlayEngine.launch();
     console.log("[HoverSource] Overlay injected.");
   }
-  function parseMaskGradient(value, rect) {
-    if (!value || !value.includes("linear-gradient"))
-      return null;
-    const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
-    if (matches.length === 0)
-      return null;
-    let stopValue = 0;
-    let stopUnit = "px";
-    for (const m of matches) {
-      const val = parseFloat(m[1]);
-      if (val > 0) {
-        stopValue = val;
-        stopUnit = m[2];
-        break;
-      }
-    }
-    if (stopValue === 0)
-      return null;
-    let direction = "to bottom";
-    if (value.includes("to top"))
-      direction = "to top";
-    else if (value.includes("to right"))
-      direction = "to right";
-    else if (value.includes("to left"))
-      direction = "to left";
+  function calculateMaskBounds(direction, stopValue, stopUnit, rect) {
     let subLeft = rect.left;
     let subTop = rect.top;
     let subWidth = rect.width;
     let subHeight = rect.height;
-    const rectBottom = rect.bottom !== void 0 ? rect.bottom : rect.top + rect.height;
-    const rectRight = rect.right !== void 0 ? rect.right : rect.left + rect.width;
+    const rectBottom = rect.bottom === void 0 ? rect.top + rect.height : rect.bottom;
+    const rectRight = rect.right === void 0 ? rect.left + rect.width : rect.right;
     if (direction === "to bottom") {
       const h = stopUnit === "px" ? stopValue : rect.height * (stopValue / 100);
       subHeight = Math.min(h, rect.height);
@@ -2996,10 +3024,37 @@ Suggested layout insertion (heuristic only):
     }
     return { left: subLeft, top: subTop, width: subWidth, height: subHeight };
   }
-  function parseClipPathInset(value, rect) {
-    if (!value || !value.includes("inset("))
+  function parseMaskGradient(value, rect) {
+    if (!value?.includes("linear-gradient"))
       return null;
-    const insetMatch = value.match(/inset\(([^)]+)\)/);
+    const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
+    if (matches.length === 0)
+      return null;
+    let stopValue = 0;
+    let stopUnit = "px";
+    for (const m of matches) {
+      const val = Number.parseFloat(m[1]);
+      if (val > 0) {
+        stopValue = val;
+        stopUnit = m[2];
+        break;
+      }
+    }
+    if (stopValue === 0)
+      return null;
+    let direction = "to bottom";
+    if (value.includes("to top"))
+      direction = "to top";
+    else if (value.includes("to right"))
+      direction = "to right";
+    else if (value.includes("to left"))
+      direction = "to left";
+    return calculateMaskBounds(direction, stopValue, stopUnit, rect);
+  }
+  function parseClipPathInset(value, rect) {
+    if (!value?.includes("inset("))
+      return null;
+    const insetMatch = /inset\(([^)]+)\)/.exec(value);
     if (!insetMatch)
       return null;
     let content = insetMatch[1].split("round")[0].trim();
@@ -3007,8 +3062,8 @@ Suggested layout insertion (heuristic only):
     if (tokens.length === 0)
       return null;
     const parseVal = (token, size) => {
-      const num = parseFloat(token);
-      if (isNaN(num))
+      const num = Number.parseFloat(token);
+      if (Number.isNaN(num))
         return 0;
       if (token.includes("%"))
         return size * (num / 100);

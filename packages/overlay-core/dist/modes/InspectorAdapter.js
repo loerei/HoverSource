@@ -1,7 +1,13 @@
 import { SourceResolver } from "@hoversource/source-resolver";
 import { inspectVisualContext } from "../inspector.js";
-function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
+
+function getCompanionBaseUrl() {
+    const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
+    if (isProxy) {
+        return "/hoversource";
+    }
+    const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
+    return `http://127.0.0.1:${port}`;
 }
 export class InspectorAdapter {
     id = "inspector";
@@ -212,7 +218,7 @@ export class InspectorAdapter {
         }
     }
     fetchBackgroundValidation(info, target, e) {
-        const validateUrl = `http://127.0.0.1:${getCompanionPort()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
+        const validateUrl = `${getCompanionBaseUrl()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
         fetch(validateUrl)
             .then(res => res.json())
             .then(data => {
@@ -235,7 +241,7 @@ export class InspectorAdapter {
                     info.classList.forEach((cls) => classesToResolve.add(cls));
                 }
                 const classListParam = Array.from(classesToResolve).join(",");
-                const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+                const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
                 fetch(staticContextUrl)
                     .then(res => res.json())
                     .then(staticData => {

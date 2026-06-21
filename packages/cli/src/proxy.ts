@@ -182,6 +182,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
     const credentials = getOrCreateLocalSslCert({
       keyPath: sslKeyPath,
       certPath: sslCertPath,
+      targetHost: target.hostname,
     });
     server = https.createServer(credentials, requestHandler);
   } else {

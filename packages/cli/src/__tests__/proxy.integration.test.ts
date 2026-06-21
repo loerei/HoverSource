@@ -221,7 +221,6 @@ describe("Proxy Server Integration", () => {
     expect(res.body).not.toContain("integrity=");
     expect(res.body).toContain(`<script src="${overlayScriptUrl}"></script>`);
   });
-
   it("should tunnel protocol upgrade connections (WS/WSS support)", async () => {
     const reqOptions = {
       hostname: "127.0.0.1",

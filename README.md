@@ -89,14 +89,15 @@ HoverSource supports resolving metadata for multiple frontend frameworks at diff
 
 | Metadata Field | React | Vue | Svelte | Angular | SolidJS | Preact | Astro | Vanilla / Fallback |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Integration Type** | Non-Invasive | Non-Invasive / Invasive | Non-Invasive | Non-Invasive | Non-Invasive | Non-Invasive | Non-Invasive | Non-Invasive |
 | **Framework Label** | `React` | `Vue` | `Svelte` | `Angular` | `SolidJS` | `Preact` | `Astro` | `Vanilla` or `Unknown` |
-| **Component Name** | Resolved (fiber/invasive) | Resolved (type name / `data-v-inspector`) | Resolved (filename inference) | Resolved (DOM debug elements) | Resolved (JSX component bounds) | Resolved (VNode walks) | Resolved (Astro metadata) | Fallback (DOM tag) |
-| **File Path** | Resolved (fiber / invasive) | Resolved (`__file` / `data-v-inspector`) | Resolved (`__svelte_meta.loc.file`) | Resolved (debug source location) | Resolved (JSX debug source) | Resolved (VNode debug info) | Resolved (Astro components) | None |
-| **Line Number** | Resolved (fiber / invasive) | None / **Resolved** (via `data-v-inspector`)* | Resolved (`__svelte_meta` loc) | Resolved (debug location) | Resolved (debug location) | Resolved (debug location) | Resolved (debug location) | None |
-| **Column Number** | Resolved (fiber / invasive) | None / **Resolved** (via `data-v-inspector`)* | Resolved (`__svelte_meta` loc) | Resolved (debug location) | Resolved (debug location) | Resolved (debug location) | Resolved (debug location) | None |
-| **Tag Name & Classes** | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) |
+| **Component Name** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Fallback (DOM tag) |
+| **File Path** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | None |
+| **Line Number** | Resolved | None (Non-Invasive) / Resolved (Invasive)* | Resolved | Resolved | Resolved | Resolved | Resolved | None |
+| **Column Number** | Resolved | None (Non-Invasive) / Resolved (Invasive)* | Resolved | Resolved | Resolved | Resolved | Resolved | None |
+| **Tag Name & Classes** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved |
 
-\* *Note: Certain frameworks like Vue do not expose template line and column locations directly on DOM nodes by default in development mode. You can run `hs install --<framework>` (e.g., `hs install --vue`, `hs install --react`, `hs install --angular`, `hs install --solid`) to enable compile-time template line/column tagging (Invasive mode). Otherwise, HoverSource defaults to Non-Invasive mode, which might hide line/column coordinates or open target files at line 1.*
+\* *Note: Vue requires compile-time template tagging (Invasive mode via `hs install --vue`) to expose line/column locations. Other frameworks resolve them out-of-the-box in development mode (Non-Invasive).*
 
 ---
 

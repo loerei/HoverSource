@@ -9,8 +9,8 @@
   "scripts": {
     "build": "tsc -b && npm run build --workspace=@hoversource/overlay-core",
     "clean": "tsc -b --clean",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage.enabled=true --coverage.reporter=lcov"
+    "test": "vitest run --exclude **/dist/**",
+    "test:coverage": "vitest run --coverage.enabled=true --coverage.reporter=lcov --exclude **/dist/**"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

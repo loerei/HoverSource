@@ -1,11 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+
+import { getOrCreateCaSignedCert, getOpensslCommand } from "./cert-ca.js";
 
 export interface SslCertConfig {
   keyPath?: string;
   certPath?: string;
+  targetHost?: string;
 }
 
 export interface SslCredentials {
@@ -34,6 +37,16 @@ export function getOrCreateLocalSslCert(config: SslCertConfig = {}): SslCredenti
     );
   }
 
+  if (config.targetHost) {
+    try {
+      return getOrCreateCaSignedCert(config.targetHost);
+    } catch (err: any) {
+      console.warn(
+        `[HoverSource SSL] Failed to generate CA-signed cert for ${config.targetHost}. Falling back to default self-signed cert. Error: ${err.message}`
+      );
+    }
+  }
+
   // Fallback: Generate self-signed certificate in the OS temp directory
   const tempDir = os.tmpdir();
   const keyPath = path.join(tempDir, "hoversource-selfsigned-localhost.key");
@@ -55,8 +68,27 @@ export function getOrCreateLocalSslCert(config: SslCertConfig = {}): SslCredenti
   try {
     console.log(`[HoverSource SSL] Generating self-signed SSL certificate for localhost...`);
     // Run openssl command cross-platform.
-    const command = `openssl req -x509 -newkey rsa:2048 -nodes -sha256 -subj "/CN=localhost" -keyout "${keyPath}" -out "${certPath}" -days 365`;
-    execSync(command, { stdio: "ignore" });
+    const openssl = getOpensslCommand();
+    execFileSync(
+      openssl,
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-sha256",
+        "-subj",
+        "/CN=localhost",
+        "-keyout",
+        keyPath,
+        "-out",
+        certPath,
+        "-days",
+        "365",
+      ],
+      { stdio: "ignore" }
+    );
 
     return {
       key: fs.readFileSync(keyPath, "utf-8"),

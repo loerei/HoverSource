@@ -128,8 +128,8 @@
       if (file) {
         const lineStr = dataset.vInspectorLine;
         const columnStr = dataset.vInspectorColumn;
-        const line = lineStr ? Number.parseInt(lineStr, 10) : NaN;
-        const column = columnStr ? Number.parseInt(columnStr, 10) : NaN;
+        const line = lineStr ? Number.parseInt(lineStr, 10) : Number.NaN;
+        const column = columnStr ? Number.parseInt(columnStr, 10) : Number.NaN;
         return {
           fileName: file,
           lineNumber: Number.isNaN(line) ? void 0 : line,

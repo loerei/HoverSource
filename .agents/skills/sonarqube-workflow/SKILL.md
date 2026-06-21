@@ -1,41 +1,39 @@
 ---
 name: sonarqube-workflow
-description: SonarQube and SonarCloud unified workflow. Analyze, refactor, and verify code quality. Use when checking SonarQube/SonarCloud issues, running code quality scans, or fixing complexity/security issues.
+description: SonarQube and SonarCloud unified workflow. Fetch and resolve code quality issues using MCP tools. Use when checking SonarCloud/SonarQube issues or fixing quality gate violations.
 ---
 
 # SonarQube & SonarCloud Unified Workflow
 
-Use this skill to optimize analyzing, batch-fixing, and verifying SonarQube/SonarCloud code quality issues with minimal token overhead and waiting cycles.
+Fetch and resolve SonarCloud/SonarQube issues using MCP tools directly.
 
 ## Quick start
 
-Execute the PowerShell helper scripts bundled with this skill to start containers and run scans:
-
-```powershell
-# 1. Start Postgres and SonarQube containers
-.agents/skills/sonarqube-workflow/scripts/start-sonar.ps1
-
-# 2. Run scanner (auto-detects project key, prompts/reads token)
-.agents/skills/sonarqube-workflow/scripts/run-scanner.ps1 -Token "YOUR_TOKEN"
-```
+Fetch open issues for a project (e.g. `loerei_HoverSource`):
+1. Call `sonarcloud:search_sonar_issues_in_projects` with `projects=["loerei_HoverSource"]` and `issueStatuses=["OPEN"]`.
+2. For active PRs, also include the `pullRequestId`.
 
 ## Workflows
 
+### Setup & CI Detection
+
+* [ ] **Detect SonarQube Cloud CI Setup**:
+  - If the project does not yet have SonarQube Cloud's CI-based analysis configured, suggest running `/sonarcloud-ci-setup` to configure the GitHub Actions workflow pipeline.
+  - Suggest and guide the user to disable **Automatic Analysis** in the SonarCloud console (under **Administration** -> **Analysis Method**, toggle off **Automatic Analysis**) to avoid conflicting analyses.
+
 ### Clean-Code Action Checklist
 
-* [ ] **Refresh Search Index First**: If files were recently changed locally or in git, update the jCodeMunch index *before* performing any searches:
-  - Call `jcodemunch:index_folder` with `path` and `use_ai_summaries=false` (incremental update).
-* [ ] **Batch-Retrieve Open Issues**: Query all open issues for the target component/file in one step using `sonarqube:search_sonar_issues_in_projects` with `issueStatuses=["OPEN"]`. Do NOT query them one-by-one.
+* [ ] **Refresh Search Index**: Update the jCodeMunch index before searching files:
+  - Call `jcodemunch:index_folder` with `path` and `use_ai_summaries=false`.
+* [ ] **Batch-Retrieve Issues**: Query all open issues for the target file in one call using `sonarcloud:search_sonar_issues_in_projects` with `issueStatuses=["OPEN"]`.
 * [ ] **Batch-Refactor Violations**:
-  - Solve multiple related smells (negated conditions, optional chaining, redundant types) in the target file at once.
-  - For surgical search-and-replace, always use `patchitright:patch_file`.
-* [ ] **Verify Locally First**: Run all local unit tests (e.g. `npx vitest run` or `npm test`) *before* executing the Sonar scanner. Fix any logic errors immediately.
-* [ ] **Run local scan**: Execute the local scan command using the PowerShell helper to update the SonarQube database.
-* [ ] **Safe PR Flow**: Before creating or merging pull requests, clear env variables: `$env:GITHUB_TOKEN=$null` to avoid GitHub CLI conflicts.
+  - Solve multiple related smells in the target file at once.
+  - For surgical search-and-replace, always use `patchitright:patch_file` (strict snake_case parameters).
+* [ ] **Verify Locally**: Run unit tests (e.g. `npx vitest run`) to ensure logic is correct.
+* [ ] **Trigger Cloud Analysis**: Commit and push changes to trigger the cloud analysis pipeline.
+* [ ] **Wait and Verify Quality Gate**: Wait for the remote analysis pipeline to complete, then query `sonarcloud:get_project_quality_gate_status` or `search_sonar_issues_in_projects`. Do NOT mark the task as complete until the Quality Gate returns Green and no open issues remain.
+* [ ] **API/Authentication Failure stopping rule**: If an MCP tool returns an authentication, permission, or connection error, STOP immediately and ask the user for credentials.
 
 ## Advanced features
 
-For detailed properties, configurations, common Sonar violations, and MCP tool quick-reference tables (so you do not have to read JSON schemas), see:
-* [REFERENCE.md](REFERENCE.md)
-* Script: [start-sonar.ps1](scripts/start-sonar.ps1)
-* Script: [run-scanner.ps1](scripts/run-scanner.ps1)
+See [REFERENCE.md](REFERENCE.md) for common Sonar violations list, CPD duplication fixes, and MCP API quick-reference tables.

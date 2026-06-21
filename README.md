@@ -112,11 +112,11 @@ When utilizing HoverSource in Web Application Proxy Mode (`hs --target=<url>`), 
 | **Dev Server Health Polling** | **Yes** | Actively polls target upstream servers before binding the proxy port, with graceful retry logic and CLI warning indicators. |
 | **Port Conflict Resolution** | **Yes** | Detects occupied debugging ports (`9222`) or companion ports (`7300`), prompts the user, or terminates conflicting processes automatically. |
 | **HTTP/2 or HTTP/3 Upgrading** | **No** | The reverse proxy runs on Node's standard HTTP/HTTPS (`HTTP/1.1`) stack. It automatically downgrades upstream connection protocols to `HTTP/1.1` and does not support multiplexing. |
-| **Subresource Integrity (SRI) Rewriting** | **No** | If the target HTML enforces strict `integrity` hashes on script/style tags, HoverSource does not recalculate or strip these attributes. Browser security blocks might trigger if those resources are modified. |
+| **Subresource Integrity (SRI) Rewriting** | **Yes** | Strips `integrity` attributes from script and link tags in HTML responses to prevent browsers from blocking modified resources. |
 | **Preloaded HSTS Domains** | **No** | For target domains that have HSTS preloaded in the browser, the self-signed SSL certificates generated locally will be blocked without the option to add a certificate exception. |
 | **WebSocket Secure (WSS) Tunneling** | **No** | Does not tunnel secure WebSocket upgrade events over HTTPS proxying, which can break dynamic Hot Module Replacement (HMR) connections. |
-| **Cookie Domain & Secure Rewriting** | **No** | Does not automatically rewrite `Domain` and `Secure` attributes in `Set-Cookie` response headers, which can break session cookies scoped to specific domains on `localhost`. |
-| **On-the-fly Decompression** | **No** | Deletes `Accept-Encoding` to force uncompressed responses instead of decompressing chunked Brotli/Gzip streams, causing minor performance overhead on large HTML loads. |
+| **Cookie Domain & Secure Rewriting** | **Yes** | Strips the `Domain` attribute in `Set-Cookie` response headers to scope cookies to `localhost`, and strips the `Secure` flag if the proxy is running over HTTP. |
+| **On-the-fly Decompression** | **Yes** | Decodes `gzip`, `deflate`, and `br` compressed HTML responses from upstream on-the-fly to allow script injection before returning the uncompressed response to the browser. |
 
 ---
 

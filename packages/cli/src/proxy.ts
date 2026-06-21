@@ -4,6 +4,19 @@ import { URL } from "node:url";
 import { ProxyResponsePipeline } from "./pipeline.js";
 import { getOrCreateLocalSslCert } from "./cert.js";
 
+export function rewriteCookieHeaders(headers: http.IncomingHttpHeaders, useHttps: boolean): void {
+  const setCookie = headers["set-cookie"];
+  if (setCookie) {
+    headers["set-cookie"] = setCookie.map((cookie) => {
+      let rewritten = cookie.replace(/;\s*domain\s*=\s*[^;]+/gi, "");
+      if (!useHttps) {
+        rewritten = rewritten.replace(/;\s*secure\b/gi, "");
+      }
+      return rewritten;
+    });
+  }
+}
+
 export interface ProxyOptions {
   targetUrl: string;
   proxyPort: number;
@@ -78,8 +91,20 @@ export function startProxy(options: ProxyOptions): Promise<void> {
 
     // ─── PART B: Proxy target application requests ─────────────────────────
     const headers = { ...req.headers };
-    // Strip accept-encoding to handle decompressed buffers directly or let pipeline decompress it
-    delete headers["accept-encoding"];
+    // Filter accept-encoding to only allow compression formats that our pipeline/zlib can handle
+    if (headers["accept-encoding"]) {
+      const accepted = String(headers["accept-encoding"]).toLowerCase();
+      const supported: string[] = [];
+      if (accepted.includes("gzip")) supported.push("gzip");
+      if (accepted.includes("deflate")) supported.push("deflate");
+      if (accepted.includes("br")) supported.push("br");
+
+      if (supported.length > 0) {
+        headers["accept-encoding"] = supported.join(", ");
+      } else {
+        delete headers["accept-encoding"];
+      }
+    }
 
     // Map upstream agent request based on target protocol
     const isTargetHttps = target.protocol === "https:";
@@ -105,6 +130,8 @@ export function startProxy(options: ProxyOptions): Promise<void> {
         // Strip CSP headers to avoid iframe and asset restrictions
         delete responseHeaders["content-security-policy"];
         delete responseHeaders["content-security-policy-report-only"];
+        // Rewrite cookie domains and secure flag
+        rewriteCookieHeaders(responseHeaders, !!useHttps);
 
         res.writeHead(proxyRes.statusCode || 200, responseHeaders);
         proxyRes.pipe(res, { end: true });
@@ -130,6 +157,8 @@ export function startProxy(options: ProxyOptions): Promise<void> {
         delete responseHeaders["content-security-policy"];
         delete responseHeaders["content-security-policy-report-only"];
         responseHeaders["content-type"] = "text/html; charset=utf-8";
+        // Rewrite cookie domains and secure flag
+        rewriteCookieHeaders(responseHeaders, !!useHttps);
 
         res.writeHead(proxyRes.statusCode || 200, responseHeaders);
         res.end(transformedBody);

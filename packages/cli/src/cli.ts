@@ -674,7 +674,11 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
 
   console.log(`[HoverSource] Proxy mode: ${targetUrl} → http://localhost:${proxyPort}`);
   try {
-    await startProxy(targetUrl, proxyPort, overlayScriptUrl);
+    await startProxy({
+      targetUrl,
+      proxyPort,
+      overlayScriptUrl,
+    });
     console.log(`[HoverSource] Proxy ready. Opening http://localhost:${proxyPort} in your browser...`);
     openBrowser(`http://localhost:${proxyPort}`);
   } catch (err: any) {

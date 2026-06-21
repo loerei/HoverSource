@@ -96,15 +96,17 @@ function getCandidateClassNames(className: string): string[] {
       if (part) candidates.add(part);
     }
     if (subParts.length > 1) {
-      candidates.add(subParts.at(-1));
+      const lastPart = subParts.at(-1);
+      if (lastPart) candidates.add(lastPart);
     }
   } else if (className.startsWith("_")) {
     const parts = className.split("_").filter(Boolean);
     for (const part of parts) {
-      candidates.add(part);
+      if (part) candidates.add(part);
     }
     if (parts.length > 1) {
-      candidates.add(parts.at(-2));
+      const secondLastPart = parts.at(-2);
+      if (secondLastPart) candidates.add(secondLastPart);
     }
   }
   

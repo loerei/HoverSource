@@ -25,7 +25,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
 
   const requestHandler = (req: http.IncomingMessage, res: http.ServerResponse) => {
     // ─── PART A: Proxy requests under /hoversource/ to Companion Server ──────
-    if (req.url && req.url.startsWith("/hoversource/")) {
+    if (req.url?.startsWith("/hoversource/")) {
       const rewrittenPath = req.url.replace(/^\/hoversource/, "") || "/";
       const isOverlayScript = rewrittenPath === "/hoversource-overlay.js";
 

@@ -8,6 +8,7 @@ import path from "node:path";
 import fs from "node:fs";
 import net from "node:net";
 import http from "node:http";
+import https from "node:https";
 import readline from "node:readline";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
@@ -30,6 +31,22 @@ export function validateSafeCommand(cmd: string): string {
     throw new Error(`[HoverSource] Security Error: Command contains invalid characters: ${cmd}`);
   }
   return cmd;
+}
+
+export function validateSafeUrl(urlStr: string): string {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(`[HoverSource] Security Error: Target URL protocol must be http or https`);
+    }
+    const hostRegex = /^[a-zA-Z0-9_\-\.]+$/;
+    if (!hostRegex.test(parsed.hostname)) {
+      throw new Error(`[HoverSource] Security Error: Target URL contains invalid hostname`);
+    }
+    return urlStr;
+  } catch (e: any) {
+    throw new Error(`[HoverSource] Security Error: Invalid Target URL: ${e.message}`);
+  }
 }
 
 function parseLongOption(arg: string, args: Record<string, string | boolean>): void {
@@ -795,7 +812,7 @@ function resolveWindowsCommand(command: string): string {
   return command;
 }
 
-function runExecMode(execCommand: string, projectRoot: string, debugPort: number): void {
+function runExecMode(execCommand: string, projectRoot: string, debugPort: number, args: any): void {
   const { command, args: cmdArgs } = parseCommand(execCommand);
   const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
 
@@ -840,12 +857,13 @@ function runExecMode(execCommand: string, projectRoot: string, debugPort: number
 }
 
 async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
+  const safeTarget = validateSafeUrl(targetUrl);
   return new Promise((resolve) => {
     try {
-      const url = new URL(targetUrl);
+      const url = new URL(safeTarget);
       const isHttps = url.protocol === "https:";
       const agent = isHttps ? https : http;
-      const req = agent.get(targetUrl, (res) => {
+      const req = agent.get(safeTarget, (res) => {
         res.resume();
         resolve(true);
       });
@@ -858,6 +876,49 @@ async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
       resolve(false);
     }
   });
+}
+
+async function handleExecMode(
+  execArg: string,
+  subcommand: string | undefined,
+  projectRoot: string,
+  debugPort: number,
+  serverPort: number,
+  args: Record<string, string | boolean>
+) {
+  let resolved = { execCommand: execArg, isElectron: false };
+  if (subcommand) {
+    const resolvedSub = resolveSubcommand(subcommand, projectRoot);
+    if (!resolvedSub) {
+      process.exit(1);
+    }
+    resolved = resolvedSub;
+  } else {
+    const pkgPath = path.join(projectRoot, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+        const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+        resolved.isElectron = "electron" in allDeps;
+      } catch {}
+    }
+  }
+
+  if (resolved.isElectron) {
+    console.log(`[HoverSource] Electron app detected. Running in exec mode.`);
+    runExecMode(resolved.execCommand, projectRoot, debugPort, args);
+  } else {
+    console.log(`[HoverSource] Web application detected. Running in web-app mode.`);
+    const { child } = await runWebAppMode(resolved.execCommand, projectRoot, serverPort, args);
+    
+    const cleanup = () => {
+      child.kill();
+      process.exit();
+    };
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
+    child.on("exit", cleanup);
+  }
 }
 
 async function main() {
@@ -878,7 +939,7 @@ async function main() {
   if (subcommand === "start") {
     console.log(`[HoverSource] Starting companion server...`);
     const serverPort = await resolveCompanionPort(requestedPort);
-    await startCompanionServer({ port: serverPort, rootDir: projectRoot });
+    await startCompanionServer({ port: serverPort, projectRoot, debugPort });
     console.log(`[HoverSource] Companion server running on port ${serverPort}.`);
     
     if (args.dashboard || args.d) {
@@ -897,50 +958,19 @@ async function main() {
 
   console.log(`[HoverSource] Starting...`);
   const serverPort = await resolveCompanionPort(requestedPort);
-  await startCompanionServer({ port: serverPort, rootDir: projectRoot });
+  await startCompanionServer({ port: serverPort, projectRoot, debugPort });
   console.log(`[HoverSource] Companion server running on port ${serverPort}.`);
 
   if (targetArg) {
-    const isTargetUp = await checkTargetUrlUp(targetArg);
+    const safeTarget = validateSafeUrl(targetArg);
+    const isTargetUp = await checkTargetUrlUp(safeTarget);
     if (!isTargetUp) {
-      console.warn(`\x1b[33m[HoverSource] ⚠️  WARNING: Target server at ${targetArg} is not responding.\x1b[0m`);
+      console.warn(`\x1b[33m[HoverSource] ⚠️  WARNING: Target server at ${safeTarget} is not responding.\x1b[0m`);
       console.warn(`[HoverSource] If your dev server starts slowly, HoverSource will automatically retry requests.`);
     }
-    await runProxyMode(targetArg, serverPort, args);
+    await runProxyMode(safeTarget, serverPort, args);
   } else if (execArg) {
-    let resolved = { execCommand: execArg, isElectron: false };
-    if (subcommand) {
-      const resolvedSub = resolveSubcommand(subcommand, projectRoot);
-      if (!resolvedSub) {
-        process.exit(1);
-      }
-      resolved = resolvedSub;
-    } else {
-      const pkgPath = path.join(projectRoot, "package.json");
-      if (fs.existsSync(pkgPath)) {
-        try {
-          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-          const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-          resolved.isElectron = "electron" in allDeps;
-        } catch {}
-      }
-    }
-
-    if (resolved.isElectron) {
-      console.log(`[HoverSource] Electron app detected. Running in exec mode.`);
-      runExecMode(resolved.execCommand, projectRoot, debugPort);
-    } else {
-      console.log(`[HoverSource] Web application detected. Running in web-app mode.`);
-      const { child } = await runWebAppMode(resolved.execCommand, projectRoot, serverPort, args);
-      
-      const cleanup = () => {
-        child.kill();
-        process.exit();
-      };
-      process.on("SIGINT", cleanup);
-      process.on("SIGTERM", cleanup);
-      child.on("exit", cleanup);
-    }
+    await handleExecMode(execArg, subcommand, projectRoot, debugPort, serverPort, args);
   }
 }
 
@@ -965,7 +995,9 @@ Options:
 `);
 }
 
-main().catch((err) => {
+try {
+  await main();
+} catch (err) {
   console.error(`[HoverSource] CLI Fatal Error:`, err);
   process.exit(1);
-});
+}

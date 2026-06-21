@@ -1,13 +1,7 @@
 import { SourceResolver } from "@hoversource/source-resolver";
 import { inspectVisualContext } from "../inspector.js";
-
-function getCompanionBaseUrl() {
-    const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
-    if (isProxy) {
-        return "/hoversource";
-    }
-    const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
-    return `http://127.0.0.1:${port}`;
+function getCompanionPort() {
+    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
 }
 export class InspectorAdapter {
     id = "inspector";
@@ -89,11 +83,11 @@ export class InspectorAdapter {
                 const activeItems = [];
                 parentItems.forEach((item) => {
                     if (item.classList.contains("hs-parent-active")) {
-                        const indexAttr = item.getAttribute("data-index");
-                        if (indexAttr !== null) {
-                            const idx = parseInt(indexAttr, 10);
+                        const idxStr = item.dataset.index;
+                        if (idxStr !== undefined) {
+                            const idx = Number.parseInt(idxStr, 10);
                             const fx = this.currentSourceInfo.visualContext.parentEffects[idx];
-                            if (fx && fx.element) {
+                            if (fx?.element) {
                                 activeItems.push({ item: item, fx });
                             }
                         }
@@ -218,7 +212,7 @@ export class InspectorAdapter {
         }
     }
     fetchBackgroundValidation(info, target, e) {
-        const validateUrl = `${getCompanionBaseUrl()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
+        const validateUrl = `http://127.0.0.1:${getCompanionPort()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
         fetch(validateUrl)
             .then(res => res.json())
             .then(data => {
@@ -241,7 +235,7 @@ export class InspectorAdapter {
                     info.classList.forEach((cls) => classesToResolve.add(cls));
                 }
                 const classListParam = Array.from(classesToResolve).join(",");
-                const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+                const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
                 fetch(staticContextUrl)
                     .then(res => res.json())
                     .then(staticData => {
@@ -271,7 +265,8 @@ export class InspectorAdapter {
         parts.push(shortcut.key.toUpperCase());
         return parts.join("+");
     }
-    renderMinimalTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
+    renderMinimalTooltip(element, info, labels) {
+        const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
         const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
         const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
         let vueHint = "";
@@ -449,7 +444,8 @@ export class InspectorAdapter {
         }
         return html;
     }
-    renderDetailedTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel) {
+    renderDetailedTooltip(element, info, labels) {
+        const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
         const computed = globalThis.getComputedStyle(element);
         const shadow = computed.boxShadow;
         const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
@@ -535,9 +531,10 @@ export class InspectorAdapter {
         })();
         const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
         const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
+        const labels = { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel };
         const innerHtml = this.minimalMode
-            ? this.renderMinimalTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel)
-            : this.renderDetailedTooltip(element, info, copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel);
+            ? this.renderMinimalTooltip(element, info, labels)
+            : this.renderDetailedTooltip(element, info, labels);
         const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
         this.controller.drawTooltip(html, e);
         const tooltipBox = this.controller.tooltipBox;
@@ -546,11 +543,11 @@ export class InspectorAdapter {
             const drawDefaultHighlights = () => {
                 this.controller.clearParentHighlights();
                 parentItems.forEach((item) => {
-                    const indexAttr = item.getAttribute("data-index");
-                    if (indexAttr !== null) {
-                        const idx = parseInt(indexAttr, 10);
+                    const idxStr = item.dataset.index;
+                    if (idxStr !== undefined) {
+                        const idx = Number.parseInt(idxStr, 10);
                         const fx = info.visualContext?.parentEffects[idx];
-                        const shouldHighlight = fx && fx.element && (fx.property === "mask-image" || fx.property === "clip-path");
+                        const shouldHighlight = fx?.element && (fx.property === "mask-image" || fx.property === "clip-path");
                         if (shouldHighlight) {
                             const rowRect = item.getBoundingClientRect();
                             this.controller.drawParentHighlight(fx, rowRect);
@@ -566,11 +563,11 @@ export class InspectorAdapter {
             drawDefaultHighlights();
             parentItems.forEach((item) => {
                 item.addEventListener("mouseenter", () => {
-                    const indexAttr = item.getAttribute("data-index");
-                    if (indexAttr !== null) {
-                        const idx = parseInt(indexAttr, 10);
+                    const idxStr = item.dataset.index;
+                    if (idxStr !== undefined) {
+                        const idx = Number.parseInt(idxStr, 10);
                         const fx = info.visualContext?.parentEffects[idx];
-                        if (fx && fx.element) {
+                        if (fx?.element) {
                             const rowRect = item.getBoundingClientRect();
                             // Clear active class from all rows
                             parentItems.forEach(el => el.classList.remove("hs-parent-active"));
@@ -660,6 +657,7 @@ export class InspectorAdapter {
         const tagName = element.tagName.toLowerCase();
         const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
         const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
+        const directionStr = data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : "";
         let text = `* **Component**: \`${data.component}\`
 * **Element**: ${selectorLabel}
 * **File Path**: \`${data.file || "Unknown"}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
@@ -670,7 +668,7 @@ export class InspectorAdapter {
   - Background: \`${data.styles.backgroundColor}\`
   - Box Shadow: \`${data.styles.boxShadow}\`
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
-  - Display: \`${data.styles.display}\` ${data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : ""}`;
+  - Display: \`${data.styles.display}\` ${directionStr}`;
         if (info.visualContext && info.visualContext.parentEffects.length > 0) {
             const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
             text += `\n* **Parent Styles**:\n${parentList}`;
@@ -697,49 +695,53 @@ export class InspectorAdapter {
         const text = `### HoverSource Component Metadata\n` + this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
         this.controller.copyToClipboard(text);
     }
+    getElementAttributes(elNode) {
+        const attrs = [];
+        if (elNode.id) {
+            attrs.push(`id="${elNode.id}"`);
+        }
+        if (elNode.className && typeof elNode.className === "string") {
+            const classes = Array.from(elNode.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
+            if (classes.length > 0) {
+                attrs.push(`class="${classes.join(" ")}"`);
+            }
+        }
+        const href = elNode.getAttribute("href");
+        if (href) {
+            attrs.push(`href="${href}"`);
+        }
+        return attrs;
+    }
+    formatMinifiedHtmlNode(node, indent) {
+        if (node.nodeType === 3) { // Text node
+            const text = node.nodeValue?.trim();
+            return text ? `${indent}...` : "";
+        }
+        if (node.nodeType === 1) { // Element node
+            const elNode = node;
+            const tagName = elNode.tagName.toLowerCase();
+            const attrs = this.getElementAttributes(elNode);
+            const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
+            const children = Array.from(elNode.childNodes);
+            if (children.length === 0) {
+                return `${indent}<${tagName}${attrStr}></${tagName}>`;
+            }
+            const childStrings = children
+                .map(c => this.formatMinifiedHtmlNode(c, indent + "  "))
+                .filter(s => s !== "");
+            if (childStrings.length === 0) {
+                return `${indent}<${tagName}${attrStr}></${tagName}>`;
+            }
+            return `${indent}<${tagName}${attrStr}>\n${childStrings.join("\n")}\n${indent}</${tagName}>`;
+        }
+        return "";
+    }
     getMinifiedHTML(el) {
         const clone = el.cloneNode(true);
         // Remove HoverSource containers or elements if any inside the clone
         const hsEls = clone.querySelectorAll('.hoversource-container, [class^="hs-"]');
         hsEls.forEach(e => e.remove());
-        const formatNode = (node, indent) => {
-            if (node.nodeType === 3) { // Text node
-                const text = node.nodeValue?.trim();
-                return text ? `${indent}...` : "";
-            }
-            if (node.nodeType === 1) { // Element node
-                const elNode = node;
-                const tagName = elNode.tagName.toLowerCase();
-                // Gather attributes
-                const attrs = [];
-                if (elNode.id) {
-                    attrs.push(`id="${elNode.id}"`);
-                }
-                if (elNode.className && typeof elNode.className === 'string') {
-                    const classes = Array.from(elNode.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-                    if (classes.length > 0) {
-                        attrs.push(`class="${classes.join(' ')}"`);
-                    }
-                }
-                if (elNode.getAttribute("href")) {
-                    attrs.push(`href="${elNode.getAttribute("href")}"`);
-                }
-                const attrStr = attrs.length > 0 ? " " + attrs.join(" ") : "";
-                const children = Array.from(elNode.childNodes);
-                if (children.length === 0) {
-                    return `${indent}<${tagName}${attrStr}></${tagName}>`;
-                }
-                const childStrings = children
-                    .map(c => formatNode(c, indent + "  "))
-                    .filter(s => s !== "");
-                if (childStrings.length === 0) {
-                    return `${indent}<${tagName}${attrStr}></${tagName}>`;
-                }
-                return `${indent}<${tagName}${attrStr}>\n${childStrings.join("\n")}\n${indent}</${tagName}>`;
-            }
-            return "";
-        };
-        return formatNode(clone, "");
+        return this.formatMinifiedHtmlNode(clone, "");
     }
     getTargetHTMLToCopy(el) {
         const parent = el.parentElement;

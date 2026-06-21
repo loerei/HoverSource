@@ -20,7 +20,7 @@ describe("InspectorAdapter - Two-Phase Debounced Hover", () => {
     it("should draw highlight immediately but debounce visual context and tooltip rendering", () => {
         vi.useFakeTimers();
         const mockParentItem = {
-            getAttribute: () => "0",
+            dataset: { index: "0" },
             addEventListener: vi.fn(),
             classList: {
                 add: vi.fn(),

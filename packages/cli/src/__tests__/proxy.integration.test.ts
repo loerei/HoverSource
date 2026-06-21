@@ -69,6 +69,17 @@ describe("Proxy Server Integration", () => {
     });
     targetPort = (targetServer.address() as any).port;
 
+    targetServer.on("upgrade", (req, socket, head) => {
+      socket.write("HTTP/1.1 101 Switching Protocols\r\nUpgrade: my-custom-upgrade\r\nConnection: Upgrade\r\n\r\n");
+      socket.write("upstream-hello");
+      socket.on("data", (chunk) => {
+        socket.write("echo:" + chunk.toString());
+        if (chunk.toString().includes("ping")) {
+          socket.end();
+        }
+      });
+    });
+
     // 2. Start a mock companion server
     companionServer = http.createServer((req, res) => {
       if (req.url === "/hoversource-overlay.js") {
@@ -209,5 +220,40 @@ describe("Proxy Server Integration", () => {
     expect(res.headers["x-received-accept-encoding"]).toBe("gzip, deflate, br");
     expect(res.body).not.toContain("integrity=");
     expect(res.body).toContain(`<script src="${overlayScriptUrl}"></script>`);
+  });
+
+  it("should tunnel protocol upgrade connections (WS/WSS support)", async () => {
+    const reqOptions = {
+      hostname: "127.0.0.1",
+      port: proxyPort,
+      path: "/ws",
+      headers: {
+        "Connection": "Upgrade",
+        "Upgrade": "my-custom-upgrade",
+      },
+    };
+
+    const req = http.request(reqOptions);
+
+    const resPromise = new Promise<string>((resolve, reject) => {
+      req.on("upgrade", (res, socket, head) => {
+        let received = head.toString();
+        socket.on("data", (chunk) => {
+          received += chunk.toString();
+          if (received.includes("echo:ping")) {
+            socket.end();
+            resolve(received);
+          }
+        });
+        socket.write("ping");
+      });
+      req.on("error", reject);
+    });
+
+    req.end();
+
+    const data = await resPromise;
+    expect(data).toContain("upstream-hello");
+    expect(data).toContain("echo:ping");
   });
 });

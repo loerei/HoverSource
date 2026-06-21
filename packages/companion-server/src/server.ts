@@ -74,7 +74,10 @@ function getLocalConfigPath(projectRoot: string): string {
 
 // Helper to normalize project path casing (Windows drive letters) and separators
 export function normalizeProjectPath(projectPath: string): string {
-  let resolved = path.resolve(projectPath).replaceAll("\\", "/");
+  let resolved = projectPath.replaceAll("\\", "/");
+  if (!resolved.startsWith("/") && !/^[a-zA-Z]:/.test(resolved)) {
+    resolved = path.resolve(projectPath).replaceAll("\\", "/");
+  }
   if (/^[a-zA-Z]:/.test(resolved)) {
     resolved = resolved[0].toUpperCase() + resolved.slice(1);
   }

@@ -135,7 +135,7 @@ subjectAltName = @alt_names
 ${altNames}
 `;
 
-    fs.writeFileSync(extConfigPath, extConfig, "utf-8");
+    fs.writeFileSync(extConfigPath, extConfig.replaceAll("\r\n", "\n"), "utf-8");
 
     // Generate Private Key and CSR for Domain
     execFileSync(
@@ -153,7 +153,7 @@ ${altNames}
         "-subj",
         `/CN=${targetHost}`,
       ],
-      { stdio: "ignore" }
+      { stdio: "pipe" }
     );
 
     // Sign CSR with Root CA using Extension config
@@ -177,7 +177,7 @@ ${altNames}
         "-extfile",
         extConfigPath,
       ],
-      { stdio: "ignore" }
+      { stdio: "pipe" }
     );
 
     // Clean up temporary config and CSR
@@ -195,7 +195,8 @@ ${altNames}
       cert: fs.readFileSync(domainCertPath, "utf-8"),
     };
   } catch (err: any) {
-    console.error(`[HoverSource SSL CA] Failed to generate signed certificate for ${targetHost}:`, err.message);
-    throw new Error(`OpenSSL signed cert generation failed: ${err.message}`);
+    const stderrStr = err.stderr ? ` Stderr: ${err.stderr.toString()}` : "";
+    console.error(`[HoverSource SSL CA] Failed to generate signed certificate for ${targetHost}:`, err.message + stderrStr);
+    throw new Error(`OpenSSL signed cert generation failed: ${err.message}${stderrStr}`);
   }
 }

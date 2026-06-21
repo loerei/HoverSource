@@ -87,16 +87,49 @@ Ideal for positioning new UI elements (cards, badges, modals, tooltips) relative
 
 HoverSource supports resolving metadata for multiple frontend frameworks at different levels of depth depending on what information is exposed by the framework's development mode:
 
-| Metadata Field | React | Vue (Non-Invasive / Invasive) | Svelte | Vanilla / Fallback |
-| :--- | :--- | :--- | :--- | :--- |
-| **Framework Label** | `React` | `Vue` | `Svelte` | `Vanilla` or `Unknown` |
-| **Component Name** | Resolved (walks fiber owners) | Resolved (from component type `name` or `__name` / `data-v-inspector`) | Resolved (inferred from Svelte filename) | Fallback (defaults to HTML tag) |
-| **File Path** | Resolved (from fiber `_debugSource.fileName`) | Resolved (from component `__file` attribute / `data-v-inspector`) | Resolved (from `__svelte_meta.loc.file`) | None |
-| **Line Number** | Resolved (from fiber `_debugSource.lineNumber`) | None (Unresolved) / **Resolved** (from `data-v-inspector`)* | Resolved (from `__svelte_meta.loc.line` + 1) | None |
-| **Column Number** | Resolved (from fiber `_debugSource.columnNumber`) | None (Unresolved) / **Resolved** (from `data-v-inspector`)* | Resolved (from `__svelte_meta.loc.column` + 1) | None |
-| **Tag Name & Classes** | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) |
+| Metadata Field | React | Vue | Svelte | Angular | SolidJS | Preact | Astro | Vanilla / Fallback |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Framework Label** | `React` | `Vue` | `Svelte` | `Angular` | `SolidJS` | `Preact` | `Astro` | `Vanilla` or `Unknown` |
+| **Component Name** | Resolved (fiber/invasive) | Resolved (type name / `data-v-inspector`) | Resolved (filename inference) | Resolved (DOM debug elements) | Resolved (JSX component bounds) | Resolved (VNode walks) | Resolved (Astro metadata) | Fallback (DOM tag) |
+| **File Path** | Resolved (fiber / invasive) | Resolved (`__file` / `data-v-inspector`) | Resolved (`__svelte_meta.loc.file`) | Resolved (debug source location) | Resolved (JSX debug source) | Resolved (VNode debug info) | Resolved (Astro components) | None |
+| **Line Number** | Resolved (fiber / invasive) | None / **Resolved** (via `data-v-inspector`)* | Resolved (`__svelte_meta` loc) | Resolved (debug location) | Resolved (debug location) | Resolved (debug location) | Resolved (debug location) | None |
+| **Column Number** | Resolved (fiber / invasive) | None / **Resolved** (via `data-v-inspector`)* | Resolved (`__svelte_meta` loc) | Resolved (debug location) | Resolved (debug location) | Resolved (debug location) | Resolved (debug location) | None |
+| **Tag Name & Classes** | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) | Resolved (DOM extraction) |
 
-\* *Note: Vue component instances in development mode do not expose line and column locations directly on DOM instances by default. Run `hs install --vue` to enable compile-time template line/column injection (Invasive mode). Without it, HoverSource defaults to Non-Invasive mode, hiding line/column coordinates and opening the file at line 1.*
+\* *Note: Certain frameworks like Vue do not expose template line and column locations directly on DOM nodes by default in development mode. You can run `hs install --<framework>` (e.g., `hs install --vue`, `hs install --react`, `hs install --angular`, `hs install --solid`) to enable compile-time template line/column tagging (Invasive mode). Otherwise, HoverSource defaults to Non-Invasive mode, which might hide line/column coordinates or open target files at line 1.*
+
+---
+
+## Proxy & Security Transport Matrix
+
+When utilizing HoverSource in Web Application Proxy Mode (`hs --target=<url>`), the reverse proxy employs dedicated routing and headers interception layers to handle modern browser restrictions:
+
+| Feature / Capability | Supported | Details |
+| :--- | :---: | :--- |
+| **HTTP Upstream Proxying** | **Yes** | Standard port forwarding with dynamic script injection. |
+| **HTTPS Upstream Proxying** | **Yes** | Automatically switches transport agents and generates local self-signed SSL certificates when targeting secure (`https://`) dev servers. |
+| **CSP Headers Stripping** | **Yes** | Automatically strips `content-security-policy` and `content-security-policy-report-only` headers from upstream HTML and static assets. |
+| **Same-Origin Iframe Routing** | **Yes** | Redirects `/hoversource/*` client assets to the local companion server. Keeps script execution same-origin inside iframes to bypass isolation policies. |
+| **Dev Server Health Polling** | **Yes** | Actively polls target upstream servers before binding the proxy port, with graceful retry logic and CLI warning indicators. |
+| **Port Conflict Resolution** | **Yes** | Detects occupied debugging ports (`9222`) or companion ports (`7300`), prompts the user, or terminates conflicting processes automatically. |
+| **HTTP/2 or HTTP/3 Upgrading** | **No** | The reverse proxy runs on Node's standard HTTP/HTTPS (`HTTP/1.1`) stack. It automatically downgrades upstream connection protocols to `HTTP/1.1` and does not support multiplexing. |
+| **Subresource Integrity (SRI) Rewriting** | **No** | If the target HTML enforces strict `integrity` hashes on script/style tags, HoverSource does not recalculate or strip these attributes. Browser security blocks might trigger if those resources are modified. |
+| **Preloaded HSTS Domains** | **No** | For target domains that have HSTS preloaded in the browser, the self-signed SSL certificates generated locally will be blocked without the option to add a certificate exception. |
+| **WebSocket Secure (WSS) Tunneling** | **No** | Does not tunnel secure WebSocket upgrade events over HTTPS proxying, which can break dynamic Hot Module Replacement (HMR) connections. |
+| **Cookie Domain & Secure Rewriting** | **No** | Does not automatically rewrite `Domain` and `Secure` attributes in `Set-Cookie` response headers, which can break session cookies scoped to specific domains on `localhost`. |
+| **On-the-fly Decompression** | **No** | Deletes `Accept-Encoding` to force uncompressed responses instead of decompressing chunked Brotli/Gzip streams, causing minor performance overhead on large HTML loads. |
+
+---
+
+## Limitations & Workarounds
+
+HoverSource relies on active development environment metadata and browser debug protocols. The following scenarios are unsupported out-of-the-box and require manual configuration or fallback mechanisms:
+
+| Scenario / Environment | Supported | Details / Resolution |
+| :--- | :---: | :--- |
+| **Docker / Containerized Dev** | **No (Manual)** | Local loopback connections (`127.0.0.1`) are isolated inside containers. You must map container ports (proxy, companion) to the host and bind the host address to `0.0.0.0`. |
+| **Non-Electron WebView Apps** | **No (Manual)** | Frameworks like Tauri (Rust) or WebView2 (.NET) do not auto-expose debugging ports. You must build in debug mode, launch the app manually to open the CDP port, and connect HoverSource to it. |
+| **Production / Minified Builds** | **No** | Production bundles strip component fiber references, AST structures, and source maps. HoverSource will fall back to raw DOM element tagging without line/column resolution. |
 
 ## Clipboard Output
 

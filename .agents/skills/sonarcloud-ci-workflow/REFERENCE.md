@@ -74,7 +74,9 @@ jobs:
           node-version: 20
           cache: 'npm' # Activates npm caching
       - name: Install dependencies
-        run: npm ci
+        run: npm install
+      - name: Build Project
+        run: npm run build
       - name: Run Tests & Coverage
         run: npm run test:coverage
       - name: SonarCloud Scan
@@ -114,3 +116,16 @@ Only include directories containing the main codebase being tested under `sonar.
 
 * **Excluding Non-Core Folders**: Do NOT add utility scripts, boilerplate, or native code folders (e.g. `native/`) if they do not have unit test coverage.
 * **Why**: SonarCloud treats these as "New Code" on the first scan. This triggers the strict Quality Gate requiring `>= 80%` coverage, failing the build since no tests cover these files. It also surfaces pre-existing security warnings in boilerplates as new blocking issues.
+
+---
+
+## 6. Troubleshooting & Common Pitfalls
+
+If your SonarCloud CI workflow fails, check for these 6 common issues:
+
+1. **Incorrect Trigger Branch**: Ensure the branch in `.github/workflows/sonarcloud.yml` matches your repository's default branch (e.g. `master` vs `main`).
+2. **UTF-8 BOM Error**: `sonar-project.properties` must be saved in UTF-8 **without BOM**. A BOM character at the start causes SonarScanner to fail parsing the first line (`You must define the following mandatory properties: sonar.organization`).
+3. **Monorepo Build Order**: If packages in a monorepo import each other via built outputs (e.g. `dist/` or `build/`), you must run the build step (`npm run build`) *before* running tests in the CI.
+4. **EBADPLATFORM Errors**: `npm ci` is extremely strict and will fail on platform-specific native binaries (like `esbuild` or `swc`) if they aren't fully synchronized. Use `npm install` instead in CI to bypass platform mismatches gracefully.
+5. **Cross-Platform CRLF in Configs**: Temporary configuration files written by code (like OpenSSL extension configs for test certificates) must use Unix line endings (`\n`). Linux CLI tools (like `openssl`) will fail to parse CRLF (`\r\n`) configs.
+6. **Test Runner Race Conditions**: Exclude build output folders (`--exclude **/dist/**`) from your test runner (Vitest/Jest) to prevent running tests twice (source vs compiled) and causing race conditions on temporary files.

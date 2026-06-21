@@ -208,13 +208,13 @@ class SelectorParser {
   private column = 1;
   private inString: string | null = null;
   private inComment: "line" | "block" | null = null;
-  private braceStack: string[][] = [];
+  private readonly braceStack: string[][] = [];
   private currentSelector = "";
   private selectorStartLine = 1;
   private selectorStartCol = 1;
-  private origins: SelectorOrigin[] = [];
+  private readonly origins: SelectorOrigin[] = [];
 
-  constructor(private content: string) {}
+  constructor(private readonly content: string) {}
 
   private advancePos(c: string) {
     if (c === "\n") {
@@ -227,37 +227,42 @@ class SelectorParser {
 
   parse(): SelectorOrigin[] {
     for (let i = 0; i < this.content.length; i++) {
-      const char = this.content[i];
-      const nextChar = this.content[i + 1] || "";
-
-      if (this.handleComments(char, nextChar)) {
-        if (this.inComment === null && char === "*") {
-          i++; // skip "/"
-        }
-        continue;
-      }
-
-      if (this.handleStrings(char, nextChar)) {
-        if (char === "\\") {
-          i++; // skip escaped char
-        }
-        continue;
-      }
-
-      if (this.detectCommentOrStringStart(char, nextChar)) {
-        if (char === "/") {
-          i++; // skip the second comment char
-        }
-        continue;
-      }
-
-      if (this.handleSpecialChars(char)) {
-        continue;
-      }
-
-      this.accumulateSelector(char);
+      i += this.parseNext(i);
     }
     return this.origins;
+  }
+
+  private parseNext(i: number): number {
+    const char = this.content[i];
+    const nextChar = this.content[i + 1] || "";
+
+    if (this.handleComments(char, nextChar)) {
+      if (this.inComment === null && char === "*") {
+        return 1; // skip "/"
+      }
+      return 0;
+    }
+
+    if (this.handleStrings(char, nextChar)) {
+      if (char === "\\") {
+        return 1; // skip escaped char
+      }
+      return 0;
+    }
+
+    if (this.detectCommentOrStringStart(char, nextChar)) {
+      if (char === "/") {
+        return 1; // skip the second comment char
+      }
+      return 0;
+    }
+
+    if (this.handleSpecialChars(char)) {
+      return 0;
+    }
+
+    this.accumulateSelector(char);
+    return 0;
   }
 
   private handleComments(char: string, nextChar: string): boolean {

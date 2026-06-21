@@ -14,7 +14,7 @@ export function getOpensslCommand(): string {
       execFileSync("openssl", ["version"], { stdio: "ignore" });
       return "openssl";
     } catch {
-      const gitOpenssl = "C:\\Program Files\\Git\\usr\\bin\\openssl.exe";
+      const gitOpenssl = String.raw`C:\Program Files\Git\usr\bin\openssl.exe`;
       if (fs.existsSync(gitOpenssl)) {
         return gitOpenssl;
       }

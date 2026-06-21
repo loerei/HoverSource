@@ -87,15 +87,15 @@ Ideal for positioning new UI elements (cards, badges, modals, tooltips) relative
 
 HoverSource supports resolving metadata for multiple frontend frameworks at different levels of depth depending on what information is exposed by the framework's development mode:
 
-| Metadata Field | React (Non-Invasive) | Vue (Non-Invasive / **Invasive**) | Svelte (Non-Invasive) | Angular (Non-Invasive) | SolidJS (Non-Invasive) | Preact (Non-Invasive) | Astro (Non-Invasive) | Vanilla / Fallback |
+| Metadata Field | React (Non-Invasive / Invasive) | Vue (Non-Invasive / **Invasive**) | Svelte (Non-Invasive) | Angular (Non-Invasive / **Invasive**) | SolidJS (Non-Invasive) | Preact (Non-Invasive) | Astro (Non-Invasive) | Vanilla / Fallback |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Component Name** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Fallback (DOM tag) |
-| **File Path** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | None |
-| **Line Number** | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | Resolved | Resolved | None |
-| **Column Number** | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | Resolved | Resolved | None |
+| **File Path** | Resolved | Resolved | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | None |
+| **Line Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | None |
+| **Column Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | None |
 | **Tag Name & Classes** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved |
 
-\* *Note: Vue requires compile-time template tagging (Invasive mode via `hs install --vue`) to expose line/column locations. Other frameworks resolve them out-of-the-box in development mode (Non-Invasive).*
+\* *Note: Vue and Angular require compile-time template tagging (Invasive mode via `hs install --vue` or `hs install --angular`) to expose line/column locations (and file path for Angular). Other frameworks resolve them out-of-the-box in development mode (Non-Invasive).*
 
 ---
 

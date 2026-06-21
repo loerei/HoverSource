@@ -213,7 +213,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
             responseHeader += `${key}: ${val}\r\n`;
           }
         } else if (value !== undefined) {
-          responseHeader += `${key}: ${String(value)}\r\n`;
+          responseHeader += `${key}: ${value as string}\r\n`;
         }
       }
       responseHeader += "\r\n";

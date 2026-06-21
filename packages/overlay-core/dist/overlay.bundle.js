@@ -3000,6 +3000,30 @@ Suggested layout insertion (heuristic only):
     OverlayEngine.launch();
     console.log("[HoverSource] Overlay injected.");
   }
+  function calculateMaskBounds(direction, stopValue, stopUnit, rect) {
+    let subLeft = rect.left;
+    let subTop = rect.top;
+    let subWidth = rect.width;
+    let subHeight = rect.height;
+    const rectBottom = rect.bottom === void 0 ? rect.top + rect.height : rect.bottom;
+    const rectRight = rect.right === void 0 ? rect.left + rect.width : rect.right;
+    if (direction === "to bottom") {
+      const h = stopUnit === "px" ? stopValue : rect.height * (stopValue / 100);
+      subHeight = Math.min(h, rect.height);
+    } else if (direction === "to top") {
+      const h = stopUnit === "px" ? stopValue : rect.height * (stopValue / 100);
+      subHeight = Math.min(h, rect.height);
+      subTop = rectBottom - subHeight;
+    } else if (direction === "to right") {
+      const w = stopUnit === "px" ? stopValue : rect.width * (stopValue / 100);
+      subWidth = Math.min(w, rect.width);
+    } else if (direction === "to left") {
+      const w = stopUnit === "px" ? stopValue : rect.width * (stopValue / 100);
+      subWidth = Math.min(w, rect.width);
+      subLeft = rectRight - subWidth;
+    }
+    return { left: subLeft, top: subTop, width: subWidth, height: subHeight };
+  }
   function parseMaskGradient(value, rect) {
     if (!value?.includes("linear-gradient"))
       return null;
@@ -3025,28 +3049,7 @@ Suggested layout insertion (heuristic only):
       direction = "to right";
     else if (value.includes("to left"))
       direction = "to left";
-    let subLeft = rect.left;
-    let subTop = rect.top;
-    let subWidth = rect.width;
-    let subHeight = rect.height;
-    const rectBottom = rect.bottom === void 0 ? rect.top + rect.height : rect.bottom;
-    const rectRight = rect.right === void 0 ? rect.left + rect.width : rect.right;
-    if (direction === "to bottom") {
-      const h = stopUnit === "px" ? stopValue : rect.height * (stopValue / 100);
-      subHeight = Math.min(h, rect.height);
-    } else if (direction === "to top") {
-      const h = stopUnit === "px" ? stopValue : rect.height * (stopValue / 100);
-      subHeight = Math.min(h, rect.height);
-      subTop = rectBottom - subHeight;
-    } else if (direction === "to right") {
-      const w = stopUnit === "px" ? stopValue : rect.width * (stopValue / 100);
-      subWidth = Math.min(w, rect.width);
-    } else if (direction === "to left") {
-      const w = stopUnit === "px" ? stopValue : rect.width * (stopValue / 100);
-      subWidth = Math.min(w, rect.width);
-      subLeft = rectRight - subWidth;
-    }
-    return { left: subLeft, top: subTop, width: subWidth, height: subHeight };
+    return calculateMaskBounds(direction, stopValue, stopUnit, rect);
   }
   function parseClipPathInset(value, rect) {
     if (!value?.includes("inset("))

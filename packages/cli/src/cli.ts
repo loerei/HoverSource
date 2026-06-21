@@ -39,7 +39,7 @@ export function validateSafeUrl(urlStr: string): string {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw new Error(`[HoverSource] Security Error: Target URL protocol must be http or https`);
     }
-    const hostRegex = /^[a-zA-Z0-9_\-\.]+$/;
+    const hostRegex = /^[a-zA-Z0-9_\-.]+$/;
     if (!hostRegex.test(parsed.hostname)) {
       throw new Error(`[HoverSource] Security Error: Target URL contains invalid hostname`);
     }
@@ -861,6 +861,14 @@ async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
   return new Promise((resolve) => {
     try {
       const url = new URL(safeTarget);
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        resolve(false);
+        return;
+      }
+      if (!/^[a-zA-Z0-9_\-.]+$/.test(url.hostname)) {
+        resolve(false);
+        return;
+      }
       const isHttps = url.protocol === "https:";
       const agent = isHttps ? https : http;
       const req = agent.get(safeTarget, (res) => {

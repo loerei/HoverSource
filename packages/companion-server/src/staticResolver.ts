@@ -83,33 +83,40 @@ function sortCssFiles(cssFiles: string[], componentFilePath?: string): string[] 
   });
 }
 
+function handleDoubleUnderscore(className: string, candidates: Set<string>) {
+  const parts = className.split("__");
+  const prefix = parts[0];
+  if (!prefix) return;
+  candidates.add(prefix);
+  
+  const subParts = prefix.split("_");
+  for (const part of subParts) {
+    if (part) candidates.add(part);
+  }
+  if (subParts.length > 1) {
+    const lastPart = subParts.at(-1);
+    if (lastPart) candidates.add(lastPart);
+  }
+}
+
+function handleSingleUnderscorePrefix(className: string, candidates: Set<string>) {
+  const parts = className.split("_").filter(Boolean);
+  for (const part of parts) {
+    if (part) candidates.add(part);
+  }
+  if (parts.length > 1) {
+    const secondLastPart = parts.at(-2);
+    if (secondLastPart) candidates.add(secondLastPart);
+  }
+}
+
 function getCandidateClassNames(className: string): string[] {
   const candidates = new Set<string>([className]);
-  
   if (className.includes("__")) {
-    const parts = className.split("__");
-    const prefix = parts[0];
-    candidates.add(prefix);
-    
-    const subParts = prefix.split("_");
-    for (const part of subParts) {
-      if (part) candidates.add(part);
-    }
-    if (subParts.length > 1) {
-      const lastPart = subParts.at(-1);
-      if (lastPart) candidates.add(lastPart);
-    }
+    handleDoubleUnderscore(className, candidates);
   } else if (className.startsWith("_")) {
-    const parts = className.split("_").filter(Boolean);
-    for (const part of parts) {
-      if (part) candidates.add(part);
-    }
-    if (parts.length > 1) {
-      const secondLastPart = parts.at(-2);
-      if (secondLastPart) candidates.add(secondLastPart);
-    }
+    handleSingleUnderscorePrefix(className, candidates);
   }
-  
   return Array.from(candidates);
 }
 

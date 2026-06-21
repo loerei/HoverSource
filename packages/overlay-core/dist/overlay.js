@@ -659,31 +659,7 @@ if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
     OverlayEngine.launch();
     console.log("[HoverSource] Overlay injected.");
 }
-export function parseMaskGradient(value, rect) {
-    if (!value?.includes("linear-gradient"))
-        return null;
-    const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
-    if (matches.length === 0)
-        return null;
-    let stopValue = 0;
-    let stopUnit = "px";
-    for (const m of matches) {
-        const val = Number.parseFloat(m[1]);
-        if (val > 0) {
-            stopValue = val;
-            stopUnit = m[2];
-            break;
-        }
-    }
-    if (stopValue === 0)
-        return null;
-    let direction = "to bottom";
-    if (value.includes("to top"))
-        direction = "to top";
-    else if (value.includes("to right"))
-        direction = "to right";
-    else if (value.includes("to left"))
-        direction = "to left";
+function calculateMaskBounds(direction, stopValue, stopUnit, rect) {
     let subLeft = rect.left;
     let subTop = rect.top;
     let subWidth = rect.width;
@@ -709,6 +685,33 @@ export function parseMaskGradient(value, rect) {
         subLeft = rectRight - subWidth;
     }
     return { left: subLeft, top: subTop, width: subWidth, height: subHeight };
+}
+export function parseMaskGradient(value, rect) {
+    if (!value?.includes("linear-gradient"))
+        return null;
+    const matches = Array.from(value.matchAll(/(\d{1,10}(?:\.\d{1,10})?)(px|%)/g));
+    if (matches.length === 0)
+        return null;
+    let stopValue = 0;
+    let stopUnit = "px";
+    for (const m of matches) {
+        const val = Number.parseFloat(m[1]);
+        if (val > 0) {
+            stopValue = val;
+            stopUnit = m[2];
+            break;
+        }
+    }
+    if (stopValue === 0)
+        return null;
+    let direction = "to bottom";
+    if (value.includes("to top"))
+        direction = "to top";
+    else if (value.includes("to right"))
+        direction = "to right";
+    else if (value.includes("to left"))
+        direction = "to left";
+    return calculateMaskBounds(direction, stopValue, stopUnit, rect);
 }
 export function parseClipPathInset(value, rect) {
     if (!value?.includes("inset("))

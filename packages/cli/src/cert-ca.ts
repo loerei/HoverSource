@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { SslCredentials } from "./cert.js";
 
 /**
@@ -11,12 +11,12 @@ import { SslCredentials } from "./cert.js";
 export function getOpensslCommand(): string {
   if (process.platform === "win32") {
     try {
-      execSync("openssl version", { stdio: "ignore" });
+      execFileSync("openssl", ["version"], { stdio: "ignore" });
       return "openssl";
     } catch {
       const gitOpenssl = "C:\\Program Files\\Git\\usr\\bin\\openssl.exe";
       if (fs.existsSync(gitOpenssl)) {
-        return `"${gitOpenssl}"`;
+        return gitOpenssl;
       }
     }
   }
@@ -41,8 +41,27 @@ export function ensureRootCa(): { caKeyPath: string; caCertPath: string } {
   if (!fs.existsSync(caKeyPath) || !fs.existsSync(caCertPath)) {
     try {
       console.log(`[HoverSource SSL CA] Generating Root CA keys in ${sslDir}...`);
-      const cmd = `${openssl} req -x509 -nodes -new -sha256 -days 3650 -newkey rsa:2048 -keyout "${caKeyPath}" -out "${caCertPath}" -subj "/CN=HoverSourceRootCA"`;
-      execSync(cmd, { stdio: "ignore" });
+      execFileSync(
+        openssl,
+        [
+          "req",
+          "-x509",
+          "-nodes",
+          "-new",
+          "-sha256",
+          "-days",
+          "3650",
+          "-newkey",
+          "rsa:2048",
+          "-keyout",
+          caKeyPath,
+          "-out",
+          caCertPath,
+          "-subj",
+          "/CN=HoverSourceRootCA",
+        ],
+        { stdio: "ignore" }
+      );
     } catch (err: any) {
       console.error(`[HoverSource SSL CA] Failed to generate Root CA:`, err.message);
       throw new Error(`Failed to generate local Root CA keys. Please check openssl configuration.`);
@@ -53,11 +72,11 @@ export function ensureRootCa(): { caKeyPath: string; caCertPath: string } {
   if (process.platform === "win32") {
     try {
       // Check if certificate is already trusted
-      execSync(`certutil -verifystore -user root "HoverSourceRootCA"`, { stdio: "ignore" });
+      execFileSync("certutil", ["-verifystore", "-user", "root", "HoverSourceRootCA"], { stdio: "ignore" });
     } catch {
       try {
         console.log(`[HoverSource SSL CA] Trusting HoverSource Development Root CA...`);
-        execSync(`certutil -addstore -user root "${caCertPath}"`, { stdio: "ignore" });
+        execFileSync("certutil", ["-addstore", "-user", "root", caCertPath], { stdio: "ignore" });
       } catch (err: any) {
         console.warn(`[HoverSource SSL CA] Warning: Failed to trust Root CA in Windows certificate store:`, err.message);
       }
@@ -119,12 +138,47 @@ ${altNames}
     fs.writeFileSync(extConfigPath, extConfig, "utf-8");
 
     // Generate Private Key and CSR for Domain
-    const reqCmd = `${openssl} req -new -newkey rsa:2048 -nodes -keyout "${domainKeyPath}" -out "${domainCsrPath}" -subj "/CN=${targetHost}"`;
-    execSync(reqCmd, { stdio: "ignore" });
+    execFileSync(
+      openssl,
+      [
+        "req",
+        "-new",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-keyout",
+        domainKeyPath,
+        "-out",
+        domainCsrPath,
+        "-subj",
+        `/CN=${targetHost}`,
+      ],
+      { stdio: "ignore" }
+    );
 
     // Sign CSR with Root CA using Extension config
-    const signCmd = `${openssl} x509 -req -in "${domainCsrPath}" -CA "${caCertPath}" -CAkey "${caKeyPath}" -CAcreateserial -out "${domainCertPath}" -days 365 -sha256 -extfile "${extConfigPath}"`;
-    execSync(signCmd, { stdio: "ignore" });
+    execFileSync(
+      openssl,
+      [
+        "x509",
+        "-req",
+        "-in",
+        domainCsrPath,
+        "-CA",
+        caCertPath,
+        "-CAkey",
+        caKeyPath,
+        "-CAcreateserial",
+        "-out",
+        domainCertPath,
+        "-days",
+        "365",
+        "-sha256",
+        "-extfile",
+        extConfigPath,
+      ],
+      { stdio: "ignore" }
+    );
 
     // Clean up temporary config and CSR
     try {

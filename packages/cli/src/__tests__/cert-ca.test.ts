@@ -8,14 +8,14 @@ vi.mock("node:child_process", async (importOriginal) => {
   const original = await importOriginal<typeof child_process>();
   return {
     ...original,
-    execSync: vi.fn((cmd, options) => {
-      if (typeof cmd === "string" && cmd.includes("certutil")) {
-        if (cmd.includes("-verifystore")) {
+    execFileSync: vi.fn((file, args, options) => {
+      if (typeof file === "string" && file.includes("certutil")) {
+        if (args && args.includes("-verifystore")) {
           throw new Error("Certificate not found");
         }
         return Buffer.from("mock success");
       }
-      return original.execSync(cmd, options);
+      return original.execFileSync(file, args, options);
     }),
   };
 });

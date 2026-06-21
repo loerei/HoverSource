@@ -115,6 +115,9 @@ When utilizing HoverSource in Web Application Proxy Mode (`hs --target=<url>`), 
 | **HTTP/2 or HTTP/3 Upgrading** | **No** | The reverse proxy runs on Node's standard HTTP/HTTPS (`HTTP/1.1`) stack. It automatically downgrades upstream connection protocols to `HTTP/1.1` and does not support multiplexing. |
 | **Subresource Integrity (SRI) Rewriting** | **No** | If the target HTML enforces strict `integrity` hashes on script/style tags, HoverSource does not recalculate or strip these attributes. Browser security blocks might trigger if those resources are modified. |
 | **Preloaded HSTS Domains** | **No** | For target domains that have HSTS preloaded in the browser, the self-signed SSL certificates generated locally will be blocked without the option to add a certificate exception. |
+| **WebSocket Secure (WSS) Tunneling** | **No** | Does not tunnel secure WebSocket upgrade events over HTTPS proxying, which can break dynamic Hot Module Replacement (HMR) connections. |
+| **Cookie Domain & Secure Rewriting** | **No** | Does not automatically rewrite `Domain` and `Secure` attributes in `Set-Cookie` response headers, which can break session cookies scoped to specific domains on `localhost`. |
+| **On-the-fly Decompression** | **No** | Deletes `Accept-Encoding` to force uncompressed responses instead of decompressing chunked Brotli/Gzip streams, causing minor performance overhead on large HTML loads. |
 
 ---
 

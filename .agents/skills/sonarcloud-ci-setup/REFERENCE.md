@@ -4,6 +4,9 @@
 
 Configure `sonar-project.properties` in the project root to define scope and exclusions:
 
+> [!IMPORTANT]
+> **UTF-8 Encoding without BOM**: You MUST save `sonar-project.properties` in UTF-8 format **without BOM**. Saving it with BOM (which is the default behavior of Windows PowerShell `Set-Content`) will cause the SonarScanner to fail to parse the first line, throwing an error: `You must define the following mandatory properties: sonar.organization`.
+
 ```properties
 sonar.organization=loerei
 sonar.projectKey=loerei_YumeShelf

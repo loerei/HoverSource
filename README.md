@@ -116,6 +116,18 @@ When utilizing HoverSource in Web Application Proxy Mode (`hs --target=<url>`), 
 | **Subresource Integrity (SRI) Rewriting** | **No** | If the target HTML enforces strict `integrity` hashes on script/style tags, HoverSource does not recalculate or strip these attributes. Browser security blocks might trigger if those resources are modified. |
 | **Preloaded HSTS Domains** | **No** | For target domains that have HSTS preloaded in the browser, the self-signed SSL certificates generated locally will be blocked without the option to add a certificate exception. |
 
+---
+
+## Known Limitations & User Responsibility
+
+HoverSource relies on active development environment metadata and browser debug protocols. The following scenarios are unsupported out-of-the-box and require manual configuration or fallback mechanisms:
+
+| Scenario / Environment | Supported | Details / Resolution |
+| :--- | :---: | :--- |
+| **Docker / Containerized Dev** | **No (Manual)** | Local loopback connections (`127.0.0.1`) are isolated inside containers. Users must map container ports (proxy, companion) to the host and bind the host address to `0.0.0.0`. |
+| **Non-Electron WebView Apps** | **No (Manual)** | Frameworks like Tauri (Rust) or WebView2 (.NET) do not auto-expose debugging ports. Users must build in debug mode, launch the app manually to open the CDP port, and connect HoverSource to it. |
+| **Production / Minified Builds** | **No** | Production bundles strip component fiber references, AST structures, and source maps. HoverSource will fall back to raw DOM element tagging without line/column resolution. |
+
 ## Clipboard Output
 
 When you press `Alt + C` on any hovered element, HoverSource copies a Markdown block to your clipboard. All sections below the first five fields are conditional — they appear only when the relevant data exists.

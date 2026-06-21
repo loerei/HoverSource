@@ -49,3 +49,6 @@ lerna-debug.log*
 # Project management
 refs/
 diff.patch
+
+# Test coverage
+coverage/

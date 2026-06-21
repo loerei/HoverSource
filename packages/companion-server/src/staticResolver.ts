@@ -203,121 +203,165 @@ function resolveNestedSelectors(
   return newSelectors;
 }
 
-function parseSelectors(content: string): SelectorOrigin[] {
-  const origins: SelectorOrigin[] = [];
-  
-  let line = 1;
-  let column = 1;
-  
-  let inString: string | null = null;
-  let inComment: "line" | "block" | null = null;
-  
-  const braceStack: string[][] = [];
-  
-  let currentSelector = "";
-  let selectorStartLine = 1;
-  let selectorStartCol = 1;
-  
-  const advancePos = (c: string) => {
-    if (c === "\n") {
-      line++;
-      column = 1;
-    } else {
-      column++;
-    }
-  };
+class SelectorParser {
+  private line = 1;
+  private column = 1;
+  private inString: string | null = null;
+  private inComment: "line" | "block" | null = null;
+  private braceStack: string[][] = [];
+  private currentSelector = "";
+  private selectorStartLine = 1;
+  private selectorStartCol = 1;
+  private origins: SelectorOrigin[] = [];
 
-  for (let i = 0; i < content.length; i++) {
-    const char = content[i];
-    const nextChar = content[i + 1] || "";
-    
-    if (inComment === "line") {
+  constructor(private content: string) {}
+
+  private advancePos(c: string) {
+    if (c === "\n") {
+      this.line++;
+      this.column = 1;
+    } else {
+      this.column++;
+    }
+  }
+
+  parse(): SelectorOrigin[] {
+    for (let i = 0; i < this.content.length; i++) {
+      const char = this.content[i];
+      const nextChar = this.content[i + 1] || "";
+
+      if (this.handleComments(char, nextChar)) {
+        if (this.inComment === null && char === "*") {
+          i++; // skip "/"
+        }
+        continue;
+      }
+
+      if (this.handleStrings(char, nextChar)) {
+        if (char === "\\") {
+          i++; // skip escaped char
+        }
+        continue;
+      }
+
+      if (this.detectCommentOrStringStart(char, nextChar)) {
+        if (char === "/") {
+          i++; // skip the second comment char
+        }
+        continue;
+      }
+
+      if (this.handleSpecialChars(char)) {
+        continue;
+      }
+
+      this.accumulateSelector(char);
+    }
+    return this.origins;
+  }
+
+  private handleComments(char: string, nextChar: string): boolean {
+    if (this.inComment === "line") {
       if (char === "\n") {
-        inComment = null;
+        this.inComment = null;
       }
-      advancePos(char);
-      continue;
+      this.advancePos(char);
+      return true;
     }
-    
-    if (inComment === "block") {
+
+    if (this.inComment === "block") {
       if (char === "*" && nextChar === "/") {
-        inComment = null;
-        i++;
-        column += 2;
-        continue;
+        this.inComment = null;
+        this.column += 2;
+        return true;
       }
-      advancePos(char);
-      continue;
+      this.advancePos(char);
+      return true;
     }
-    
-    if (inString !== null) {
-      if (char === "\\" && i + 1 < content.length) {
-        const next = content[i + 1];
-        advancePos(char);
-        advancePos(next);
-        i++;
-        continue;
+
+    return false;
+  }
+
+  private handleStrings(char: string, nextChar: string): boolean {
+    if (this.inString !== null) {
+      if (char === "\\" && nextChar) {
+        this.advancePos(char);
+        this.advancePos(nextChar);
+        return true;
       }
-      if (char === inString) {
-        inString = null;
+      if (char === this.inString) {
+        this.inString = null;
       }
-      advancePos(char);
-      continue;
+      this.advancePos(char);
+      return true;
     }
-    
+    return false;
+  }
+
+  private detectCommentOrStringStart(char: string, nextChar: string): boolean {
     if (char === "/" && nextChar === "/") {
-      inComment = "line";
-      i++;
-      column += 2;
-      continue;
+      this.inComment = "line";
+      this.column += 2;
+      return true;
     }
     if (char === "/" && nextChar === "*") {
-      inComment = "block";
-      i++;
-      column += 2;
-      continue;
+      this.inComment = "block";
+      this.column += 2;
+      return true;
     }
-    
     if (char === '"' || char === "'" || char === "`") {
-      inString = char;
-      advancePos(char);
-      continue;
+      this.inString = char;
+      this.advancePos(char);
+      return true;
     }
-    
-    if (char === "{") {
-      const rawSel = currentSelector.trim();
-      const newSelectors = resolveNestedSelectors(rawSel, braceStack, origins, selectorStartLine, selectorStartCol);
-      
-      const fallback = rawSel ? [rawSel] : [];
-      braceStack.push(newSelectors.length > 0 ? newSelectors : fallback);
-      currentSelector = "";
-      advancePos(char);
-      continue;
-    }
-    
-    if (char === "}") {
-      braceStack.pop();
-      currentSelector = "";
-      advancePos(char);
-      continue;
-    }
-    
-    if (char === ";") {
-      currentSelector = "";
-      advancePos(char);
-      continue;
-    }
-    
-    if (currentSelector.trim() === "") {
-      selectorStartLine = line;
-      selectorStartCol = column;
-    }
-    currentSelector += char;
-    
-    advancePos(char);
+    return false;
   }
-  
-  return origins;
+
+  private handleSpecialChars(char: string): boolean {
+    if (char === "{") {
+      const rawSel = this.currentSelector.trim();
+      const newSelectors = resolveNestedSelectors(
+        rawSel,
+        this.braceStack,
+        this.origins,
+        this.selectorStartLine,
+        this.selectorStartCol
+      );
+      const fallback = rawSel ? [rawSel] : [];
+      this.braceStack.push(newSelectors.length > 0 ? newSelectors : fallback);
+      this.currentSelector = "";
+      this.advancePos(char);
+      return true;
+    }
+
+    if (char === "}") {
+      this.braceStack.pop();
+      this.currentSelector = "";
+      this.advancePos(char);
+      return true;
+    }
+
+    if (char === ";") {
+      this.currentSelector = "";
+      this.advancePos(char);
+      return true;
+    }
+
+    return false;
+  }
+
+  private accumulateSelector(char: string) {
+    if (this.currentSelector.trim() === "") {
+      this.selectorStartLine = this.line;
+      this.selectorStartCol = this.column;
+    }
+    this.currentSelector += char;
+    this.advancePos(char);
+  }
+}
+
+function parseSelectors(content: string): SelectorOrigin[] {
+  return new SelectorParser(content).parse();
 }
 
 function findClassOrigins(

@@ -139,6 +139,25 @@ function resolveSubcommand(
   return { execCommand: `npm run ${subcommand}`, isElectron };
 }
 
+function detectDevServerPort(projectRoot: string): number {
+  const pkgPath = path.join(projectRoot, "package.json");
+  if (!fs.existsSync(pkgPath)) return 3000;
+
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+
+    if ("next" in allDeps) return 3000;
+    if ("nuxt" in allDeps) return 3000;
+    if ("vite" in allDeps) return 5173;
+    if ("@sveltejs/kit" in allDeps) return 5173;
+    if ("@angular/cli" in allDeps || "@angular/core" in allDeps) return 4200;
+    if ("webpack-dev-server" in allDeps) return 8080;
+  } catch {}
+
+  return 3000;
+}
+
 function probeHostPort(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -171,9 +190,9 @@ export async function isPortFree(port: number): Promise<boolean> {
   return true;
 }
 
-export async function findFreePort(startPort: number, excludePort?: number): Promise<number> {
+export async function findFreePort(startPort: number, excludePort?: number, maxPort = 65535): Promise<number> {
   let port = startPort;
-  while (true) {
+  while (port <= maxPort) {
     if (port === excludePort) {
       port++;
       continue;
@@ -183,6 +202,10 @@ export async function findFreePort(startPort: number, excludePort?: number): Pro
     }
     port++;
   }
+  throw new Error(
+    `[HoverSource] No free port found between ${startPort} and ${maxPort}. ` +
+    `Close some applications or specify a port manually with --port=<port>.`
+  );
 }
 
 /**
@@ -584,7 +607,7 @@ async function handlePatchOption(
   }
 
   if (shouldPatch) {
-    const newDebugPort = debugPort + 1;
+    const newDebugPort = await findFreePort(debugPort + 1);
     const patchResult = findAndPatchDebugPort(projectRoot, debugPort, newDebugPort);
     if (patchResult) {
       return { newDebugPort, patchRestorer: patchResult.restore };
@@ -629,6 +652,7 @@ async function resolveDebugPortConflicts(
 
   if (currentDebugPort === debugPort && isDebugPortInUse) {
     console.warn(`\x1b[33m[HoverSource] Proceeding with port ${currentDebugPort} anyway. Overlay connection might fail.\x1b[0m\n`);
+    console.warn(`\x1b[33m[HoverSource] To fix: close the process using port ${currentDebugPort}, or pass --debug-port=<free-port>.\x1b[0m`);
   }
 
   return { resolvedDebugPort: currentDebugPort, patchRestorer };
@@ -651,11 +675,92 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
   console.log(`[HoverSource] Proxy mode: ${targetUrl} → http://localhost:${proxyPort}`);
   try {
     await startProxy(targetUrl, proxyPort, overlayScriptUrl);
-  } catch (err) {
-    console.error(`[HoverSource] Ignored proxy failure:`, err);
+    console.log(`[HoverSource] Proxy ready. Opening http://localhost:${proxyPort} in your browser...`);
+    openBrowser(`http://localhost:${proxyPort}`);
+  } catch (err: any) {
+    const isAddrInUse = err?.code === "EADDRINUSE";
+    console.error(`[HoverSource] Proxy failed to start on port ${proxyPort}.`);
+    if (isAddrInUse) {
+      console.error(`[HoverSource] Port ${proxyPort} is in use. Pass --proxy-port=<port> or close the process using it.`);
+    } else {
+      console.error(`[HoverSource] Error: ${err?.message || err}`);
+    }
+    console.error(`[HoverSource] The companion server is still running. You can open http://localhost:${serverPort}/dashboard directly.`);
   }
-  console.log(`[HoverSource] Proxy ready. Opening http://localhost:${proxyPort} in your browser...`);
-  openBrowser(`http://localhost:${proxyPort}`);
+}
+
+async function waitForServer(port: number, timeoutMs = 120_000): Promise<boolean> {
+  const start = Date.now();
+  let dots = 0;
+  while (Date.now() - start < timeoutMs) {
+    const up = await new Promise<boolean>((resolve) => {
+      const req = http.get(`http://127.0.0.1:${port}`, (res) => {
+        res.resume();
+        resolve(true);
+      });
+      req.setTimeout(1000, () => { req.destroy(); resolve(false); });
+      req.on("error", () => resolve(false));
+    });
+    if (up) return true;
+    dots++;
+    if (dots % 6 === 0) {
+      console.log(`[HoverSource] Still waiting for dev server on port ${port}...`);
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return false;
+}
+
+async function runWebAppMode(
+  execCommand: string,
+  projectRoot: string,
+  serverPort: number,
+  args: any
+): Promise<{ child: ReturnType<typeof spawn> }> {
+  const config = loadMergedConfig(projectRoot);
+  const timeoutSec = config.webAppDevServerTimeout ?? 120;
+  const timeoutMs = timeoutSec * 1000;
+
+  const devPort = detectDevServerPort(projectRoot);
+  console.log(`[HoverSource] Web app detected. Dev server expected on port ${devPort}.`);
+
+  // Spawn the dev server
+  const { command, args: cmdArgs } = parseCommand(execCommand);
+  const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
+  const useShell = process.platform === "win32";
+  const child = useShell
+    ? spawn([resolvedCmd, ...cmdArgs].join(" "), {
+        shell: true,
+        env: process.env,
+        cwd: validateSafePath(projectRoot),
+        stdio: "inherit",
+      })
+    : spawn(resolvedCmd, cmdArgs, {
+        shell: false,
+        env: process.env,
+        cwd: validateSafePath(projectRoot),
+        stdio: "inherit",
+        detached: true,
+      });
+
+  child.on("error", (err) => {
+    console.error(`[HoverSource] Dev server failed to start:`, err.message);
+  });
+
+  // Wait for the dev server to be ready
+  console.log(`[HoverSource] Waiting for dev server on port ${devPort} (timeout: ${timeoutSec}s)...`);
+  const ready = await waitForServer(devPort, timeoutMs);
+
+  if (!ready) {
+    console.error(`[HoverSource] Dev server did not respond on port ${devPort} within timeout.`);
+    console.error(`[HoverSource] If your dev server uses a different port, run it separately and use:`);
+    console.error(`\x1b[36m[HoverSource]   hs -t http://localhost:<your-port>\x1b[0m`);
+    return { child };
+  }
+
+  console.log(`[HoverSource] Dev server is ready on port ${devPort}.`);
+  await runProxyMode(`http://localhost:${devPort}`, serverPort, args);
+  return { child };
 }
 
 function cleanArgument(arg: string): string {
@@ -693,12 +798,21 @@ function runExecMode(execCommand: string, projectRoot: string, debugPort: number
   };
   const { command, args } = parseCommand(execCommand);
   const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
-  const child = spawn(resolvedCmd, args, {
-    shell: false,
-    env: childEnv,
-    cwd: validateSafePath(projectRoot),
-    stdio: "inherit",
-  });
+  const useShell = process.platform === "win32";
+  // On Windows, .cmd files require shell — pass full command as single string to avoid DEP0190
+  const child = useShell
+    ? spawn([resolvedCmd, ...args].join(" "), {
+        shell: true,
+        env: childEnv,
+        cwd: validateSafePath(projectRoot),
+        stdio: "inherit",
+      })
+    : spawn(resolvedCmd, args, {
+        shell: false,
+        env: childEnv,
+        cwd: validateSafePath(projectRoot),
+        stdio: "inherit",
+      });
   child.on("error", (err) => {
     console.error(`[HoverSource] Failed to spawn exec command:`, err.message);
   });
@@ -1246,7 +1360,7 @@ function resolveExecCommand(
   execCommand: string | undefined,
   targetUrl: string | undefined,
   projectRoot: string
-): string | undefined {
+): { execCommand: string | undefined; isElectron: boolean } {
   if (subcommand && !execCommand && !targetUrl) {
     const resolved = resolveSubcommand(subcommand, projectRoot);
     if (!resolved) {
@@ -1255,9 +1369,9 @@ function resolveExecCommand(
     if (resolved.isElectron) {
       console.log(`[HoverSource] Detected Electron project, using exec mode.`);
     }
-    return resolved.execCommand;
+    return { execCommand: resolved.execCommand, isElectron: resolved.isElectron };
   }
-  return execCommand;
+  return { execCommand, isElectron: false };
 }
 
 async function main() {
@@ -1311,7 +1425,8 @@ async function main() {
   };
   setupCleanup(cleanup);
 
-  execCommand = resolveExecCommand(subcommand, execCommand, targetUrl, projectRoot);
+  const resolved = resolveExecCommand(subcommand, execCommand, targetUrl, projectRoot);
+  execCommand = resolved.execCommand;
 
   console.log(`[HoverSource] Initializing...`);
 
@@ -1342,9 +1457,30 @@ async function main() {
     return;
   }
 
-  // ─── MODE B: Exec wrapper (Electron apps) ────────────────────────────────
+  // ─── MODE B: Exec wrapper (Electron apps) or Auto-Proxy (Web apps) ────────
   if (execCommand) {
-    runExecMode(execCommand, projectRoot, debugPort);
+    if (resolved.isElectron) {
+      runExecMode(execCommand, projectRoot, debugPort);
+    } else {
+      const webApp = await runWebAppMode(execCommand, projectRoot, serverPort, args);
+      const prevCleanup = cleanup;
+      setupCleanup(() => {
+        prevCleanup();
+        try {
+          if (webApp.child.pid) {
+            console.log(`[HoverSource] Cleaning up dev server process (PID: ${webApp.child.pid})...`);
+            if (process.platform === "win32") {
+              exec(`taskkill /F /T /PID ${webApp.child.pid}`);
+            } else {
+              process.kill(-webApp.child.pid, "SIGKILL");
+            }
+          }
+        } catch (err) {
+          console.debug("[HoverSource] Dev server cleanup error:", err);
+        }
+      });
+      return;
+    }
   }
 
   // 3. Locate bundled overlay script

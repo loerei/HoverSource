@@ -861,25 +861,26 @@ async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
   return new Promise((resolve) => {
     try {
       const url = new URL(safeTarget);
-      if (url.protocol !== "http:" && url.protocol !== "https:") {
+      const schemesList = ["http:", "https:"];
+      if (schemesList.includes(url.protocol)) {
+        const isHttps = url.protocol === "https:";
+        const req = isHttps
+          ? https.get(url, (res) => {
+              res.resume();
+              resolve(true);
+            })
+          : http.get(url, (res) => {
+              res.resume();
+              resolve(true);
+            });
+        req.setTimeout(2000, () => {
+          req.destroy();
+          resolve(false);
+        });
+        req.on("error", () => resolve(false));
+      } else {
         resolve(false);
-        return;
       }
-      if (!/^[a-zA-Z0-9_\-.]+$/.test(url.hostname)) {
-        resolve(false);
-        return;
-      }
-      const isHttps = url.protocol === "https:";
-      const agent = isHttps ? https : http;
-      const req = agent.get(safeTarget, (res) => {
-        res.resume();
-        resolve(true);
-      });
-      req.setTimeout(2000, () => {
-        req.destroy();
-        resolve(false);
-      });
-      req.on("error", () => resolve(false));
     } catch {
       resolve(false);
     }

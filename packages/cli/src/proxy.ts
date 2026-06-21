@@ -188,6 +188,52 @@ export function startProxy(options: ProxyOptions): Promise<void> {
     server = http.createServer(requestHandler);
   }
 
+  const upgradeHandler = (req: http.IncomingMessage, socket: any, head: Buffer) => {
+    const isTargetHttps = target.protocol === "https:";
+    const agent = isTargetHttps ? https : http;
+
+    const requestOptions: http.RequestOptions = {
+      hostname: target.hostname,
+      port: target.port || (isTargetHttps ? 443 : 80),
+      path: req.url,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: target.host,
+      },
+    };
+
+    const proxyReq = agent.request(requestOptions);
+
+    proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
+      let responseHeader = `HTTP/${req.httpVersion} 101 Switching Protocols\r\n`;
+      for (const [key, value] of Object.entries(proxyRes.headers)) {
+        if (Array.isArray(value)) {
+          for (const val of value) {
+            responseHeader += `${key}: ${val}\r\n`;
+          }
+        } else if (value !== undefined) {
+          responseHeader += `${key}: ${value as string}\r\n`;
+        }
+      }
+      responseHeader += "\r\n";
+      socket.write(responseHeader);
+
+      proxySocket.write(proxyHead);
+      socket.pipe(proxySocket);
+      proxySocket.pipe(socket);
+    });
+
+    proxyReq.on("error", (err) => {
+      console.error(`[HoverSource Proxy] WebSocket proxy error forwarding upgrade to ${targetUrl}:`, err.message);
+      socket.end();
+    });
+
+    proxyReq.end();
+  };
+
+  server.on("upgrade", upgradeHandler);
+
   return new Promise((resolve, reject) => {
     server.listen(proxyPort, () => {
       resolve();

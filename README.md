@@ -118,14 +118,14 @@ When utilizing HoverSource in Web Application Proxy Mode (`hs --target=<url>`), 
 
 ---
 
-## Known Limitations & User Responsibility
+## Limitations & Workarounds
 
 HoverSource relies on active development environment metadata and browser debug protocols. The following scenarios are unsupported out-of-the-box and require manual configuration or fallback mechanisms:
 
 | Scenario / Environment | Supported | Details / Resolution |
 | :--- | :---: | :--- |
-| **Docker / Containerized Dev** | **No (Manual)** | Local loopback connections (`127.0.0.1`) are isolated inside containers. Users must map container ports (proxy, companion) to the host and bind the host address to `0.0.0.0`. |
-| **Non-Electron WebView Apps** | **No (Manual)** | Frameworks like Tauri (Rust) or WebView2 (.NET) do not auto-expose debugging ports. Users must build in debug mode, launch the app manually to open the CDP port, and connect HoverSource to it. |
+| **Docker / Containerized Dev** | **No (Manual)** | Local loopback connections (`127.0.0.1`) are isolated inside containers. You must map container ports (proxy, companion) to the host and bind the host address to `0.0.0.0`. |
+| **Non-Electron WebView Apps** | **No (Manual)** | Frameworks like Tauri (Rust) or WebView2 (.NET) do not auto-expose debugging ports. You must build in debug mode, launch the app manually to open the CDP port, and connect HoverSource to it. |
 | **Production / Minified Builds** | **No** | Production bundles strip component fiber references, AST structures, and source maps. HoverSource will fall back to raw DOM element tagging without line/column resolution. |
 
 ## Clipboard Output

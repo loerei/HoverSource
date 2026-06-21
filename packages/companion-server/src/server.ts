@@ -22,6 +22,7 @@ export interface HoverSourceConfig {
   minimalModeByDefault: boolean;
   editor: string;
   autoResolvePortConflicts?: boolean;
+  webAppDevServerTimeout?: number;
   snappingThreshold?: number;
   desnappingThreshold?: number;
   maxTraversalDepth?: number;
@@ -48,6 +49,7 @@ const DEFAULT_CONFIG: HoverSourceConfig = {
   minimalModeByDefault: false,
   editor: "vscode",
   autoResolvePortConflicts: false,
+  webAppDevServerTimeout: 120,
   snappingThreshold: 15,
   desnappingThreshold: 15,
   maxTraversalDepth: 32,
@@ -341,6 +343,7 @@ function handleOverlayScript(req: http.IncomingMessage, res: http.ServerResponse
   res.end(portBootstrap + bundleContent);
 }
 
+// Dashboard router mapping: can serve from packages or local companion static assets
 function handleDashboard(req: http.IncomingMessage, res: http.ServerResponse) {
   let dashboardPath = path.resolve(__dirname, "dashboard.html");
   if (!fs.existsSync(dashboardPath)) {
@@ -768,9 +771,8 @@ export function startCompanionServer(config: ServerConfig): http.Server {
 
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {
-      console.error(`[HoverSource] Port ${config.port} is already in use.`);
-      console.error(`[HoverSource] A previous HoverSource instance may still be running.`);
-      console.error(`[HoverSource] Run with a different port, e.g.: --port=3001`);
+      console.error(`[HoverSource] Port ${config.port} was claimed between resolution and bind (TOCTOU race).`);
+      console.error(`[HoverSource] Try again — the CLI will pick the next free port. Or pass --port=<port> explicitly.`);
       process.exit(1);
     } else {
       throw err;

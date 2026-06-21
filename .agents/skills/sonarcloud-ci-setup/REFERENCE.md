@@ -1,0 +1,113 @@
+# SonarCloud CI Setup Reference Guide
+
+## 1. Project Configuration Files
+
+Configure `sonar-project.properties` in the project root to define scope and exclusions:
+
+```properties
+sonar.organization=loerei
+sonar.projectKey=loerei_YumeShelf
+sonar.projectName=YumeShelf
+sonar.sources=src,native
+sonar.tests=tests
+sonar.test.inclusions=tests/**/*.test.ts,tests/**/*.spec.ts
+sonar.exclusions=node_modules/**,dist/**,build/**,build_output/**,tests/**,**/*.test.ts,**/*.spec.ts
+sonar.cpd.exclusions=tests/**,**/*.test.ts,**/*.spec.ts
+sonar.javascript.lcov.reportPaths=coverage/lcov.info
+```
+
+---
+
+## 2. GitHub Actions Workflows
+
+### Option A: Static Analysis Workflow (Recommended for Speed)
+Does not install dependencies, running in ~10–20 seconds:
+
+```yaml
+name: SonarCloud Analysis
+on:
+  push:
+    branches:
+      - main # Change to master if your default branch is master
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  sonarcloud:
+    name: SonarCloud Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Disable shallow clone for accurate git history
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+```
+
+### Option B: Coverage-Based Workflow (With Caching)
+Caching reduces setup time if tests must be executed in CI:
+
+```yaml
+name: SonarCloud Analysis with Coverage
+on:
+  push:
+    branches:
+      - main # Change to master if your default branch is master
+  pull_request:
+    types: [opened, synchronize, reopened]
+jobs:
+  sonarcloud:
+    name: SonarCloud Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm' # Activates npm caching
+      - name: Install dependencies
+        run: npm ci
+      - name: Run Tests & Coverage
+        run: npm run test:coverage
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+```
+
+---
+
+## 3. Disabling Automatic Analysis (Autoscan)
+
+You must disable SonarCloud's built-in Automatic Analysis to avoid duplicate analysis conflicts.
+
+1. Navigate to your project dashboard on [sonarcloud.io](https://sonarcloud.io/).
+2. Click **Administration** in the left menu.
+3. Select **Analysis Method**.
+4. Gạt nút **Toggle OFF** cho **Automatic Analysis**.
+
+---
+
+## 4. Verification using GitHub CLI
+
+To verify Quality Gate checks on local PRs, prevent dummy token auth failures:
+
+```powershell
+# Safe PR status check
+$env:GITHUB_TOKEN=$null; gh pr checks <pr_number>
+```
+
+---
+
+## 5. Scope Selection & Avoiding Testless Languages
+
+Only include directories containing the main codebase being tested under `sonar.sources`. 
+
+* **Excluding Non-Core Folders**: Do NOT add utility scripts, boilerplate, or native code folders (e.g. `native/`) if they do not have unit test coverage.
+* **Why**: SonarCloud treats these as "New Code" on the first scan. This triggers the strict Quality Gate requiring `>= 80%` coverage, failing the build since no tests cover these files. It also surfaces pre-existing security warnings in boilerplates as new blocking issues.

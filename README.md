@@ -95,7 +95,14 @@ HoverSource supports resolving metadata for multiple frontend frameworks at diff
 | **Column Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | None |
 | **Tag Name & Classes** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved |
 
-\* *Note: Vue and Angular require compile-time template tagging (Invasive mode via `hs install --vue` or `hs install --angular`) to expose line/column locations (and file path for Angular). Other frameworks resolve them out-of-the-box in development mode (Non-Invasive).*
+\* *Note: Vue and Angular require compile-time template tagging (Invasive mode via `hs install --vue` or `hs install --angular`) to expose line/column locations (and file path for Angular). Other frameworks resolve them out-of-the-box in development mode (Non-Invasive). For server-side environments (React Server Components / SSR in Next.js), React utilizes automatic, zero-config on-disk runtime patching during dev server execution.*
+
+### Next.js & React Server Components (RSC) Support
+
+For Next.js 14+ projects, HoverSource automatically resolves source code locations (file path, line, and column) for both server-rendered components (SSR) and React Server Components (RSC) when launched using `hs dev` or `hs start`.
+
+- **Mechanism**: HoverSource temporarily patches the standard React CJS development runtimes and Next.js's vendored app-page router runtimes on disk during development server execution. All patched files are restored to their original state upon process exit or CLI shutdown.
+- **Optimized SWC Integration**: For elements compiled with dev-mode source tracking (`__source`), HoverSource reads the source locations directly without performance overhead. For RSC elements where compiler-level source attributes are stripped, HoverSource resolves locations dynamically on the server.
 
 ---
 

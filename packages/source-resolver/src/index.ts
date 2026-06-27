@@ -27,8 +27,8 @@ export class SourceResolver {
     // Register default adapters
     this.fiberAdapter = new ReactFiberAdapter();
     this.adapters.push(
-      this.fiberAdapter,
       new ReactInvasiveAdapter(),
+      this.fiberAdapter,
       new VueAdapter(),
       new SvelteAdapter(),
       new PreactAdapter(),

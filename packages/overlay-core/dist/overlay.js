@@ -28,8 +28,8 @@ class OverlayEngine {
     }
     async init() {
         await this.loadConfig();
-        this.initStyles();
         this.createUI();
+        this.initStyles();
         this.initShortcuts();
         this.activeMode.activate(this);
         globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
@@ -80,6 +80,35 @@ class OverlayEngine {
     initStyles() {
         const isLightTheme = this.config?.theme === "light" ||
             (this.config?.theme === "system" && !globalThis.matchMedia("(prefers-color-scheme: dark)").matches);
+        const colors = isLightTheme
+            ? {
+                tooltipBg: "rgba(255, 255, 255, 0.96)",
+                tooltipBorder: "rgba(0, 0, 0, 0.15)",
+                tooltipText: "#1f2937",
+                borderSep: "rgba(0, 0, 0, 0.1)",
+                labelColor: "#6b7280",
+                stackText: "#374151",
+                stackBg: "rgba(0, 0, 0, 0.05)",
+                layerShapeFill: "#e5e7eb",
+                layerShapeStroke: "rgba(0,0,0,0.35)",
+                layerShapeHoverFill: "#d1d5db",
+                layerShapeHoverStroke: "rgba(0,0,0,0.6)",
+                layerHintColor: "#9ca3af"
+            }
+            : {
+                tooltipBg: "rgba(18, 18, 18, 0.95)",
+                tooltipBorder: "rgba(255, 255, 255, 0.15)",
+                tooltipText: "#f3f4f6",
+                borderSep: "rgba(255, 255, 255, 0.1)",
+                labelColor: "#9ca3af",
+                stackText: "#e5e7eb",
+                stackBg: "rgba(255, 255, 255, 0.05)",
+                layerShapeFill: "#262626",
+                layerShapeStroke: "rgba(255,255,255,0.5)",
+                layerShapeHoverFill: "#3f3f46",
+                layerShapeHoverStroke: "rgba(255,255,255,0.7)",
+                layerHintColor: "#6b7280"
+            };
         const style = document.createElement("style");
         style.id = "hoversource-styles";
         style.innerHTML = `
@@ -170,10 +199,10 @@ class OverlayEngine {
       }
       .hoversource-tooltip {
         position: absolute;
-        background: ${isLightTheme ? "rgba(255, 255, 255, 0.96)" : "rgba(18, 18, 18, 0.95)"};
+        background: ${colors.tooltipBg};
         backdrop-filter: blur(8px);
-        border: 1px solid ${isLightTheme ? "rgba(0, 0, 0, 0.15)" : "rgba(255, 255, 255, 0.15)"};
-        color: ${isLightTheme ? "#1f2937" : "#f3f4f6"};
+        border: 1px solid ${colors.tooltipBorder};
+        color: ${colors.tooltipText};
         padding: 12px;
         border-radius: 8px;
         font-size: 11px;
@@ -188,7 +217,7 @@ class OverlayEngine {
         font-size: 13px;
         color: #3b82f6;
         margin-bottom: 6px;
-        border-bottom: 1px solid ${isLightTheme ? "rgba(0, 0, 0, 0.1)" : "rgba(255, 255, 255, 0.1)"};
+        border-bottom: 1px solid ${colors.borderSep};
         padding-bottom: 4px;
         display: flex;
         justify-content: space-between;
@@ -203,15 +232,15 @@ class OverlayEngine {
         text-transform: uppercase;
       }
       .hoversource-section { margin-top: 6px; }
-      .hoversource-label { color: ${isLightTheme ? "#6b7280" : "#9ca3af"}; font-weight: 500; }
+      .hoversource-label { color: ${colors.labelColor}; font-weight: 500; }
       .hoversource-value { font-family: monospace; color: #10b981; word-break: break-all; }
       .hoversource-link { color: #2563eb; text-decoration: underline; cursor: pointer; }
       .hoversource-link:hover { color: #3b82f6; }
       .hoversource-stack { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
       .hoversource-stack-item {
         font-family: monospace;
-        color: ${isLightTheme ? "#374151" : "#e5e7eb"};
-        background: ${isLightTheme ? "rgba(0, 0, 0, 0.05)" : "rgba(255, 255, 255, 0.05)"};
+        color: ${colors.stackText};
+        background: ${colors.stackBg};
         padding: 2px 4px;
         border-radius: 3px;
       }
@@ -246,14 +275,14 @@ class OverlayEngine {
         overflow: visible;
       }
       .hs-layer-shape {
-        fill: ${isLightTheme ? '#e5e7eb' : '#262626'};
-        stroke: ${isLightTheme ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.5)'};
+        fill: ${colors.layerShapeFill};
+        stroke: ${colors.layerShapeStroke};
         stroke-width: 1.5;
         transition: fill 0.12s, stroke 0.12s;
       }
       .hs-layer-dot:hover .hs-layer-shape {
-        fill: ${isLightTheme ? '#d1d5db' : '#3f3f46'};
-        stroke: ${isLightTheme ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.7)'};
+        fill: ${colors.layerShapeHoverFill};
+        stroke: ${colors.layerShapeHoverStroke};
       }
       .hs-layer-dot--active .hs-layer-shape {
         fill: #3b82f6;
@@ -268,7 +297,7 @@ class OverlayEngine {
       }
       .hs-layer-hint {
         font-size: 8px;
-        color: ${isLightTheme ? '#9ca3af' : '#6b7280'};
+        color: ${colors.layerHintColor};
         text-align: center;
         margin-top: 2px;
         white-space: nowrap;
@@ -286,11 +315,16 @@ class OverlayEngine {
         font-size: 9px;
         color: #6b7280;
         text-align: right;
-        border-top: 1px dashed ${isLightTheme ? "rgba(0, 0, 0, 0.1)" : "rgba(255, 255, 255, 0.1)"};
+        border-top: 1px dashed ${colors.borderSep};
         padding-top: 4px;
       }
     `;
-        document.head.appendChild(style);
+        if (this.container) {
+            this.container.appendChild(style);
+        }
+        else {
+            document.head.appendChild(style);
+        }
     }
     createUI() {
         if (this.container)
@@ -306,6 +340,12 @@ class OverlayEngine {
         this.tooltipBox.style.display = "none";
         this.container.appendChild(this.tooltipBox);
         document.body.appendChild(this.container);
+    }
+    ensureUI() {
+        if (this.container && !document.body.contains(this.container)) {
+            console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
+            document.body.appendChild(this.container);
+        }
     }
     initShortcuts() {
         globalThis.addEventListener("keydown", this.handleKeyDown);
@@ -397,6 +437,7 @@ class OverlayEngine {
         return tag === "input" || tag === "textarea" || activeEl.hasAttribute("contenteditable");
     }
     handlePointerOver = (e) => {
+        this.ensureUI();
         const target = e.target;
         if (!target || target === this.container || this.container?.contains(target)) {
             if (this.isFrozen) {
@@ -412,6 +453,7 @@ class OverlayEngine {
         }
     };
     handlePointerMove = (e) => {
+        this.ensureUI();
         this.activeMode.onPointerMove(e);
         if (this.isFrozen) {
             e.stopImmediatePropagation();

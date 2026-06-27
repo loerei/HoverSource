@@ -15,7 +15,7 @@ export async function resolve(specifier: string, context: any, nextResolve: any)
 
   const isTarget = specifier === "react/jsx-dev-runtime" ||
                    specifier.endsWith("/react/jsx-dev-runtime") ||
-                   specifier.replace(/\\/g, "/").includes("react/jsx-dev-runtime") ||
+                    specifier.replaceAll("\\", "/").includes("react/jsx-dev-runtime") ||
                    specifier.includes("next/dist/compiled/react/jsx-dev-runtime");
 
   if (isTarget) {

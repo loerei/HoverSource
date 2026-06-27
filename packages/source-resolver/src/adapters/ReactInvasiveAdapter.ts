@@ -3,21 +3,21 @@ import { getElementMetadata, getComponentNameFromFile, parseColonLocation } from
 
 const invasiveLocs = new WeakMap<HTMLElement, string>();
 
-if (typeof window !== "undefined" && typeof document !== "undefined") {
+if (typeof globalThis.window !== "undefined" && typeof globalThis.document !== "undefined") {
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
       if (m.type === "childList") {
         m.addedNodes.forEach((node) => {
           if (node.nodeType === 1) { // Element
             const el = node as HTMLElement;
-            const loc = el.getAttribute("data-hoversource-loc");
+            const loc = el.dataset.hoversourceLoc;
             if (loc) {
               invasiveLocs.set(el, loc);
             }
             try {
               el.querySelectorAll("[data-hoversource-loc]").forEach((child) => {
                 if (child instanceof HTMLElement) {
-                  invasiveLocs.set(child, child.getAttribute("data-hoversource-loc")!);
+                  invasiveLocs.set(child, child.dataset.hoversourceLoc!);
                 }
               });
             } catch {}
@@ -25,7 +25,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
         });
       } else if (m.type === "attributes" && m.attributeName === "data-hoversource-loc") {
         const el = m.target as HTMLElement;
-        const loc = el.getAttribute("data-hoversource-loc");
+        const loc = el.dataset.hoversourceLoc;
         if (loc) {
           invasiveLocs.set(el, loc);
         }
@@ -37,7 +37,7 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
     try {
       document.querySelectorAll("[data-hoversource-loc]").forEach((el) => {
         if (el instanceof HTMLElement) {
-          invasiveLocs.set(el, el.getAttribute("data-hoversource-loc")!);
+          invasiveLocs.set(el, el.dataset.hoversourceLoc!);
         }
       });
     } catch {}

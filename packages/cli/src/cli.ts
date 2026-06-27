@@ -579,58 +579,25 @@ function restoreLeftoverPatches() {
     console.debug("[HoverSource] Leftover patch restore failed:", err);
   }
 }
-
-
-
 const patchedReactRuntimesList: { path: string; originalContent: string }[] = [];
 
-function patchReactRuntimes(projectRoot: string) {
-  process.once("exit", restoreReactRuntimes);
+function patchSingleReactRuntime(fullPath: string, relPath: string, projectRoot: string) {
+  try {
+    const content = fs.readFileSync(fullPath, "utf-8");
+    if (content.includes("HoverSource Injection Patch")) {
+      return;
+    }
 
-  const searchDirs = [
-    projectRoot,
-    path.join(projectRoot, "apps/web")
-  ];
+    let newContent = content;
 
-  const relativePaths = [
-    "node_modules/react/cjs/react-jsx-dev-runtime.development.js",
-    "node_modules/next/dist/compiled/react/cjs/react-jsx-dev-runtime.development.js",
-    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-dev-runtime.development.js",
-    "node_modules/next/dist/compiled/react/cjs/react-jsx-dev-runtime.react-server.development.js",
-    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-dev-runtime.react-server.development.js",
-    "node_modules/react/cjs/react-jsx-runtime.development.js",
-    "node_modules/next/dist/compiled/react/cjs/react-jsx-runtime.development.js",
-    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-runtime.development.js",
-    "node_modules/next/dist/compiled/react/cjs/react-jsx-runtime.react-server.development.js",
-    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-runtime.react-server.development.js",
-    // Next.js App Router vendored runtimes
-    "node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime.js",
-    "node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-jsx-runtime.js",
-    "node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js",
-    "node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-runtime.js",
-    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime.js",
-    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/rsc/react-jsx-runtime.js",
-    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js",
-    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/ssr/react-jsx-runtime.js"
-  ];
-
-  for (const dir of searchDirs) {
-    for (const relPath of relativePaths) {
-      const fullPath = path.resolve(dir, relPath);
-      if (fs.existsSync(fullPath)) {
-        try {
-          const content = fs.readFileSync(fullPath, "utf-8");
-          if (!content.includes("HoverSource Injection Patch")) {
-            let newContent = content;
-
-            if (relPath.includes("vendored")) {
-              const matchExpr = content.match(/module\.exports\s*=\s*(.*?);/);
-              if (matchExpr) {
-                const originalExpr = matchExpr[1];
-                const isDev = relPath.includes("dev");
-                let wrappedContent = "";
-                if (isDev) {
-                  wrappedContent = `
+    if (relPath.includes("vendored")) {
+      const matchExpr = content.match(/module\.exports\s*=\s*(.*?);/);
+      if (matchExpr) {
+        const originalExpr = matchExpr[1];
+        const isDev = relPath.includes("dev");
+        let wrappedContent = "";
+        if (isDev) {
+          wrappedContent = `
 const original = ${originalExpr};
 exports.Fragment = original.Fragment;
 exports.jsxDEV = function(type, config, maybeKey, isStaticChildren, source, self) {
@@ -638,8 +605,8 @@ exports.jsxDEV = function(type, config, maybeKey, isStaticChildren, source, self
   return original.jsxDEV(type, config, maybeKey, isStaticChildren, source, self);
 };
 `;
-                } else {
-                  wrappedContent = `
+        } else {
+          wrappedContent = `
 const original = ${originalExpr};
 exports.Fragment = original.Fragment;
 exports.jsx = function(type, config, maybeKey, ...args) {
@@ -651,9 +618,9 @@ exports.jsxs = function(type, config, maybeKey, ...args) {
   return original.jsxs.call(this, type, config, maybeKey, ...args);
 };
 `;
-                }
-                
-                newContent = (content.includes('"use strict";') ? '"use strict";\n' : "") + `
+        }
+        
+        newContent = (content.includes('"use strict";') ? '"use strict";\n' : "") + `
 // HoverSource Injection Patch
 if (!globalThis.__HOVERSOURCE_INJECT_SOURCE__) {
   globalThis.__HOVERSOURCE_INJECT_SOURCE__ = (function() {
@@ -721,46 +688,46 @@ if (!globalThis.__HOVERSOURCE_INJECT_SOURCE__) {
 }
 ${wrappedContent}
 `;
-              }
-            } else {
-              // 1. For anonymous function exports, prepend injection as the first statement in the body
-              newContent = newContent.replace(
-                /(exports\.jsxDEV\s*=\s*function\s*\(\s*type\s*,\s*config\s*,\s*maybeKey\s*,\s*isStaticChildren\s*\)\s*\{)/g,
-                "$1 globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config, arguments[4]);"
-              );
-              newContent = newContent.replace(
-                /(exports\.jsx\s*=\s*function\s*\(\s*type\s*,\s*config\s*,\s*maybeKey\s*\)\s*\{)/g,
-                "$1 globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config);"
-              );
-              newContent = newContent.replace(
-                /(exports\.jsxs\s*=\s*function\s*\(\s*type\s*,\s*config\s*,\s*maybeKey\s*\)\s*\{)/g,
-                "$1 globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config);"
-              );
+      }
+    } else {
+      // 1. For anonymous function exports, prepend injection as the first statement in the body
+      newContent = newContent.replace(
+        /exports\.jsxDEV\s*=\s*function\s*\(\s*type,\s*config,\s*maybeKey,\s*isStaticChildren\s*\)\s*\{/g,
+        "exports.jsxDEV = function(type, config, maybeKey, isStaticChildren) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config, arguments[4]);"
+      );
+      newContent = newContent.replace(
+        /exports\.jsx\s*=\s*function\s*\(\s*type,\s*config,\s*maybeKey\s*\)\s*\{/g,
+        "exports.jsx = function(type, config, maybeKey) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config);"
+      );
+      newContent = newContent.replace(
+        /exports\.jsxs\s*=\s*function\s*\(\s*type,\s*config,\s*maybeKey\s*\)\s*\{/g,
+        "exports.jsxs = function(type, config, maybeKey) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config);"
+      );
 
-              // 2. For variable assignments, replace with top-level wrappers at module scope
-              newContent = newContent.replace(
-                "exports.jsxDEV = jsxDEV$1;",
-                "exports.jsxDEV = function(t, c, k, s, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c, s); return jsxDEV$1(t, c, k, s, ...args); };"
-              );
-              newContent = newContent.replace(
-                "exports.jsxDEV = jsxDEV;",
-                "exports.jsxDEV = function(t, c, k, s, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c, s); return jsxDEV(t, c, k, s, ...args); };"
-              );
-              newContent = newContent.replace(
-                "exports.jsx = jsx;",
-                "exports.jsx = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsx(t, c, k, ...args); };"
-              );
-              newContent = newContent.replace(
-                "exports.jsx = jsxWithValidationDynamic;",
-                "exports.jsx = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsxWithValidationDynamic(t, c, k, ...args); };"
-              );
-              newContent = newContent.replace(
-                "exports.jsxs = jsxs;",
-                "exports.jsxs = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsxs(t, c, k, ...args); };"
-              );
+      // 2. For variable assignments, replace with top-level wrappers at module scope
+      newContent = newContent.replace(
+        "exports.jsxDEV = jsxDEV$1;",
+        "exports.jsxDEV = function(t, c, k, s, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c, s); return jsxDEV$1(t, c, k, s, ...args); };"
+      );
+      newContent = newContent.replace(
+        "exports.jsxDEV = jsxDEV;",
+        "exports.jsxDEV = function(t, c, k, s, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c, s); return jsxDEV(t, c, k, s, ...args); };"
+      );
+      newContent = newContent.replace(
+        "exports.jsx = jsx;",
+        "exports.jsx = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsx(t, c, k, ...args); };"
+      );
+      newContent = newContent.replace(
+        "exports.jsx = jsxWithValidationDynamic;",
+        "exports.jsx = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsxWithValidationDynamic(t, c, k, ...args); };"
+      );
+      newContent = newContent.replace(
+        "exports.jsxs = jsxs;",
+        "exports.jsxs = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsxs(t, c, k, ...args); };"
+      );
 
-              // 3. Append the global helper block to the end of the file
-              newContent = newContent + `
+      // 3. Append the global helper block to the end of the file
+      newContent = newContent + `
 // HoverSource Injection Patch
 globalThis.__HOVERSOURCE_INJECT_SOURCE__ = (function() {
   const path = require("path");
@@ -825,16 +792,54 @@ globalThis.__HOVERSOURCE_INJECT_SOURCE__ = (function() {
   };
 })();
 `;
-            }      if (newContent !== content) {
-              recordPatchState(fullPath, content);
-              patchedReactRuntimesList.push({ path: fullPath, originalContent: content });
-              fs.writeFileSync(fullPath, newContent, "utf-8");
-              console.log(`[HoverSource] Temporarily patched React development runtime on disk: ${path.relative(projectRoot, fullPath)}`);
-            }
-          }
-        } catch (err: any) {
-          console.warn(`[HoverSource] Failed to patch React runtime in ${path.relative(projectRoot, fullPath)}:`, err.message);
-        }
+    }
+
+    if (newContent !== content) {
+      recordPatchState(fullPath, content);
+      patchedReactRuntimesList.push({ path: fullPath, originalContent: content });
+      fs.writeFileSync(fullPath, newContent, "utf-8");
+      console.log(`[HoverSource] Temporarily patched React development runtime on disk: ${path.relative(projectRoot, fullPath)}`);
+    }
+  } catch (err: any) {
+    console.warn(`[HoverSource] Failed to patch React runtime in ${path.relative(projectRoot, fullPath)}:`, err.message);
+  }
+}
+
+function patchReactRuntimes(projectRoot: string) {
+  process.once("exit", restoreReactRuntimes);
+
+  const searchDirs = [
+    projectRoot,
+    path.join(projectRoot, "apps/web")
+  ];
+
+  const relativePaths = [
+    "node_modules/react/cjs/react-jsx-dev-runtime.development.js",
+    "node_modules/next/dist/compiled/react/cjs/react-jsx-dev-runtime.development.js",
+    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-dev-runtime.development.js",
+    "node_modules/next/dist/compiled/react/cjs/react-jsx-dev-runtime.react-server.development.js",
+    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-dev-runtime.react-server.development.js",
+    "node_modules/react/cjs/react-jsx-runtime.development.js",
+    "node_modules/next/dist/compiled/react/cjs/react-jsx-runtime.development.js",
+    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-runtime.development.js",
+    "node_modules/next/dist/compiled/react/cjs/react-jsx-runtime.react-server.development.js",
+    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-runtime.react-server.development.js",
+    // Next.js App Router vendored runtimes
+    "node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime.js",
+    "node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-jsx-runtime.js",
+    "node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js",
+    "node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-runtime.js",
+    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime.js",
+    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/rsc/react-jsx-runtime.js",
+    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js",
+    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/ssr/react-jsx-runtime.js"
+  ];
+
+  for (const dir of searchDirs) {
+    for (const relPath of relativePaths) {
+      const fullPath = path.resolve(dir, relPath);
+      if (fs.existsSync(fullPath)) {
+        patchSingleReactRuntime(fullPath, relPath, projectRoot);
       }
     }
   }

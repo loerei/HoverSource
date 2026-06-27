@@ -1,7 +1,6 @@
-import { register } from "node:module";
+import Module, { register } from "node:module";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import path from "node:path";
-import Module from "node:module";
 import fs from "node:fs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,7 +67,7 @@ try {
 
     const isTarget = request === "react/jsx-dev-runtime" ||
                      request.endsWith("/react/jsx-dev-runtime") ||
-                     request.replace(/\\/g, "/").includes("react/jsx-dev-runtime") ||
+                      request.replaceAll("\\", "/").includes("react/jsx-dev-runtime") ||
                      request.includes("next/dist/compiled/react/jsx-dev-runtime");
 
     if (isTarget) {

@@ -94,21 +94,21 @@
 
   // ../source-resolver/dist/adapters/ReactInvasiveAdapter.js
   var invasiveLocs = /* @__PURE__ */ new WeakMap();
-  if (typeof window !== "undefined" && typeof document !== "undefined") {
+  if (typeof globalThis.window !== "undefined" && typeof globalThis.document !== "undefined") {
     const observer = new MutationObserver((mutations) => {
       for (const m of mutations) {
         if (m.type === "childList") {
           m.addedNodes.forEach((node) => {
             if (node.nodeType === 1) {
               const el = node;
-              const loc = el.getAttribute("data-hoversource-loc");
+              const loc = el.dataset.hoversourceLoc;
               if (loc) {
                 invasiveLocs.set(el, loc);
               }
               try {
                 el.querySelectorAll("[data-hoversource-loc]").forEach((child) => {
                   if (child instanceof HTMLElement) {
-                    invasiveLocs.set(child, child.getAttribute("data-hoversource-loc"));
+                    invasiveLocs.set(child, child.dataset.hoversourceLoc);
                   }
                 });
               } catch {
@@ -117,7 +117,7 @@
           });
         } else if (m.type === "attributes" && m.attributeName === "data-hoversource-loc") {
           const el = m.target;
-          const loc = el.getAttribute("data-hoversource-loc");
+          const loc = el.dataset.hoversourceLoc;
           if (loc) {
             invasiveLocs.set(el, loc);
           }
@@ -128,7 +128,7 @@
       try {
         document.querySelectorAll("[data-hoversource-loc]").forEach((el) => {
           if (el instanceof HTMLElement) {
-            invasiveLocs.set(el, el.getAttribute("data-hoversource-loc"));
+            invasiveLocs.set(el, el.dataset.hoversourceLoc);
           }
         });
       } catch {
@@ -2499,6 +2499,33 @@ Suggested layout insertion (heuristic only):
     }
     initStyles() {
       const isLightTheme = this.config?.theme === "light" || this.config?.theme === "system" && !globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+      const colors = isLightTheme ? {
+        tooltipBg: "rgba(255, 255, 255, 0.96)",
+        tooltipBorder: "rgba(0, 0, 0, 0.15)",
+        tooltipText: "#1f2937",
+        borderSep: "rgba(0, 0, 0, 0.1)",
+        labelColor: "#6b7280",
+        stackText: "#374151",
+        stackBg: "rgba(0, 0, 0, 0.05)",
+        layerShapeFill: "#e5e7eb",
+        layerShapeStroke: "rgba(0,0,0,0.35)",
+        layerShapeHoverFill: "#d1d5db",
+        layerShapeHoverStroke: "rgba(0,0,0,0.6)",
+        layerHintColor: "#9ca3af"
+      } : {
+        tooltipBg: "rgba(18, 18, 18, 0.95)",
+        tooltipBorder: "rgba(255, 255, 255, 0.15)",
+        tooltipText: "#f3f4f6",
+        borderSep: "rgba(255, 255, 255, 0.1)",
+        labelColor: "#9ca3af",
+        stackText: "#e5e7eb",
+        stackBg: "rgba(255, 255, 255, 0.05)",
+        layerShapeFill: "#262626",
+        layerShapeStroke: "rgba(255,255,255,0.5)",
+        layerShapeHoverFill: "#3f3f46",
+        layerShapeHoverStroke: "rgba(255,255,255,0.7)",
+        layerHintColor: "#6b7280"
+      };
       const style = document.createElement("style");
       style.id = "hoversource-styles";
       style.innerHTML = `
@@ -2589,10 +2616,10 @@ Suggested layout insertion (heuristic only):
       }
       .hoversource-tooltip {
         position: absolute;
-        background: ${isLightTheme ? "rgba(255, 255, 255, 0.96)" : "rgba(18, 18, 18, 0.95)"};
+        background: ${colors.tooltipBg};
         backdrop-filter: blur(8px);
-        border: 1px solid ${isLightTheme ? "rgba(0, 0, 0, 0.15)" : "rgba(255, 255, 255, 0.15)"};
-        color: ${isLightTheme ? "#1f2937" : "#f3f4f6"};
+        border: 1px solid ${colors.tooltipBorder};
+        color: ${colors.tooltipText};
         padding: 12px;
         border-radius: 8px;
         font-size: 11px;
@@ -2607,7 +2634,7 @@ Suggested layout insertion (heuristic only):
         font-size: 13px;
         color: #3b82f6;
         margin-bottom: 6px;
-        border-bottom: 1px solid ${isLightTheme ? "rgba(0, 0, 0, 0.1)" : "rgba(255, 255, 255, 0.1)"};
+        border-bottom: 1px solid ${colors.borderSep};
         padding-bottom: 4px;
         display: flex;
         justify-content: space-between;
@@ -2622,15 +2649,15 @@ Suggested layout insertion (heuristic only):
         text-transform: uppercase;
       }
       .hoversource-section { margin-top: 6px; }
-      .hoversource-label { color: ${isLightTheme ? "#6b7280" : "#9ca3af"}; font-weight: 500; }
+      .hoversource-label { color: ${colors.labelColor}; font-weight: 500; }
       .hoversource-value { font-family: monospace; color: #10b981; word-break: break-all; }
       .hoversource-link { color: #2563eb; text-decoration: underline; cursor: pointer; }
       .hoversource-link:hover { color: #3b82f6; }
       .hoversource-stack { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
       .hoversource-stack-item {
         font-family: monospace;
-        color: ${isLightTheme ? "#374151" : "#e5e7eb"};
-        background: ${isLightTheme ? "rgba(0, 0, 0, 0.05)" : "rgba(255, 255, 255, 0.05)"};
+        color: ${colors.stackText};
+        background: ${colors.stackBg};
         padding: 2px 4px;
         border-radius: 3px;
       }
@@ -2665,14 +2692,14 @@ Suggested layout insertion (heuristic only):
         overflow: visible;
       }
       .hs-layer-shape {
-        fill: ${isLightTheme ? "#e5e7eb" : "#262626"};
-        stroke: ${isLightTheme ? "rgba(0,0,0,0.35)" : "rgba(255,255,255,0.5)"};
+        fill: ${colors.layerShapeFill};
+        stroke: ${colors.layerShapeStroke};
         stroke-width: 1.5;
         transition: fill 0.12s, stroke 0.12s;
       }
       .hs-layer-dot:hover .hs-layer-shape {
-        fill: ${isLightTheme ? "#d1d5db" : "#3f3f46"};
-        stroke: ${isLightTheme ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.7)"};
+        fill: ${colors.layerShapeHoverFill};
+        stroke: ${colors.layerShapeHoverStroke};
       }
       .hs-layer-dot--active .hs-layer-shape {
         fill: #3b82f6;
@@ -2687,7 +2714,7 @@ Suggested layout insertion (heuristic only):
       }
       .hs-layer-hint {
         font-size: 8px;
-        color: ${isLightTheme ? "#9ca3af" : "#6b7280"};
+        color: ${colors.layerHintColor};
         text-align: center;
         margin-top: 2px;
         white-space: nowrap;
@@ -2705,7 +2732,7 @@ Suggested layout insertion (heuristic only):
         font-size: 9px;
         color: #6b7280;
         text-align: right;
-        border-top: 1px dashed ${isLightTheme ? "rgba(0, 0, 0, 0.1)" : "rgba(255, 255, 255, 0.1)"};
+        border-top: 1px dashed ${colors.borderSep};
         padding-top: 4px;
       }
     `;

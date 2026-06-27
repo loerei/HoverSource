@@ -3,7 +3,7 @@ import { getElementMetadata, getComponentNameFromFile, parseColonLocation } from
 
 const invasiveLocs = new WeakMap<HTMLElement, string>();
 
-if (typeof globalThis.window !== "undefined" && typeof globalThis.document !== "undefined") {
+if (globalThis.window !== undefined && globalThis.document !== undefined) {
   const observer = new MutationObserver((mutations) => {
     for (const m of mutations) {
       if (m.type === "childList") {

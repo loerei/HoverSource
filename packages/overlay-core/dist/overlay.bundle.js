@@ -94,7 +94,7 @@
 
   // ../source-resolver/dist/adapters/ReactInvasiveAdapter.js
   var invasiveLocs = /* @__PURE__ */ new WeakMap();
-  if (typeof globalThis.window !== "undefined" && typeof globalThis.document !== "undefined") {
+  if (globalThis.window !== void 0 && globalThis.document !== void 0) {
     const observer = new MutationObserver((mutations) => {
       for (const m of mutations) {
         if (m.type === "childList") {

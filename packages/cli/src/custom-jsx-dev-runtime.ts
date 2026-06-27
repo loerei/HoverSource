@@ -10,7 +10,7 @@ const original = originalUrl ? await import(originalUrl) : await import("react/j
 export const Fragment = original.Fragment;
 
 export function jsxDEV(type: any, props: any, key: any, isStaticChildren: any, source: any, self: any) {
-  if (typeof globalThis.window === "undefined" && source && props && typeof type === "string") {
+  if (globalThis.window === undefined && source && props && typeof type === "string") {
     let filePath = source.fileName || "";
     try {
       // Normalize absolute path to relative path based on process CWD

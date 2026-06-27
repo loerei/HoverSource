@@ -591,7 +591,7 @@ function patchSingleReactRuntime(fullPath: string, relPath: string, projectRoot:
     let newContent = content;
 
     if (relPath.includes("vendored")) {
-      const matchExpr = content.match(/module\.exports\s*=\s*(.*?);/);
+      const matchExpr = content.match(/module\.exports\s*=\s*([^;]+);/);
       if (matchExpr) {
         const originalExpr = matchExpr[1];
         const isDev = relPath.includes("dev");

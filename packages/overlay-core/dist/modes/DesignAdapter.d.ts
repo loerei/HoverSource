@@ -55,6 +55,7 @@ export declare class DesignAdapter implements InteractionMode {
     private getHorizontalOffset;
     private getVerticalOffset;
     private formatAnchorStatus;
+    private buildTooltipHtml;
     private renderTooltip;
     onShortcut(command: SemanticShortcut): void;
     private readonly handleKeyDown;

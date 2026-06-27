@@ -93,13 +93,72 @@
   };
 
   // ../source-resolver/dist/adapters/ReactInvasiveAdapter.js
+  var invasiveLocs = /* @__PURE__ */ new WeakMap();
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "childList") {
+          m.addedNodes.forEach((node) => {
+            if (node.nodeType === 1) {
+              const el = node;
+              const loc = el.getAttribute("data-hoversource-loc");
+              if (loc) {
+                invasiveLocs.set(el, loc);
+              }
+              try {
+                el.querySelectorAll("[data-hoversource-loc]").forEach((child) => {
+                  if (child instanceof HTMLElement) {
+                    invasiveLocs.set(child, child.getAttribute("data-hoversource-loc"));
+                  }
+                });
+              } catch {
+              }
+            }
+          });
+        } else if (m.type === "attributes" && m.attributeName === "data-hoversource-loc") {
+          const el = m.target;
+          const loc = el.getAttribute("data-hoversource-loc");
+          if (loc) {
+            invasiveLocs.set(el, loc);
+          }
+        }
+      }
+    });
+    const scan = () => {
+      try {
+        document.querySelectorAll("[data-hoversource-loc]").forEach((el) => {
+          if (el instanceof HTMLElement) {
+            invasiveLocs.set(el, el.getAttribute("data-hoversource-loc"));
+          }
+        });
+      } catch {
+      }
+    };
+    const startObserver = () => {
+      scan();
+      try {
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ["data-hoversource-loc"]
+        });
+      } catch {
+      }
+    };
+    if (document.body) {
+      startObserver();
+    } else {
+      document.addEventListener("DOMContentLoaded", startObserver);
+    }
+  }
   var ReactInvasiveAdapter = class {
     name = "react-invasive";
     canResolve(element) {
-      return !!(element.dataset && typeof element.dataset.hoversourceLoc === "string");
+      return invasiveLocs.has(element) || !!(element.dataset && typeof element.dataset.hoversourceLoc === "string");
     }
     resolve(element) {
-      const value = element.dataset?.hoversourceLoc;
+      const value = invasiveLocs.get(element) || element.dataset?.hoversourceLoc;
       if (value) {
         const parsed = parseColonLocation(value);
         if (parsed) {
@@ -384,7 +443,7 @@
     nodeCache = /* @__PURE__ */ new WeakMap();
     constructor() {
       this.fiberAdapter = new ReactFiberAdapter();
-      this.adapters.push(this.fiberAdapter, new ReactInvasiveAdapter(), new VueAdapter(), new SvelteAdapter(), new PreactAdapter(), new SolidAdapter(), new AstroAdapter(), new AngularAdapter());
+      this.adapters.push(new ReactInvasiveAdapter(), this.fiberAdapter, new VueAdapter(), new SvelteAdapter(), new PreactAdapter(), new SolidAdapter(), new AstroAdapter(), new AngularAdapter());
       this.setupMutationObserver();
     }
     setupMutationObserver() {
@@ -2392,8 +2451,8 @@ Suggested layout insertion (heuristic only):
     }
     async init() {
       await this.loadConfig();
-      this.initStyles();
       this.createUI();
+      this.initStyles();
       this.initShortcuts();
       this.activeMode.activate(this);
       globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
@@ -2650,7 +2709,11 @@ Suggested layout insertion (heuristic only):
         padding-top: 4px;
       }
     `;
-      document.head.appendChild(style);
+      if (this.container) {
+        this.container.appendChild(style);
+      } else {
+        document.head.appendChild(style);
+      }
     }
     createUI() {
       if (this.container)
@@ -2666,6 +2729,12 @@ Suggested layout insertion (heuristic only):
       this.tooltipBox.style.display = "none";
       this.container.appendChild(this.tooltipBox);
       document.body.appendChild(this.container);
+    }
+    ensureUI() {
+      if (this.container && !document.body.contains(this.container)) {
+        console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
+        document.body.appendChild(this.container);
+      }
     }
     initShortcuts() {
       globalThis.addEventListener("keydown", this.handleKeyDown);
@@ -2745,6 +2814,7 @@ Suggested layout insertion (heuristic only):
       return tag === "input" || tag === "textarea" || activeEl.hasAttribute("contenteditable");
     }
     handlePointerOver = (e) => {
+      this.ensureUI();
       const target = e.target;
       if (!target || target === this.container || this.container?.contains(target)) {
         if (this.isFrozen) {
@@ -2760,6 +2830,7 @@ Suggested layout insertion (heuristic only):
       }
     };
     handlePointerMove = (e) => {
+      this.ensureUI();
       this.activeMode.onPointerMove(e);
       if (this.isFrozen) {
         e.stopImmediatePropagation();

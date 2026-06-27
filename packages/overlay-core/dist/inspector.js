@@ -10,13 +10,7 @@ if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" &
     });
     observer.observe(document.body, { childList: true, subtree: true, attributes: true });
 }
-export function inspectVisualContext(element, maxDepth = 32) {
-    if (contextCache.has(element)) {
-        return contextCache.get(element);
-    }
-    const parentEffects = [];
-    const layoutConstraints = {};
-    // 1. Inspect layout constraints on the element itself
+function inspectLayoutConstraints(element, layoutConstraints) {
     try {
         const computed = globalThis.getComputedStyle(element);
         if (computed.position && computed.position !== "static") {
@@ -38,6 +32,15 @@ export function inspectVisualContext(element, maxDepth = 32) {
     catch (e) {
         console.warn("[HoverSource] Failed to compute element layout constraints", e);
     }
+}
+export function inspectVisualContext(element, maxDepth = 32) {
+    if (contextCache.has(element)) {
+        return contextCache.get(element);
+    }
+    const parentEffects = [];
+    const layoutConstraints = {};
+    // 1. Inspect layout constraints on the element itself
+    inspectLayoutConstraints(element, layoutConstraints);
     // 2. Traverse up parent hierarchy (up to maxDepth levels) to identify inherited visual/scrolling effects
     let current = element.parentElement;
     let depth = 0;

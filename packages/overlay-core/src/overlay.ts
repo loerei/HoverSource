@@ -37,8 +37,8 @@ class OverlayEngine implements OverlayController {
 
   private async init() {
     await this.loadConfig();
-    this.initStyles();
     this.createUI();
+    this.initStyles();
     this.initShortcuts();
 
     this.activeMode.activate(this);
@@ -309,7 +309,11 @@ class OverlayEngine implements OverlayController {
         padding-top: 4px;
       }
     `;
-    document.head.appendChild(style);
+    if (this.container) {
+      this.container.appendChild(style);
+    } else {
+      document.head.appendChild(style);
+    }
   }
 
   private createUI() {
@@ -328,6 +332,13 @@ class OverlayEngine implements OverlayController {
     this.container.appendChild(this.tooltipBox);
 
     document.body.appendChild(this.container);
+  }
+
+  private ensureUI() {
+    if (this.container && !document.body.contains(this.container)) {
+      console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
+      document.body.appendChild(this.container);
+    }
   }
 
   private initShortcuts() {
@@ -423,6 +434,7 @@ class OverlayEngine implements OverlayController {
   }
 
   private readonly handlePointerOver = (e: PointerEvent) => {
+    this.ensureUI();
     const target = e.target as HTMLElement | null;
     if (!target || target === this.container || this.container?.contains(target)) {
       if (this.isFrozen) {
@@ -440,6 +452,7 @@ class OverlayEngine implements OverlayController {
   };
 
   private readonly handlePointerMove = (e: PointerEvent) => {
+    this.ensureUI();
     this.activeMode.onPointerMove(e);
     if (this.isFrozen) {
       e.stopImmediatePropagation();

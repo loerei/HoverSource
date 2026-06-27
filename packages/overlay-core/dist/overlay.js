@@ -28,8 +28,8 @@ class OverlayEngine {
     }
     async init() {
         await this.loadConfig();
-        this.initStyles();
         this.createUI();
+        this.initStyles();
         this.initShortcuts();
         this.activeMode.activate(this);
         globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
@@ -290,7 +290,12 @@ class OverlayEngine {
         padding-top: 4px;
       }
     `;
-        document.head.appendChild(style);
+        if (this.container) {
+            this.container.appendChild(style);
+        }
+        else {
+            document.head.appendChild(style);
+        }
     }
     createUI() {
         if (this.container)
@@ -306,6 +311,12 @@ class OverlayEngine {
         this.tooltipBox.style.display = "none";
         this.container.appendChild(this.tooltipBox);
         document.body.appendChild(this.container);
+    }
+    ensureUI() {
+        if (this.container && !document.body.contains(this.container)) {
+            console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
+            document.body.appendChild(this.container);
+        }
     }
     initShortcuts() {
         globalThis.addEventListener("keydown", this.handleKeyDown);
@@ -397,6 +408,7 @@ class OverlayEngine {
         return tag === "input" || tag === "textarea" || activeEl.hasAttribute("contenteditable");
     }
     handlePointerOver = (e) => {
+        this.ensureUI();
         const target = e.target;
         if (!target || target === this.container || this.container?.contains(target)) {
             if (this.isFrozen) {
@@ -412,6 +424,7 @@ class OverlayEngine {
         }
     };
     handlePointerMove = (e) => {
+        this.ensureUI();
         this.activeMode.onPointerMove(e);
         if (this.isFrozen) {
             e.stopImmediatePropagation();

@@ -95,7 +95,7 @@ HoverSource supports resolving metadata for multiple frontend frameworks at diff
 | **Column Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | None |
 | **Tag Name & Classes** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved |
 
-\* *Note: Vue and Angular require compile-time template tagging (Invasive mode via `hs install --vue` or `hs install --angular`) to expose line/column locations (and file path for Angular). Other frameworks resolve them out-of-the-box in development mode (Non-Invasive).*
+\* *Note: Vue and Angular require compile-time template tagging (Invasive mode via `hs install --vue` or `hs install --angular`) to expose line/column locations (and file path for Angular). Other frameworks resolve them out-of-the-box in development mode (Non-Invasive). For server-side environments (React Server Components / SSR in Next.js), React utilizes automatic, zero-config on-disk runtime patching during dev server execution.*
 
 ### Next.js & React Server Components (RSC) Support
 

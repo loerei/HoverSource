@@ -884,7 +884,8 @@ async function runWebAppMode(
     if (hasExited) {
       console.error(`\n\x1b[31m[HoverSource] Error: Dev server process exited early with code ${exitCode}.\x1b[0m`);
       console.error(`[HoverSource] Please make sure your dev server is built and can run successfully.`);
-      console.error(`[HoverSource] If it's a production server, ensure you have built it first (e.g. npm run build).`);
+      console.error(`[HoverSource] If it's a production server, ensure you have built it first (e.g. npm run build)`);
+      console.error(`[HoverSource] or run the development server instead (e.g. hs dev).`);
       return { child };
     }
     console.error(`[HoverSource] Dev server did not respond on port ${devPort} within timeout.`);

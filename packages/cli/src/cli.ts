@@ -581,26 +581,22 @@ function restoreLeftoverPatches() {
 }
 const patchedReactRuntimesList: { path: string; originalContent: string }[] = [];
 
-function patchSingleReactRuntime(fullPath: string, relPath: string, projectRoot: string) {
-  try {
-    const content = fs.readFileSync(fullPath, "utf-8");
-    if (content.includes("HoverSource Injection Patch")) {
-      return;
-    }
+function patchVendoredReactRuntime(content: string, relPath: string): string | null {
+  const exportsIdx = content.indexOf("module.exports");
+  if (exportsIdx === -1) {
+    return null;
+  }
+  const equalsIdx = content.indexOf("=", exportsIdx);
+  const endIdx = content.indexOf(";", exportsIdx);
+  if (equalsIdx === -1 || endIdx === -1 || equalsIdx >= endIdx) {
+    return null;
+  }
 
-    let newContent = content;
-
-    if (relPath.includes("vendored")) {
-      const exportsIdx = content.indexOf("module.exports");
-      if (exportsIdx !== -1) {
-        const equalsIdx = content.indexOf("=", exportsIdx);
-        const endIdx = content.indexOf(";", exportsIdx);
-        if (equalsIdx !== -1 && endIdx !== -1 && equalsIdx < endIdx) {
-          const originalExpr = content.slice(equalsIdx + 1, endIdx).trim();
-          const isDev = relPath.includes("dev");
-          let wrappedContent = "";
-          if (isDev) {
-            wrappedContent = `
+  const originalExpr = content.slice(equalsIdx + 1, endIdx).trim();
+  const isDev = relPath.includes("dev");
+  let wrappedContent = "";
+  if (isDev) {
+    wrappedContent = `
 const original = ${originalExpr};
 exports.Fragment = original.Fragment;
 exports.jsxDEV = function(type, config, maybeKey, isStaticChildren, source, self) {
@@ -608,8 +604,8 @@ exports.jsxDEV = function(type, config, maybeKey, isStaticChildren, source, self
   return original.jsxDEV(type, config, maybeKey, isStaticChildren, source, self);
 };
 `;
-          } else {
-            wrappedContent = `
+  } else {
+    wrappedContent = `
 const original = ${originalExpr};
 exports.Fragment = original.Fragment;
 exports.jsx = function(type, config, maybeKey, ...args) {
@@ -621,9 +617,9 @@ exports.jsxs = function(type, config, maybeKey, ...args) {
   return original.jsxs.call(this, type, config, maybeKey, ...args);
 };
 `;
-          }
-          
-          newContent = (content.includes('"use strict";') ? '"use strict";\n' : "") + `
+  }
+
+  return (content.includes('"use strict";') ? '"use strict";\n' : "") + `
 // HoverSource Injection Patch
 if (!globalThis.__HOVERSOURCE_INJECT_SOURCE__) {
   globalThis.__HOVERSOURCE_INJECT_SOURCE__ = (function() {
@@ -691,7 +687,21 @@ if (!globalThis.__HOVERSOURCE_INJECT_SOURCE__) {
 }
 ${wrappedContent}
 `;
-        }
+}
+
+function patchSingleReactRuntime(fullPath: string, relPath: string, projectRoot: string) {
+  try {
+    const content = fs.readFileSync(fullPath, "utf-8");
+    if (content.includes("HoverSource Injection Patch")) {
+      return;
+    }
+
+    let newContent = content;
+
+    if (relPath.includes("vendored")) {
+      const patched = patchVendoredReactRuntime(content, relPath);
+      if (patched) {
+        newContent = patched;
       }
     } else {
       // 1. For anonymous function exports, prepend injection as the first statement in the body

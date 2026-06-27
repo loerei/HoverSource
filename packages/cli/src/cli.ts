@@ -846,6 +846,49 @@ async function runWebAppMode(
   const devPort = detectDevServerPort(projectRoot, execCommand);
   console.log(`[HoverSource] Web app detected. Dev server expected on port ${devPort}.`);
 
+  const devPortFree = await isPortFree(devPort);
+  if (!devPortFree) {
+    const pid = await getPidUsingPort(devPort);
+    const procName = pid ? await getProcessName(pid) : undefined;
+    console.warn(`\n\x1b[33m[HoverSource] ⚠️  WARNING: Dev server port ${devPort} is already in use by another process!\x1b[0m`);
+    if (pid) {
+      console.warn(`\x1b[33m[HoverSource] Process: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
+    } else {
+      console.warn(`\x1b[33m[HoverSource] Could not identify the process holding the port.\x1b[0m`);
+    }
+    
+    const autoResolve = args["auto-resolve"] === true;
+    const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
+    
+    let resolvedConflict = false;
+    if (pid && isInteractive) {
+      let shouldKill = autoResolve;
+      if (shouldKill) {
+        console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically terminating process ${pid}...`);
+      } else {
+        const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${devPort}? (y/N): \x1b[0m`);
+        shouldKill = answer.trim().toLowerCase() === "y";
+      }
+      
+      if (shouldKill) {
+        console.log(`[HoverSource] Terminating process ${pid}...`);
+        const success = await killProcess(pid, devPort);
+        if (success) {
+          console.log(`[HoverSource] Process terminated successfully. Port ${devPort} is now free.`);
+          resolvedConflict = true;
+          // Wait a brief moment for OS to release the socket
+          await new Promise((r) => setTimeout(r, 700));
+        } else {
+          console.error(`[HoverSource] Failed to terminate process. You may need to run as administrator or close it manually.`);
+        }
+      }
+    }
+    
+    if (!resolvedConflict) {
+      console.warn(`[HoverSource] Continuing anyway. If it fails, please close the process using port ${devPort} manually.`);
+    }
+  }
+
   // Spawn the dev server
   const { command, args: cmdArgs } = parseCommand(execCommand);
   const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));

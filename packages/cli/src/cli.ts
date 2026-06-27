@@ -1109,7 +1109,19 @@ async function handleExecMode(
     const { child } = await runWebAppMode(resolved.execCommand, projectRoot, serverPort, args);
     
     const cleanup = () => {
-      child.kill();
+      if (child.pid) {
+        try {
+          if (process.platform === "win32") {
+            exec(`taskkill /F /T /PID ${child.pid}`);
+          } else {
+            process.kill(-child.pid, "SIGKILL");
+          }
+        } catch {
+          child.kill();
+        }
+      } else {
+        child.kill();
+      }
       process.exit();
     };
     process.on("SIGINT", cleanup);

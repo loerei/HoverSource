@@ -788,10 +788,17 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
   }
 }
 
-async function waitForServer(port: number, timeoutMs = 120_000): Promise<boolean> {
+async function waitForServer(
+  port: number,
+  timeoutMs = 120_000,
+  hasExitedCheck?: () => boolean
+): Promise<boolean> {
   const start = Date.now();
   let dots = 0;
   while (Date.now() - start < timeoutMs) {
+    if (hasExitedCheck && hasExitedCheck()) {
+      return false;
+    }
     const up = await new Promise<boolean>((resolve) => {
       const tryHost = (url: string) => {
         const req = http.get(url, (res) => {
@@ -862,11 +869,24 @@ async function runWebAppMode(
     console.error(`[HoverSource] Dev server failed to start:`, err.message);
   });
 
+  let hasExited = false;
+  let exitCode: number | null = null;
+  child.on("exit", (code) => {
+    hasExited = true;
+    exitCode = code;
+  });
+
   // Wait for the dev server to be ready
   console.log(`[HoverSource] Waiting for dev server on port ${devPort} (timeout: ${timeoutSec}s)...`);
-  const ready = await waitForServer(devPort, timeoutMs);
+  const ready = await waitForServer(devPort, timeoutMs, () => hasExited);
 
   if (!ready) {
+    if (hasExited) {
+      console.error(`\n\x1b[31m[HoverSource] Error: Dev server process exited early with code ${exitCode}.\x1b[0m`);
+      console.error(`[HoverSource] Please make sure your dev server is built and can run successfully.`);
+      console.error(`[HoverSource] If it's a production server, ensure you have built it first (e.g. npm run build).`);
+      return { child };
+    }
     console.error(`[HoverSource] Dev server did not respond on port ${devPort} within timeout.`);
     console.error(`[HoverSource] If your dev server uses a different port, run it separately and use:`);
     console.error(`\x1b[36m[HoverSource]   hs -t http://localhost:<your-port>\x1b[0m`);

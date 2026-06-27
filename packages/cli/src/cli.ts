@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { startCompanionServer, loadMergedConfig } from "@hoversource/companion-server";
+import { injectOverlayScript } from "@hoversource/client-injector";
 import { startProxy } from "./proxy.js";
 import { exec, spawn } from "node:child_process";
 import path from "node:path";
@@ -150,12 +151,89 @@ function resolveSubcommand(
     ...pkg.dependencies,
     ...pkg.devDependencies,
   };
-  const isElectron = "electron" in allDeps;
+  const hasElectronDep = "electron" in allDeps;
+  let isElectron = hasElectronDep;
+  if (hasElectronDep) {
+    const scriptCmd = scripts[subcommand] || "";
+    const lowerCmd = scriptCmd.toLowerCase();
+    const isWebDevServer = (
+      lowerCmd.includes("vite") ||
+      lowerCmd.includes("next ") ||
+      lowerCmd.includes("nuxt") ||
+      lowerCmd.includes("webpack") ||
+      lowerCmd.includes("astro")
+    );
+    const mentionsElectron = lowerCmd.includes("electron");
+    if (isWebDevServer && !mentionsElectron) {
+      isElectron = false;
+    }
+  }
 
   return { execCommand: `npm run ${subcommand}`, isElectron };
 }
 
-function detectDevServerPort(projectRoot: string): number {
+function detectDevServerPort(projectRoot: string, execCommand?: string): number {
+  let configPort: number | undefined;
+
+  // 1. Try to find custom port from config file mentioned in execCommand
+  if (execCommand) {
+    try {
+      let actualCmd = execCommand;
+      const npmRunMatch = execCommand.match(/^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/);
+      if (npmRunMatch) {
+        const scriptName = npmRunMatch[1];
+        const pkgPath = path.join(projectRoot, "package.json");
+        if (fs.existsSync(pkgPath)) {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+          if (pkg.scripts && pkg.scripts[scriptName]) {
+            actualCmd = pkg.scripts[scriptName];
+          }
+        }
+      }
+
+      const configMatch = actualCmd.match(/(?:--config|-c)\s+([^\s"'\\]+)/);
+      let configPath = configMatch ? configMatch[1] : undefined;
+      if (!configPath) {
+        const fileMatch = actualCmd.match(/([^\s"'\\]+\.config\.[jt]s)/);
+        configPath = fileMatch ? fileMatch[1] : undefined;
+      }
+
+      if (configPath) {
+        const fullPath = path.resolve(projectRoot, configPath);
+        if (fs.existsSync(fullPath)) {
+          const content = fs.readFileSync(fullPath, "utf-8");
+          const portMatch = content.match(/port:\s*(\d+)/);
+          if (portMatch) {
+            configPort = Number.parseInt(portMatch[1], 10);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Try to find common config files in root
+  if (!configPort) {
+    const commonConfigs = ["vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs"];
+    for (const file of commonConfigs) {
+      try {
+        const fullPath = path.join(projectRoot, file);
+        if (fs.existsSync(fullPath)) {
+          const content = fs.readFileSync(fullPath, "utf-8");
+          const portMatch = content.match(/port:\s*(\d+)/);
+          if (portMatch) {
+            configPort = Number.parseInt(portMatch[1], 10);
+            break;
+          }
+        }
+      } catch {}
+    }
+  }
+
+  if (configPort && !Number.isNaN(configPort)) {
+    return configPort;
+  }
+
+  // 3. Fallback to package.json dependencies
   const pkgPath = path.join(projectRoot, "package.json");
   if (!fs.existsSync(pkgPath)) return 3000;
 
@@ -715,12 +793,28 @@ async function waitForServer(port: number, timeoutMs = 120_000): Promise<boolean
   let dots = 0;
   while (Date.now() - start < timeoutMs) {
     const up = await new Promise<boolean>((resolve) => {
-      const req = http.get(`http://127.0.0.1:${port}`, (res) => {
-        res.resume();
-        resolve(true);
-      });
-      req.setTimeout(1000, () => { req.destroy(); resolve(false); });
-      req.on("error", () => resolve(false));
+      const tryHost = (url: string) => {
+        const req = http.get(url, (res) => {
+          res.resume();
+          resolve(true);
+        });
+        req.setTimeout(500, () => {
+          req.destroy();
+          if (url.includes("localhost")) {
+            tryHost(`http://127.0.0.1:${port}`);
+          } else {
+            resolve(false);
+          }
+        });
+        req.on("error", () => {
+          if (url.includes("localhost")) {
+            tryHost(`http://127.0.0.1:${port}`);
+          } else {
+            resolve(false);
+          }
+        });
+      };
+      tryHost(`http://localhost:${port}`);
     });
     if (up) return true;
     dots++;
@@ -742,7 +836,7 @@ async function runWebAppMode(
   const timeoutSec = config.webAppDevServerTimeout ?? 120;
   const timeoutMs = timeoutSec * 1000;
 
-  const devPort = detectDevServerPort(projectRoot);
+  const devPort = detectDevServerPort(projectRoot, execCommand);
   console.log(`[HoverSource] Web app detected. Dev server expected on port ${devPort}.`);
 
   // Spawn the dev server
@@ -811,7 +905,58 @@ function resolveWindowsCommand(command: string): string {
   return command;
 }
 
-function runExecMode(execCommand: string, projectRoot: string, debugPort: number, args: any): void {
+function findScriptPath(projectRoot: string): string {
+  const pathsToTry = [
+    path.resolve(__dirname, "../../overlay-core/dist/overlay.bundle.js"),
+    path.resolve(__dirname, "../node_modules/@hoversource/overlay-core/dist/overlay.bundle.js"),
+    path.resolve(projectRoot, "node_modules/@hoversource/overlay-core/dist/overlay.bundle.js")
+  ];
+
+  for (const p of pathsToTry) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+
+  console.error(`[HoverSource] Critical Error: Could not locate overlay.bundle.js.`);
+  console.error(`Please run 'npm run build' inside the HoverSource directory before launching.`);
+  process.exit(1);
+}
+
+async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string): Promise<void> {
+  console.log(`[HoverSource] Watching debug port :${debugPort} for Chromium targets...`);
+  
+  let isInjected = false;
+  
+  const pollAndInject = async () => {
+    try {
+      const injectedCount = await injectOverlayScript(debugPort, scriptWithPort);
+      if (injectedCount > 0 && !isInjected) {
+        console.log(`[HoverSource] Successfully connected and injected into ${injectedCount} target(s).`);
+        isInjected = true;
+      }
+    } catch (err: any) {
+      if (isInjected) {
+        console.log(`[HoverSource] Lost connection or target closed. Re-watching...`);
+        isInjected = false;
+      }
+      if (process.env.DEBUG) {
+        console.debug("[HoverSource] Ignored poll injection error:", err.message);
+      }
+    }
+  };
+
+  await pollAndInject();
+  setInterval(pollAndInject, 2500);
+}
+
+function runExecMode(
+  execCommand: string,
+  projectRoot: string,
+  debugPort: number,
+  serverPort: number,
+  args: any
+): void {
   const { command, args: cmdArgs } = parseCommand(execCommand);
   const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
 
@@ -838,6 +983,13 @@ function runExecMode(execCommand: string, projectRoot: string, debugPort: number
     child.on("error", (err) => {
       console.error(`[HoverSource] Exec command failed to start: ${err.message}`);
     });
+
+    const scriptPath = findScriptPath(projectRoot);
+    const scriptContent = fs.readFileSync(validateSafePath(scriptPath), "utf-8");
+    const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
+    const scriptWithPort = portBootstrap + scriptContent;
+    
+    startCdpInjectionWatch(portToUse, scriptWithPort);
 
     const cleanup = () => {
       if (patchRestorer) patchRestorer();
@@ -907,14 +1059,30 @@ async function handleExecMode(
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
         const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-        resolved.isElectron = "electron" in allDeps;
+        const hasElectronDep = "electron" in allDeps;
+        let isElectron = hasElectronDep;
+        if (hasElectronDep) {
+          const lowerCmd = execArg.toLowerCase();
+          const isWebDevServer = (
+            lowerCmd.includes("vite") ||
+            lowerCmd.includes("next ") ||
+            lowerCmd.includes("nuxt") ||
+            lowerCmd.includes("webpack") ||
+            lowerCmd.includes("astro")
+          );
+          const mentionsElectron = lowerCmd.includes("electron");
+          if (isWebDevServer && !mentionsElectron) {
+            isElectron = false;
+          }
+        }
+        resolved.isElectron = isElectron;
       } catch {}
     }
   }
 
   if (resolved.isElectron) {
     console.log(`[HoverSource] Electron app detected. Running in exec mode.`);
-    runExecMode(resolved.execCommand, projectRoot, debugPort, args);
+    runExecMode(resolved.execCommand, projectRoot, debugPort, serverPort, args);
   } else {
     console.log(`[HoverSource] Web application detected. Running in web-app mode.`);
     const { child } = await runWebAppMode(resolved.execCommand, projectRoot, serverPort, args);
@@ -943,8 +1111,20 @@ async function main() {
   const requestedPort = Number.parseInt(String(args.port || args.p || 7300), 10);
   const debugPort = Number.parseInt(String(args["debug-port"] || 9222), 10);
 
+  // Check if start script exists in package.json to avoid conflict
+  let hasStartScript = false;
+  try {
+    const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      if (pkg?.scripts?.start) {
+        hasStartScript = true;
+      }
+    }
+  } catch {}
+
   // суб-команда Start
-  if (subcommand === "start") {
+  if (subcommand === "start" && !hasStartScript) {
     console.log(`[HoverSource] Starting companion server...`);
     const serverPort = await resolveCompanionPort(requestedPort);
     await startCompanionServer({ port: serverPort, projectRoot, debugPort });

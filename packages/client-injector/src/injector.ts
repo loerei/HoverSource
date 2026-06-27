@@ -80,6 +80,61 @@ function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
   });
 }
 
+function isAlreadyInjected(wsUrl: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const ws = new WebSocket(wsUrl);
+    let resolved = false;
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve(false);
+        try { ws.close(); } catch {}
+      }
+    }, 1500);
+
+    ws.on("open", () => {
+      ws.send(JSON.stringify({
+        id: 1,
+        method: "Runtime.evaluate",
+        params: {
+          expression: "!!(globalThis.__HOVERSOURCE_PORT__ || window.__HOVERSOURCE_PORT__)",
+          awaitPromise: false
+        }
+      }));
+    });
+
+    ws.on("message", (data) => {
+      try {
+        const dataStr = typeof data === "string" ? data : (data as Buffer).toString("utf8");
+        const msg = JSON.parse(dataStr);
+        if (msg.id === 1) {
+          clearTimeout(timeout);
+          resolved = true;
+          const isInjected = !!msg.result?.result?.value;
+          resolve(isInjected);
+          ws.close();
+        }
+      } catch (e) {
+        clearTimeout(timeout);
+        if (!resolved) {
+          resolved = true;
+          resolve(false);
+        }
+        ws.close();
+      }
+    });
+
+    ws.on("error", () => {
+      clearTimeout(timeout);
+      if (!resolved) {
+        resolved = true;
+        resolve(false);
+      }
+    });
+  });
+}
+
 export async function injectOverlayScript(port: number, scriptContent: string): Promise<number> {
   const listUrl = `http://127.0.0.1:${port}/json`;
   const targets = await fetchJson<CdpTarget[]>(listUrl);
@@ -96,6 +151,10 @@ export async function injectOverlayScript(port: number, scriptContent: string): 
   for (const target of validTargets) {
     if (target.webSocketDebuggerUrl) {
       try {
+        const already = await isAlreadyInjected(target.webSocketDebuggerUrl);
+        if (already) {
+          continue;
+        }
         await injectIntoTarget(target.webSocketDebuggerUrl, scriptContent);
         console.log(`[HoverSource] Injected overlay successfully into: ${target.title} (${target.url})`);
         injectionCount++;

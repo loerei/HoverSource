@@ -207,6 +207,19 @@ export function startProxy(options: ProxyOptions): Promise<void> {
     const proxyReq = agent.request(requestOptions);
 
     proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
+      socket.on("error", (err: any) => {
+        if (process.env.DEBUG) {
+          console.debug("[HoverSource Proxy] Client socket error:", err.message);
+        }
+        proxySocket.destroy();
+      });
+      proxySocket.on("error", (err: any) => {
+        if (process.env.DEBUG) {
+          console.debug("[HoverSource Proxy] Target socket error:", err.message);
+        }
+        socket.destroy();
+      });
+
       let responseHeader = `HTTP/${req.httpVersion} 101 Switching Protocols\r\n`;
       for (const [key, value] of Object.entries(proxyRes.headers)) {
         if (Array.isArray(value)) {

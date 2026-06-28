@@ -1,16 +1,12 @@
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { AppLauncher, LaunchConfig } from "./types.js";
 import { ReactRuntimePatcher } from "../patcher/ReactRuntimePatcher.js";
 import { loadMergedConfig } from "@hoversource/companion-server";
 import {
   detectDevServerPort,
-  isPortFree,
-  getPidUsingPort,
-  getProcessName,
-  askQuestion,
-  killProcess,
   parseCommand,
   resolveWindowsCommand,
   validateSafeCommand,
@@ -18,6 +14,7 @@ import {
   waitForServer,
   runProxyMode
 } from "../cli.js";
+import { resolveDevServerPort } from "../port.js";
 
 export class WebProxyLauncher implements AppLauncher {
   private patcher = new ReactRuntimePatcher();
@@ -32,74 +29,49 @@ export class WebProxyLauncher implements AppLauncher {
     const timeoutSec = mergedConfig.webAppDevServerTimeout ?? 120;
     const timeoutMs = timeoutSec * 1000;
 
-    const devPort = detectDevServerPort(projectRoot, execCommand);
-    console.log(`[HoverSource] Web app detected. Dev server expected on port ${devPort}.`);
+    const expectedDevPort = detectDevServerPort(projectRoot, execCommand);
+    console.log(`[HoverSource] Web app detected. Dev server expected on port ${expectedDevPort}.`);
 
-    const devPortFree = await isPortFree(devPort);
-    if (!devPortFree) {
-      const pid = await getPidUsingPort(devPort);
-      const procName = pid ? await getProcessName(pid) : undefined;
-      console.warn(`\n\x1b[33m[HoverSource] ⚠️  WARNING: Dev server port ${devPort} is already in use by another process!\x1b[0m`);
-      if (pid) {
-        console.warn(`\x1b[33m[HoverSource] Process: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
-      } else {
-        console.warn(`\x1b[33m[HoverSource] Could not identify the process holding the port.\x1b[0m`);
-      }
-      
-      const autoResolve = args["auto-resolve"] === true;
-      const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
-      
-      let resolvedConflict = false;
-      if (pid && isInteractive) {
-        let shouldKill = autoResolve;
-        if (shouldKill) {
-          console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically terminating process ${pid}...`);
-        } else {
-          const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${devPort}? (y/N): \x1b[0m`);
-          shouldKill = answer.trim().toLowerCase() === "y";
-        }
-        
-        if (shouldKill) {
-          console.log(`[HoverSource] Terminating process ${pid}...`);
-          const success = await killProcess(pid, devPort);
-          if (success) {
-            console.log(`[HoverSource] Process terminated successfully. Port ${devPort} is now free.`);
-            resolvedConflict = true;
-            // Wait a brief moment for OS to release the socket
-            await new Promise((r) => setTimeout(r, 700));
-          } else {
-            console.error(`[HoverSource] Failed to terminate process. You may need to run as administrator or close it manually.`);
-          }
-        }
-      }
-      
-      if (!resolvedConflict) {
-        console.warn(`[HoverSource] Continuing anyway. If it fails, please close the process using port ${devPort} manually.`);
-      }
+    const autoResolve = args["auto-resolve"] === true;
+    const devResult = await resolveDevServerPort({
+      projectRoot,
+      execCommand,
+      expectedPort: expectedDevPort,
+      mode: "web",
+      autoResolve,
+      excludePorts: [serverPort]
+    });
+
+    const targetDevPort = devResult.port;
+    if (targetDevPort !== expectedDevPort) {
+      console.log(`[HoverSource] Dev server will use port ${targetDevPort} instead of ${expectedDevPort}.`);
     }
 
     // Set NODE_OPTIONS to preload our bootstrap script in all Node processes spawned by the dev server
-    // Since this file is in src/launcher, __dirname is packages/cli/dist/launcher
-    // We resolve bootstrap.js relative to it (which is in packages/cli/dist/bootstrap.js)
-    const bootstrapPath = path.resolve(projectRoot, "node_modules/@hoversource/cli/dist/bootstrap.js");
-    const bootstrapUrl = pathToFileURL(fs.existsSync(bootstrapPath) ? bootstrapPath : path.resolve(projectRoot, "../cli/dist/bootstrap.js")).href;
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const localBootstrap = path.resolve(__dirname, "../bootstrap.js");
+    const projectBootstrap = path.resolve(projectRoot, "node_modules/@hoversource/cli/dist/bootstrap.js");
+    const bootstrapPath = fs.existsSync(projectBootstrap) ? projectBootstrap : localBootstrap;
+    const bootstrapUrl = pathToFileURL(bootstrapPath).href;
     
-    const env = { ...process.env };
+    const env = { ...process.env, ...devResult.env };
     const currentOptions = env.NODE_OPTIONS || "";
     env.NODE_OPTIONS = `${currentOptions} --import "${bootstrapUrl}"`.trim();
 
     // Spawn the dev server
     const { command, args: cmdArgs } = parseCommand(execCommand);
+    const finalArgs = [...cmdArgs, ...devResult.extraArgs];
     const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
     const useShell = process.platform === "win32";
     const child = useShell
-      ? spawn([resolvedCmd, ...cmdArgs].join(" "), {
+      ? spawn([resolvedCmd, ...finalArgs].join(" "), {
           shell: true,
           env,
           cwd: validateSafePath(projectRoot),
           stdio: "inherit",
         })
-      : spawn(resolvedCmd, cmdArgs, {
+      : spawn(resolvedCmd, finalArgs, {
           shell: false,
           env,
           cwd: validateSafePath(projectRoot),
@@ -119,8 +91,8 @@ export class WebProxyLauncher implements AppLauncher {
     });
 
     // Wait for the dev server to be ready
-    console.log(`[HoverSource] Waiting for dev server on port ${devPort} (timeout: ${timeoutSec}s)...`);
-    const ready = await waitForServer(devPort, timeoutMs, () => hasExited);
+    console.log(`[HoverSource] Waiting for dev server on port ${targetDevPort} (timeout: ${timeoutSec}s)...`);
+    const ready = await waitForServer(targetDevPort, timeoutMs, () => hasExited);
 
     if (!ready) {
       if (hasExited) {
@@ -130,13 +102,13 @@ export class WebProxyLauncher implements AppLauncher {
         console.error(`[HoverSource] or run the development server instead (e.g. hs dev).`);
         return;
       }
-      console.error(`[HoverSource] Dev server did not respond on port ${devPort} within timeout.`);
+      console.error(`[HoverSource] Dev server did not respond on port ${targetDevPort} within timeout.`);
       console.error(`[HoverSource] If your dev server uses a different port, run it separately and use:`);
       console.error(`\x1b[36m[HoverSource]   hs -t http://localhost:<your-port>\x1b[0m`);
       return;
     }
 
-    console.log(`[HoverSource] Dev server is ready on port ${devPort}.`);
+    console.log(`[HoverSource] Dev server is ready on port ${targetDevPort}.`);
     
     // Register cleanup to restore runtimes on exit
     const cleanup = () => {
@@ -159,8 +131,6 @@ export class WebProxyLauncher implements AppLauncher {
     process.once("SIGTERM", cleanup);
     child.on("exit", cleanup);
 
-    await runProxyMode(`http://localhost:${devPort}`, serverPort, args);
+    await runProxyMode(`http://localhost:${targetDevPort}`, serverPort, args);
   }
 }
-
-import fs from "node:fs";

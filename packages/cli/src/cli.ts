@@ -9,10 +9,35 @@ import fs from "node:fs";
 import net from "node:net";
 import http from "node:http";
 import https from "node:https";
-import readline from "node:readline";
-import os from "node:os";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { restoreLeftoverPatches, recordPatchState, removePatchState } from "./utils/patchState.js";
+import {
+  isPortFree,
+  findFreePort,
+  getPidUsingPort,
+  getProcessName,
+  killProcess,
+  askQuestion,
+  isZombieOfProject,
+  resolveCompanionPort,
+  resolveDevServerPort,
+  resolveAllPorts
+} from "./port.js";
+
+// Re-export port functions for backward compatibility
+export {
+  isPortFree,
+  findFreePort,
+  getPidUsingPort,
+  getProcessName,
+  killProcess,
+  askQuestion,
+  isZombieOfProject,
+  resolveCompanionPort,
+  resolveDevServerPort,
+  resolveAllPorts
+} from "./port.js";
+export type { DevServerPortResult, PortPlan } from "./port.js";
 import { WebProxyLauncher } from "./launcher/WebProxyLauncher.js";
 import { ElectronCdpLauncher } from "./launcher/ElectronCdpLauncher.js";
 
@@ -255,114 +280,6 @@ export function detectDevServerPort(projectRoot: string, execCommand?: string): 
   return 3000;
 }
 
-function probeHostPort(port: number, host: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.unref();
-    server.on("error", (err: any) => {
-      if (err.code === "EADDRINUSE") {
-        resolve(false);
-      } else {
-        // Other errors (e.g. EADDRNOTAVAIL for IPv6 on some systems) do not mean the port is in use
-        resolve(true);
-      }
-    });
-    server.listen(port, host, () => {
-      server.close();
-      resolve(true);
-    });
-  });
-}
-
-export async function isPortFree(port: number): Promise<boolean> {
-  const free127 = await probeHostPort(port, "127.0.0.1");
-  if (!free127) return false;
-
-  const free000 = await probeHostPort(port, "0.0.0.0");
-  if (!free000) return false;
-
-  const freeIPv6 = await probeHostPort(port, "::");
-  if (!freeIPv6) return false;
-
-  return true;
-}
-
-export async function findFreePort(startPort: number, excludePort?: number, maxPort = 65535): Promise<number> {
-  let port = startPort;
-  while (port <= maxPort) {
-    if (port === excludePort) {
-      port++;
-      continue;
-    }
-    if (await isPortFree(port)) {
-      return port;
-    }
-    port++;
-  }
-  throw new Error(
-    `[HoverSource] No free port found between ${startPort} and ${maxPort}. ` +
-    `Close some applications or specify a port manually with --port=<port>.`
-  );
-}
-
-/**
- * If the requested port is occupied by another HoverSource instance, tell it
- * to shut down and wait for the port to free up so we can reuse it.
- * Returns the port we should actually bind to.
- */
-export async function resolveCompanionPort(requestedPort: number, targetPort?: number): Promise<number> {
-  // If requestedPort collides with targetPort, shift it to next free port starting from 7300 upwards (excluding targetPort)
-  if (targetPort !== undefined && requestedPort === targetPort) {
-    console.log(`[HoverSource] Requested companion port ${requestedPort} conflicts with target application port ${targetPort}. Shifting...`);
-    return findFreePort(7300, targetPort);
-  }
-
-  // Try to bind immediately — port is free
-  const free = await isPortFree(requestedPort);
-  if (free) return requestedPort;
-
-  // Port taken — check if it's an HS companion
-  const isHs = await new Promise<boolean>((resolve) => {
-    const req = http.get(`http://127.0.0.1:${requestedPort}/ping`, (res) => {
-      let body = "";
-      res.on("data", (c: Buffer) => (body += c.toString()));
-      res.on("end", () => resolve(body.trim() === "pong"));
-    });
-    req.setTimeout(1500, () => {
-      req.destroy();
-      resolve(false);
-    });
-    req.on("error", () => resolve(false));
-  });
-
-  if (isHs) {
-    console.log(`[HoverSource] Previous instance found on port ${requestedPort}. Taking over...`);
-    await new Promise<void>((resolve) => {
-      const req = http.get(`http://127.0.0.1:${requestedPort}/shutdown`, () => resolve());
-      req.setTimeout(1500, () => {
-        req.destroy();
-        resolve();
-      });
-      req.on("error", () => resolve());
-    });
-    // Wait for the port to free up
-    await new Promise((r) => setTimeout(r, 700));
-
-    // Double check if the port was successfully freed
-    const isNowFree = await isPortFree(requestedPort);
-
-    if (isNowFree) {
-      return requestedPort;
-    } else {
-      console.log(`[HoverSource] Previous instance on port ${requestedPort} could not be terminated (ghost port).`);
-    }
-  }
-
-  // Something else owns this port — find the next free one
-  console.log(`[HoverSource] Port ${requestedPort} in use by another process, using next free port.`);
-  return findFreePort(requestedPort + 1, targetPort);
-}
-
 function openBrowser(url: string) {
   let startCmd = "xdg-open";
   if (process.platform === "darwin") {
@@ -377,161 +294,7 @@ function openBrowser(url: string) {
     }
   });
 }
-
-export function askQuestion(query: string): Promise<string> {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  return new Promise((resolve) => rl.question(query, (ans) => {
-    rl.close();
-    resolve(ans);
-  }));
-}
-
-export function getPidUsingPort(port: number): Promise<number | undefined> {
-  return new Promise((resolve) => {
-    if (process.platform === "win32") {
-      exec(`netstat -ano | findstr :${port}`, (err, stdout) => {
-        if (err || !stdout) return resolve(undefined);
-        const lines = stdout.split("\n");
-        for (const line of lines) {
-          if (line.includes("LISTENING")) {
-            const parts = line.trim().split(/\s+/);
-            const pidStr = parts[parts.length - 1];
-            const pid = Number.parseInt(pidStr, 10);
-            if (!Number.isNaN(pid) && pid > 0) {
-              return resolve(pid);
-            }
-          }
-        }
-        resolve(undefined);
-      });
-    } else {
-      exec(`lsof -t -i:${port}`, (err, stdout) => {
-        if (err || !stdout) return resolve(undefined);
-        const pid = Number.parseInt(stdout.trim(), 10);
-        if (!Number.isNaN(pid) && pid > 0) {
-          resolve(pid);
-        } else {
-          resolve(undefined);
-        }
-      });
-    }
-  });
-}
-
-export function getProcessName(pid: number): Promise<string | undefined> {
-  return new Promise((resolve) => {
-    if (process.platform === "win32") {
-      exec(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, (err, stdout) => {
-        if (err || !stdout) return resolve(undefined);
-        if (stdout.includes("No tasks are running")) {
-          return resolve(undefined);
-        }
-        const parts = stdout.trim().split(",");
-        if (parts[0]) {
-          const name = parts[0].replaceAll('"', "");
-          return resolve(name);
-        }
-        resolve(undefined);
-      });
-    } else {
-      exec(`ps -p ${pid} -o comm=`, (err, stdout) => {
-        if (err || !stdout) return resolve(undefined);
-        resolve(stdout.trim());
-      });
-    }
-  });
-}
-
-function killProcessWindowsUac(pid: number, port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    console.log(`[HoverSource] Normal termination failed. Requesting Administrator elevation (UAC)...`);
-    const tempFile = path.join(os.tmpdir(), `hs_taskkill_${pid}.log`);
-    if (fs.existsSync(tempFile)) {
-      try { fs.unlinkSync(tempFile); } catch (err) {
-        console.debug("[HoverSource] Failed to delete existing temp file:", err);
-      }
-    }
-
-    const elevatorCmd = String.raw`powershell -Command "Start-Process cmd.exe -ArgumentList '/c taskkill /F /PID ${pid} > \"${tempFile}\" 2>&1' -Verb RunAs -WindowStyle Hidden"`;
-    exec(elevatorCmd, (elevatorErr) => {
-      if (elevatorErr) {
-        console.error(`[HoverSource] UAC request canceled or failed: ${elevatorErr.message}`);
-        resolve(false);
-      } else {
-        // Poll the port to see if it frees up
-        let checks = 0;
-        const checkInterval = setInterval(async () => {
-          const free = await isPortFree(port);
-          checks++;
-          if (free) {
-            clearInterval(checkInterval);
-            try { fs.unlinkSync(tempFile); } catch (err) {
-              console.debug("[HoverSource] Temp file delete ignored:", err);
-            }
-            resolve(true);
-          } else if (checks > 20) { // 4 seconds total
-            clearInterval(checkInterval);
-            
-            // Read temp file for failure reasons
-            let errorDetails = "";
-            if (fs.existsSync(tempFile)) {
-              try {
-                errorDetails = fs.readFileSync(tempFile, "utf-8").trim();
-                fs.unlinkSync(tempFile);
-              } catch (err) {
-                console.debug("[HoverSource] Failed to read/delete temp file:", err);
-              }
-            }
-
-            if (errorDetails) {
-              console.error(`\x1b[31m[HoverSource] UAC Taskkill failed: ${errorDetails}\x1b[0m`);
-            } else {
-              console.error(`\x1b[31m[HoverSource] UAC Taskkill failed or was canceled by the user.\x1b[0m`);
-            }
-            resolve(false);
-          }
-        }, 200);
-      }
-    });
-  });
-}
-
-export function killProcess(pid: number, port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const cmd = process.platform === "win32" ? `taskkill /F /PID ${pid}` : `kill -9 ${pid}`;
-    exec(cmd, (err, stdout, stderr) => {
-      if (!err) {
-        // Normal kill reported success, but let's double check the port is free
-        let checks = 0;
-        const checkInterval = setInterval(async () => {
-          const free = await isPortFree(port);
-          checks++;
-          if (free) {
-            clearInterval(checkInterval);
-            resolve(true);
-          } else if (checks > 10) {
-            clearInterval(checkInterval);
-            console.error(`[HoverSource] Normal kill reported success but port is still occupied.`);
-            if (stderr) console.error(`[HoverSource] Details: ${stderr.trim()}`);
-            resolve(false);
-          }
-        }, 200);
-        return;
-      }
-
-      // If failed on Windows, try elevating with UAC
-      if (process.platform === "win32") {
-        killProcessWindowsUac(pid, port).then(resolve);
-      } else {
-        if (stderr) console.error(`[HoverSource] Details: ${stderr.trim()}`);
-        resolve(false);
-      }
-    });
-  });
-}// On-disk patching functions moved to patcher/ReactRuntimePatcher.ts and utils/patchState.ts= 0;
+// On-disk patching functions moved to patcher/ReactRuntimePatcher.ts and utils/patchState.ts
 
 function patchSingleFileForDebugPort(
   fullPath: string,

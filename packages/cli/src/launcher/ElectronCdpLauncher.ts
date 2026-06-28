@@ -9,8 +9,10 @@ import {
   validateSafePath,
   findScriptPath,
   startCdpInjectionWatch,
-  resolveDebugPortConflicts
+  resolveDebugPortConflicts,
+  detectDevServerPort,
 } from "../cli.js";
+import { resolveDevServerPort } from "../port.js";
 
 export class ElectronCdpLauncher implements AppLauncher {
   async launch(config: LaunchConfig): Promise<void> {
@@ -19,24 +21,37 @@ export class ElectronCdpLauncher implements AppLauncher {
     const { command, args: cmdArgs } = parseCommand(execCommand);
     const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
 
+    const autoResolve = args["auto-resolve"] === true;
+
+    // Check if the dev server port is occupied and resolve it
+    const devPort = detectDevServerPort(projectRoot, execCommand);
+    const devResult = await resolveDevServerPort({
+      projectRoot,
+      execCommand,
+      expectedPort: devPort,
+      mode: "electron",
+      autoResolve,
+      excludePorts: [serverPort, debugPort]
+    });
+
     const runWithCdp = (portToUse: number, patchRestorer?: () => void) => {
-      const electronArgs = [...cmdArgs, `--remote-debugging-port=${portToUse}`];
-      console.log(`[HoverSource] Launching target command with remote debugging: ${[resolvedCmd, ...electronArgs].join(" ")}`);
+      console.log(`[HoverSource] Launching target command with remote debugging: ${[resolvedCmd, ...cmdArgs].join(" ")}`);
       
       const env = {
         ...process.env,
+        ...devResult.env,
         ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${portToUse}`
       };
 
       const useShell = process.platform === "win32";
       const child = useShell
-        ? spawn([resolvedCmd, ...electronArgs].join(" "), {
+        ? spawn([resolvedCmd, ...cmdArgs].join(" "), {
             shell: true,
             env,
             cwd: validateSafePath(projectRoot),
             stdio: "inherit",
           })
-        : spawn(resolvedCmd, electronArgs, {
+        : spawn(resolvedCmd, cmdArgs, {
             shell: false,
             env,
             cwd: validateSafePath(projectRoot),
@@ -65,9 +80,7 @@ export class ElectronCdpLauncher implements AppLauncher {
       child.on("exit", cleanup);
     };
 
-    const autoResolve = args["auto-resolve"] === true;
-    resolveDebugPortConflicts(debugPort, projectRoot, autoResolve, args).then((resolved) => {
-      runWithCdp(resolved.resolvedDebugPort, resolved.patchRestorer);
-    });
+    const resolved = await resolveDebugPortConflicts(debugPort, projectRoot, autoResolve, args);
+    runWithCdp(resolved.resolvedDebugPort, resolved.patchRestorer);
   }
 }

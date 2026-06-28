@@ -63,14 +63,12 @@ export function probeHostPort(port: number, host: string): Promise<boolean> {
 }
 
 export async function isPortFree(port: number): Promise<boolean> {
-  const results = await Promise.all([
-    probeHostPort(port, "127.0.0.1"),
-    probeHostPort(port, "localhost"),
-    probeHostPort(port, "::1"),
-    probeHostPort(port, "0.0.0.0"),
-    probeHostPort(port, "::")
-  ]);
-  return results.every(Boolean);
+  if (!await probeHostPort(port, "127.0.0.1")) return false;
+  if (!await probeHostPort(port, "localhost")) return false;
+  if (!await probeHostPort(port, "::1")) return false;
+  if (!await probeHostPort(port, "0.0.0.0")) return false;
+  if (!await probeHostPort(port, "::")) return false;
+  return true;
 }
 
 export async function findFreePort(startPort: number, excludePorts?: number | number[], maxPort = 65535): Promise<number> {

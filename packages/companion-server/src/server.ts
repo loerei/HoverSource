@@ -186,8 +186,32 @@ function escapeRegExp(str: string): string {
 // Resolve a file param (possibly relative) to an absolute path
 function resolveFilePath(fileParam: string, projectRoot: string): string {
   if (path.isAbsolute(fileParam)) return fileParam;
-  const cleanFile = fileParam.startsWith("/") ? fileParam.substring(1) : fileParam;
-  return path.resolve(projectRoot, cleanFile);
+  
+  let cleanFile = fileParam;
+  if (cleanFile.startsWith("[project]/")) {
+    cleanFile = cleanFile.substring("[project]/".length);
+  }
+  // Strip leading host/port prefixes like "5173/", "localhost:3000/", etc.
+  cleanFile = cleanFile.replace(/^(?:https?:\/\/)?(?:[a-zA-Z0-9.-]+)?(?::\d+)?\//, "");
+  // If the path starts with digits followed by a slash (e.g., "5173/"), strip it
+  cleanFile = cleanFile.replace(/^\d+\//, "");
+  // If it starts with "/", strip it
+  if (cleanFile.startsWith("/")) {
+    cleanFile = cleanFile.substring(1);
+  }
+  
+  let resolved = path.resolve(projectRoot, cleanFile);
+  if (fs.existsSync(resolved)) {
+    return resolved;
+  }
+  
+  // If not found directly, check if prepending "src/" works
+  const srcResolved = path.resolve(projectRoot, "src", cleanFile);
+  if (fs.existsSync(srcResolved)) {
+    return srcResolved;
+  }
+  
+  return resolved;
 }
 
 // Simple deep helper
@@ -342,7 +366,12 @@ function handleOverlayScript(req: http.IncomingMessage, res: http.ServerResponse
   }
   const bundleContent = fs.readFileSync(bundlePath, "utf-8");
   const portBootstrap = `window.__HOVERSOURCE_PORT__ = ${config.port};\n`;
-  res.writeHead(200, { "Content-Type": "application/javascript" });
+  res.writeHead(200, {
+    "Content-Type": "application/javascript",
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0"
+  });
   res.end(portBootstrap + bundleContent);
 }
 
@@ -608,10 +637,17 @@ function handleValidateLine(req: http.IncomingMessage, res: http.ServerResponse,
   const { absolutePath, lineVal, colVal, tagNameParam, classList } = params;
   const corrected = verifyAndCorrectSourceLocation(absolutePath, lineVal, colVal, tagNameParam, classList);
 
+  let displayPath = absolutePath;
+  if (absolutePath.startsWith(config.projectRoot)) {
+    displayPath = absolutePath.substring(config.projectRoot.length).replace(/^[/\\]+/, "");
+    displayPath = "[project]/" + displayPath.replaceAll("\\", "/");
+  }
+
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({
     original: { line: lineVal, column: colVal },
-    corrected: { line: corrected.line, column: corrected.column }
+    corrected: { line: corrected.line, column: corrected.column },
+    correctedFile: displayPath
   }));
 }
 

@@ -34,22 +34,37 @@ function fetchJson<T>(url: string): Promise<T> {
 function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(wsUrl);
-    let messageId = 1;
 
     ws.on("open", () => {
       ws.send(JSON.stringify({
-        id: messageId++,
-        method: "Runtime.enable",
+        id: 1,
+        method: "Page.enable",
         params: {}
       }));
 
       ws.send(JSON.stringify({
-        id: messageId++,
+        id: 2,
+        method: "Page.addScriptToEvaluateOnNewDocument",
+        params: {
+          source: scriptContent
+        }
+      }));
+
+      ws.send(JSON.stringify({
+        id: 3,
         method: "Runtime.evaluate",
         params: {
           expression: scriptContent,
           userGesture: true,
           awaitPromise: false
+        }
+      }));
+
+      ws.send(JSON.stringify({
+        id: 4,
+        method: "Page.reload",
+        params: {
+          ignoreCache: true
         }
       }));
     });
@@ -58,14 +73,14 @@ function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
       try {
         const dataStr = typeof data === "string" ? data : (data as Buffer).toString("utf8");
         const msg = JSON.parse(dataStr);
-        if (msg.id === 2) {
-          if (msg.error) {
-            reject(new Error(`CDP evaluation error: ${JSON.stringify(msg.error)}`));
-          } else if (msg.result?.exceptionDetails) {
-            reject(new Error(`Script execution threw exception: ${msg.result.exceptionDetails.exception.description}`));
-          } else {
-            resolve();
-          }
+        if (msg.error) {
+          reject(new Error(`CDP error for message ${msg.id}: ${JSON.stringify(msg.error)}`));
+          ws.close();
+          return;
+        }
+
+        if (msg.id === 4) {
+          resolve();
           ws.close();
         }
       } catch (e) {
@@ -116,6 +131,7 @@ function isAlreadyInjected(wsUrl: string): Promise<boolean> {
           ws.close();
         }
       } catch (e) {
+        console.debug("[HoverSource] Ignored evaluation error during injection check:", e);
         clearTimeout(timeout);
         if (!resolved) {
           resolved = true;

@@ -1,3 +1,5 @@
+import { setupVanillaMonkeyPatch } from "./vanillaPatch.js";
+setupVanillaMonkeyPatch();
 import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 function getCompanionBaseUrl() {

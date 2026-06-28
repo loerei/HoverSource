@@ -1,17 +1,17 @@
 # HoverSource Benchmark Logs
 
-This directory contains the detailed execution logs, benchmark reports, and visualization charts comparing the performance of AI coding agents under different instruction/prompting strategies.
+This directory contains execution logs, benchmark reports, and visualization charts comparing the performance of an AI coding agent under three prompting strategies.
 
 ## Benchmark Methodology
 
 We evaluate the performance of an AI coding agent (Gemini 3.5 Flash) on style modification and minor layout tasks across three distinct prompting variants:
 
 1. **Prompt A: Pure Natural Language (No Context)**
-   * Simulates a developer who does not know the codebase. The prompt describes the visual goal in plain human language without mentioning specific files, classes, or coordinates.
-2. **Prompt B: Senior Developer Context (Manual Search Helper)**
-   * Simulates a senior developer pointing the agent to the right place. The prompt includes manual file paths and component names but leaves the exact element coordinates/CSS selectors open-ended.
-3. **Prompt C: HoverSource Component Metadata (Automatic Clipboard)**
-   * Pares the natural language instruction with the full structured **Component Metadata** block copied directly from the HoverSource inspector overlay (`Alt + C`). This block provides exact element selectors, file paths, dimensions, layout constraints, and parent/key styles.
+   * Describes the visual goal in natural language. No file paths, CSS selectors, or component locations are provided.
+2. **Prompt B: Manual Context**
+   * Specifies target file paths and component names, representing manual developer input. Exact element coordinates and CSS selectors are omitted.
+3. **Prompt C: HoverSource Metadata**
+   * Pairs the natural language instruction with the structured component metadata block exported by HoverSource. This includes exact selectors, file paths, layout constraints, dimensions, and parent styles.
 
 ---
 
@@ -23,12 +23,12 @@ benchmark-logs/
 ├── generate_chart.py          # Python script to compile and plot metrics
 ├── calcom/                    # Benchmark 1: Cal.com Monorepo (~7,700 source files)
 │   ├── calcom-benchmark.md    # Consolidated summary and task-by-task breakdown
-│   ├── calcom-benchmark-chart.png # High-resolution line chart comparing time and tokens
-│   └── logs/                  # Raw step-by-step agent transcripts (Tasks 1-10)
+│   ├── calcom-benchmark-chart.png # Visualization comparing time and tokens
+│   └── logs/                  # Agent transcripts (Tasks 1-10)
 └── yumeshelf/                 # Benchmark 2: YumeShelf Electron App (~200 source files)
     ├── yumeshelf-benchmark.md # Consolidated summary and task-by-task breakdown
-    ├── yumeshelf-benchmark-chart.png # High-resolution line chart comparing time and tokens
-    └── logs/                  # Raw step-by-step agent transcripts (Tasks 11-15)
+    ├── yumeshelf-benchmark-chart.png # Visualization comparing time and tokens
+    └── logs/                  # Agent transcripts (Tasks 11-15)
 ```
 
 ---
@@ -48,22 +48,21 @@ The visualization charts in the subdirectories are compiled and generated using 
 
 ---
 
-## Deep Analysis: Prompting Methodology & Code Elegance
+## Analysis: Prompting Methodology & Code Quality
 
-### Core Philosophy: Human Intuition (B) vs. Machine Precision (C)
-* **Prompt B (Senior Dev Context):** Relies on human search context. The developer points the agent to a file path and component, leaving exact CSS selectors and DOM structures for the agent to find.
-* **Prompt C (HoverSource Metadata):** Relies on automated precise context. The agent receives exact file paths, lines, specific CSS selectors, bounding boxes, parent styles, and layout constraints via the clipboard.
+### Context Comparison
+* **Prompt B (Manual Context):** Relies on high-level file and component naming, leaving exact CSS selectors and DOM structures for the agent to find.
+* **Prompt C (HoverSource Metadata):** Provides exact file paths, line numbers, specific CSS selectors, bounding boxes, parent styles, and layout constraints.
 
-### Performance Dynamics
-1. **Execution Time (Lower is Better):**
-   * **Cal.com (Large Monorepo):** Prompt C completed tasks in **16.4s** on average, vs. **44.2s** for Prompt B (2.7x faster).
-   * **YumeShelf (Medium Codebase):** Prompt C took **24.8s** vs. **38.8s** for Prompt B.
-   * *Insight:* Direct styling coordinates eliminate the agent's exploratory "thought loops," significantly reducing generation latency.
-2. **Token Efficiency vs. Cost Trade-offs:**
-   * In massive codebases, Prompt C keeps the peak context window clean. However, in small/isolated codebases, Prompt B can be more token-efficient (e.g., YumeShelf Task 15 took **5s** / **10k tokens** for B vs. **14s** / **48k tokens** for C) because the dense metadata block introduces initial token overhead for simple fixes.
+### Performance Analysis
+1. **Execution Time:**
+   * **Cal.com (Large Monorepo):** Prompt C completed tasks in **16.4s** on average, compared to **44.2s** for Prompt B.
+   * **YumeShelf (Medium Codebase):** Prompt C took **24.8s** on average, compared to **38.8s** for Prompt B.
+   * *Observation:* Providing specific selectors and source lines bypassed search phases and component hierarchy traversals, reducing latency.
+2. **Token Consumption:**
+   * In larger codebases, Prompt C reduced peak context usage. In smaller codebases or simple tasks, Prompt B was more token-efficient (e.g., YumeShelf Task 15 required **5s** and **10k tokens** for B, compared to **14s** and **48k tokens** for C). This is due to the baseline token overhead introduced by the structured metadata block.
 
-### Code Elegance & Architectural Integrity (The "Hidden" Advantage)
-The most critical difference is how the agent behaves under each constraint:
-* **Prompt B Side-Effects (Task 11 & 14):** By forcing the agent to modify a specific `.ts` file, the agent chose "brute-force" solutions. It injected programmatic JavaScript event listeners (`onmouseover`/`onmouseout`) to apply inline DOM styles, violating the separation of concerns.
-* **Prompt C Architectural Fit:** Because Prompt C provides the exact CSS file path and class selector, the agent confidently targets the stylesheets (`game-cards.css` / `menus-tooltips.css`) to write clean, native CSS rules, keeping logic and presentation cleanly separated.
-
+### Impact on Code Quality & Architecture
+The type of context provided influenced the architectural decisions made by the agent:
+* **Prompt B Side-Effects (Task 11 & 14):** When Prompt B specified a TypeScript controller file (e.g., `stack-cards.ts`), the agent resolved styling changes programmatically in JavaScript using inline styles and DOM event listeners (`onmouseover`, `onmouseout`). This bypassed the project's styling conventions.
+* **Prompt C Resolution:** When Prompt C provided the exact stylesheet path and class selector, the agent modified the native CSS rule in the stylesheet directly, maintaining the separation between logical controller code and presentation styles.

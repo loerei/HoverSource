@@ -62,7 +62,12 @@ The visualization charts in the subdirectories are compiled and generated using 
 2. **Token Consumption:**
    * In larger codebases, Prompt C reduced peak context usage. In smaller codebases or simple tasks, Prompt B was more token-efficient (e.g., YumeShelf Task 15 required **5s** and **10k tokens** for B, compared to **14s** and **48k tokens** for C). This is due to the baseline token overhead introduced by the structured metadata block.
 
-### Impact on Code Quality & Architecture
-The type of context provided influenced the architectural decisions made by the agent:
-* **Prompt B Side-Effects (Task 11 & 14):** When Prompt B specified a TypeScript controller file (e.g., `stack-cards.ts`), the agent resolved styling changes programmatically in JavaScript using inline styles and DOM event listeners (`onmouseover`, `onmouseout`). This bypassed the project's styling conventions.
-* **Prompt C Resolution:** When Prompt C provided the exact stylesheet path and class selector, the agent modified the native CSS rule in the stylesheet directly, maintaining the separation between logical controller code and presentation styles.
+### Case Study: Architectural Integrity vs. Token Overhead
+
+The choice of target context (Prompt B vs. Prompt C) directly influenced the architectural patterns in the generated code patches:
+
+* **Prompt B Side-Effects (YumeShelf Task 11 & 14):** When Prompt B restricted the agent to a specific TypeScript controller file (e.g., `stack-cards.ts`), the agent resolved the styling changes programmatically in JavaScript. It injected inline styling attributes and added DOM event listeners (`onmouseover`, `onmouseout`). While functionally correct, this pattern couples styling rules inside the application logic, bypassing the project's CSS styling conventions.
+* **Prompt C Resolution:** Because Prompt C provided both the exact stylesheet path and the CSS class selector, the agent targeted the native CSS rules directly in `game-cards.css` and `menus-tooltips.css`. This preserved the clean separation of concerns between logical code and presentation styles.
+
+While Prompt C consumed slightly more tokens on simpler tasks due to the baseline size of the metadata block, it prevented the introduction of styling workarounds in the logical codebase.
+

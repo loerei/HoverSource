@@ -105,3 +105,18 @@ This document records the benchmark metrics for the YumeShelf tasks (Tasks 11 to
 | **Execution Time** | 42.0s | 5.0s | 14.0s | **-88.1%** (8.4x) | -66.7% (3.0x) |
 | **Cumulative Input** | 74,040 | 9,996 | 48,281 | **-86.5%** (7.4x) | -34.8% (1.5x) |
 | **Peak Context** | 10,422 | 4,955 | 9,992 | **-52.5%** | -4.1% |
+
+---
+
+## Architectural Case Study: Presentation-Logic Separation vs. Context Overhead
+
+In **Task 11** and **Task 14**, the choice of target context led to distinct architectural results in the generated code patches:
+
+### Prompt B (Manual Controller Context)
+When provided only with the controller file path (`stack-cards.ts` or `game-cards.ts`), the agent confined its code modifications to those specific TypeScript files. To achieve the requested visual changes (hover states), it programmatically injected inline styling attributes and added JavaScript event listeners (`onmouseover`, `onmouseout`). This resulted in a functional patch but violated best-practice separation of concerns by coupling styling rules inside the application logic.
+
+### Prompt C (HoverSource Metadata)
+By providing the exact target CSS selector and stylesheet source file (`game-cards.css` or `menus-tooltips.css`), Prompt C enabled the agent to locate the appropriate style rules. The agent modified the native CSS stylesheets directly, preserving the project's styling conventions and keeping logical controllers separate from presentation details. 
+
+Although Prompt C required slightly more tokens in these medium-sized tasks due to the inclusion of the metadata block, the resulting patches preserved the codebase's original design integrity.
+

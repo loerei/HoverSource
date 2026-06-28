@@ -12,7 +12,6 @@ import https from "node:https";
 import { fileURLToPath } from "node:url";
 import { restoreLeftoverPatches, recordPatchState, removePatchState } from "./utils/patchState.js";
 import {
-  isPortFree,
   findFreePort,
   getPidUsingPort,
   getProcessName,
@@ -197,39 +196,51 @@ function resolveSubcommand(
   return { execCommand: `npm run ${subcommand}`, isElectron };
 }
 
-function findPortFromExecCommand(projectRoot: string, execCommand: string): number | undefined {
-  try {
-    let actualCmd = execCommand;
-    const npmRunMatch = execCommand.match(/^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/);
-    if (npmRunMatch) {
-      const scriptName = npmRunMatch[1];
-      const pkgPath = path.join(projectRoot, "package.json");
-      if (fs.existsSync(pkgPath)) {
+function resolveActualCmd(projectRoot: string, execCommand: string): string {
+  const npmRunMatch = execCommand.match(/^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/);
+  if (npmRunMatch) {
+    const scriptName = npmRunMatch[1];
+    const pkgPath = path.join(projectRoot, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
         if (pkg.scripts?.[scriptName]) {
-          actualCmd = pkg.scripts[scriptName];
+          return pkg.scripts[scriptName];
         }
-      }
+      } catch {}
     }
+  }
+  return execCommand;
+}
 
-    const configMatch = actualCmd.match(/(?:--config|-c)\s+([^\s"'\\]+)/);
-    let configPath = configMatch ? configMatch[1] : undefined;
-    if (!configPath) {
-      const fileMatch = actualCmd.match(/([^\s"'\\]+\.config\.[jt]s)/);
-      configPath = fileMatch ? fileMatch[1] : undefined;
-    }
+function findConfigPath(actualCmd: string): string | undefined {
+  const configMatch = actualCmd.match(/(?:--config|-c)\s+([^\s"'\\]+)/);
+  if (configMatch) return configMatch[1];
+  
+  const fileMatch = actualCmd.match(/([^\s"'\\]+\.config\.[jt]s)/);
+  return fileMatch ? fileMatch[1] : undefined;
+}
 
-    if (configPath) {
-      const fullPath = path.resolve(projectRoot, configPath);
-      if (fs.existsSync(fullPath)) {
-        const content = fs.readFileSync(fullPath, "utf-8");
-        const portMatch = content.match(/port:\s*(\d+)/);
-        if (portMatch) {
-          return Number.parseInt(portMatch[1], 10);
-        }
+function readPortFromConfig(projectRoot: string, configPath: string): number | undefined {
+  const fullPath = path.resolve(projectRoot, configPath);
+  if (fs.existsSync(fullPath)) {
+    try {
+      const content = fs.readFileSync(fullPath, "utf-8");
+      const portMatch = content.match(/port:\s*(\d+)/);
+      if (portMatch) {
+        return Number.parseInt(portMatch[1], 10);
       }
-    }
-  } catch {}
+    } catch {}
+  }
+  return undefined;
+}
+
+function findPortFromExecCommand(projectRoot: string, execCommand: string): number | undefined {
+  const actualCmd = resolveActualCmd(projectRoot, execCommand);
+  const configPath = findConfigPath(actualCmd);
+  if (configPath) {
+    return readPortFromConfig(projectRoot, configPath);
+  }
   return undefined;
 }
 
@@ -642,6 +653,34 @@ export async function startCdpInjectionWatch(debugPort: number, scriptWithPort: 
   setInterval(pollAndInject, 2500);
 }
 
+function determineIfElectron(execArg: string, projectRoot: string): boolean {
+  const pkgPath = path.join(projectRoot, "package.json");
+  if (!fs.existsSync(pkgPath)) return false;
+
+  try {
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const hasElectronDep = "electron" in allDeps;
+    if (hasElectronDep) {
+      const lowerCmd = execArg.toLowerCase();
+      const isWebDevServer = (
+        lowerCmd.includes("vite") ||
+        lowerCmd.includes("next ") ||
+        lowerCmd.includes("nuxt") ||
+        lowerCmd.includes("webpack") ||
+        lowerCmd.includes("astro")
+      );
+      const mentionsElectron = lowerCmd.includes("electron");
+      if (isWebDevServer && !mentionsElectron) {
+        return false;
+      }
+    }
+    return hasElectronDep;
+  } catch {
+    return false;
+  }
+}
+
 export async function handleExecMode(
   execArg: string,
   subcommand: string | undefined,
@@ -658,30 +697,7 @@ export async function handleExecMode(
     }
     resolved = resolvedSub;
   } else {
-    const pkgPath = path.join(projectRoot, "package.json");
-    if (fs.existsSync(pkgPath)) {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-        const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-        const hasElectronDep = "electron" in allDeps;
-        let isElectron = hasElectronDep;
-        if (hasElectronDep) {
-          const lowerCmd = execArg.toLowerCase();
-          const isWebDevServer = (
-            lowerCmd.includes("vite") ||
-            lowerCmd.includes("next ") ||
-            lowerCmd.includes("nuxt") ||
-            lowerCmd.includes("webpack") ||
-            lowerCmd.includes("astro")
-          );
-          const mentionsElectron = lowerCmd.includes("electron");
-          if (isWebDevServer && !mentionsElectron) {
-            isElectron = false;
-          }
-        }
-        resolved.isElectron = isElectron;
-      } catch {}
-    }
+    resolved.isElectron = determineIfElectron(execArg, projectRoot);
   }
 
   const launcher = resolved.isElectron

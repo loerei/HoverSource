@@ -44,6 +44,8 @@ The benchmarks were performed on two public open-source projects of different sc
 | **Avg Cumulative Input Tokens** | 651,681 | 37,858 | 35,733 | **-94.5%** (18.2x fewer tokens) |
 | **Avg Peak Context Window** | 28,257 | 7,372 | 6,486 | **-77.0%** |
 
+![Cal.com Benchmark Chart](benchmark-logs/calcom/calcom-benchmark-chart.png)
+
 ---
 
 ### Benchmark 2: YumeShelf (Medium Codebase - 5 Tasks)
@@ -57,6 +59,8 @@ The benchmarks were performed on two public open-source projects of different sc
 | **Avg Execution Time** | 34.4s | 38.8s | 24.8s | **-27.9%** (1.4x faster) |
 | **Avg Cumulative Input Tokens** | 118,354 | 44,382 | 61,255 | **-48.2%** (1.9x fewer tokens) |
 | **Avg Peak Context Window** | 14,140 | 8,589 | 9,984 | **-29.4%** |
+
+![YumeShelf Benchmark Chart](benchmark-logs/yumeshelf/yumeshelf-benchmark-chart.png)
 
 ---
 

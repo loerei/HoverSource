@@ -59,14 +59,6 @@ function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
           awaitPromise: false
         }
       }));
-
-      ws.send(JSON.stringify({
-        id: 4,
-        method: "Page.reload",
-        params: {
-          ignoreCache: true
-        }
-      }));
     });
 
     ws.on("message", (data) => {
@@ -79,7 +71,7 @@ function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
           return;
         }
 
-        if (msg.id === 4) {
+        if (msg.id === 3) {
           resolve();
           ws.close();
         }

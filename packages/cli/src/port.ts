@@ -348,6 +348,26 @@ export async function resolveCompanionPort(requestedPort: number, targetPort?: n
 
 type Framework = "vite" | "next" | "nuxt" | "angular" | "cra" | "webpack" | "generic";
 
+function detectFrameworkFromScript(scriptCmd: string): Framework | null {
+  if (scriptCmd.includes("vite") && !scriptCmd.includes("electron")) return "vite";
+  if (scriptCmd.includes("next")) return "next";
+  if (scriptCmd.includes("nuxt")) return "nuxt";
+  if (scriptCmd.includes("ng ") || scriptCmd.includes("@angular")) return "angular";
+  if (scriptCmd.includes("react-scripts")) return "cra";
+  if (scriptCmd.includes("webpack")) return "webpack";
+  return null;
+}
+
+function detectFrameworkFromDeps(allDeps: Record<string, string>): Framework {
+  if ("vite" in allDeps || "@sveltejs/kit" in allDeps) return "vite";
+  if ("next" in allDeps) return "next";
+  if ("nuxt" in allDeps) return "nuxt";
+  if ("@angular/cli" in allDeps || "@angular/core" in allDeps) return "angular";
+  if ("react-scripts" in allDeps) return "cra";
+  if ("webpack-dev-server" in allDeps) return "webpack";
+  return "generic";
+}
+
 /**
  * Detect which framework the project uses, to know how to inject the port.
  */
@@ -361,35 +381,19 @@ function detectFramework(projectRoot: string, execCommand?: string): Framework {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
       allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
 
-      // Resolve npm run <script> to the actual command
       if (execCommand) {
         const npmRunMatch = /^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/.exec(execCommand);
-        if (npmRunMatch && pkg.scripts?.[npmRunMatch[1]]) {
-          scriptCmd = pkg.scripts[npmRunMatch[1]].toLowerCase();
-        } else {
-          scriptCmd = execCommand.toLowerCase();
-        }
+        scriptCmd = (npmRunMatch && pkg.scripts?.[npmRunMatch[1]])
+          ? pkg.scripts[npmRunMatch[1]].toLowerCase()
+          : execCommand.toLowerCase();
       }
     }
   } catch {}
 
-  // Check script command first (more specific than deps)
-  if (scriptCmd.includes("vite") && !scriptCmd.includes("electron")) return "vite";
-  if (scriptCmd.includes("next")) return "next";
-  if (scriptCmd.includes("nuxt")) return "nuxt";
-  if (scriptCmd.includes("ng ") || scriptCmd.includes("@angular")) return "angular";
-  if (scriptCmd.includes("react-scripts")) return "cra";
-  if (scriptCmd.includes("webpack")) return "webpack";
+  const fromScript = detectFrameworkFromScript(scriptCmd);
+  if (fromScript) return fromScript;
 
-  // Fallback to deps
-  if ("vite" in allDeps || "@sveltejs/kit" in allDeps) return "vite";
-  if ("next" in allDeps) return "next";
-  if ("nuxt" in allDeps) return "nuxt";
-  if ("@angular/cli" in allDeps || "@angular/core" in allDeps) return "angular";
-  if ("react-scripts" in allDeps) return "cra";
-  if ("webpack-dev-server" in allDeps) return "webpack";
-
-  return "generic";
+  return detectFrameworkFromDeps(allDeps);
 }
 
 /**
@@ -437,6 +441,49 @@ function buildPortInjection(framework: Framework, port: number): { env: Record<s
 // ---------------------------------------------------------------------------
 //  Dev server port conflict resolution
 // ---------------------------------------------------------------------------
+
+async function handleElectronBlocker(
+  pid: number,
+  procName: string | undefined,
+  expectedPort: number,
+  autoResolve: boolean,
+  framework: Framework
+): Promise<DevServerPortResult> {
+  console.warn(`\n\x1b[33m[HoverSource] ⚠️  Dev server port ${expectedPort} is occupied by: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
+  console.warn(`\x1b[33m[HoverSource] Electron projects require the original port — port shifting is not possible.\x1b[0m`);
+
+  let shouldKill = autoResolve;
+  if (shouldKill) {
+    console.log(`[HoverSource] --auto-resolve: Automatically terminating blocker on port ${expectedPort}...`);
+  } else {
+    const isInteractive = process.stdout.isTTY && process.stdin.isTTY;
+    if (isInteractive) {
+      const answer = await askQuestion(`\x1b[36m[HoverSource] Terminate this process to free port ${expectedPort}? (Y/n): \x1b[0m`);
+      shouldKill = answer.trim().toLowerCase() !== "n";
+    } else {
+      shouldKill = true;
+      console.log(`[HoverSource] Non-interactive mode. Automatically terminating blocker on port ${expectedPort}...`);
+    }
+  }
+
+  if (shouldKill) {
+    console.log(`[HoverSource] Terminating process ${pid}...`);
+    const success = await killProcess(pid, expectedPort);
+    if (success) {
+      console.log(`[HoverSource] Port ${expectedPort} is now free.`);
+      await new Promise((r) => setTimeout(r, 700));
+      const injection = buildPortInjection(framework, expectedPort);
+      return { port: expectedPort, ...injection };
+    }
+    console.error(`\x1b[31m[HoverSource] Failed to free port ${expectedPort}. The dev server will likely fail.\x1b[0m`);
+    console.error(`[HoverSource] Please close the process manually or run as administrator.`);
+  } else {
+    console.warn(`\x1b[33m[HoverSource] Proceeding without freeing port ${expectedPort}. The dev server will likely fail.\x1b[0m`);
+  }
+
+  const injection = buildPortInjection(framework, expectedPort);
+  return { port: expectedPort, ...injection };
+}
 
 /**
  * Ensures the dev server port is free before the app launches.
@@ -490,48 +537,9 @@ export async function resolveDevServerPort(opts: {
       }
     }
 
-    // 2b. For electron mode: port shifting won't work because inner scripts (concurrently,
-    //     vite, electron) have hardcoded port references. We MUST free the original port.
+    // 2b. For electron mode, handle the blocker appropriately
     if (mode === "electron") {
-      console.warn(`\n\x1b[33m[HoverSource] ⚠️  Dev server port ${expectedPort} is occupied by: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
-      console.warn(`\x1b[33m[HoverSource] Electron projects require the original port — port shifting is not possible.\x1b[0m`);
-
-      // Auto-kill the blocker: either --auto-resolve is set, or we default to killing
-      // because there's no other viable option for Electron projects.
-      let shouldKill = autoResolve;
-      if (shouldKill) {
-        console.log(`[HoverSource] --auto-resolve: Automatically terminating blocker on port ${expectedPort}...`);
-      } else {
-        const isInteractive = process.stdout.isTTY && process.stdin.isTTY;
-        if (isInteractive) {
-          const answer = await askQuestion(`\x1b[36m[HoverSource] Terminate this process to free port ${expectedPort}? (Y/n): \x1b[0m`);
-          // Default to YES (Y/n) — the user must explicitly decline
-          shouldKill = answer.trim().toLowerCase() !== "n";
-        } else {
-          // Non-interactive (CI/piped): auto-kill since port shifting won't work
-          shouldKill = true;
-          console.log(`[HoverSource] Non-interactive mode. Automatically terminating blocker on port ${expectedPort}...`);
-        }
-      }
-
-      if (shouldKill) {
-        console.log(`[HoverSource] Terminating process ${pid}...`);
-        const success = await killProcess(pid, expectedPort);
-        if (success) {
-          console.log(`[HoverSource] Port ${expectedPort} is now free.`);
-          await new Promise((r) => setTimeout(r, 700));
-          const injection = buildPortInjection(framework, expectedPort);
-          return { port: expectedPort, ...injection };
-        }
-        console.error(`\x1b[31m[HoverSource] Failed to free port ${expectedPort}. The dev server will likely fail.\x1b[0m`);
-        console.error(`[HoverSource] Please close the process manually or run as administrator.`);
-      } else {
-        console.warn(`\x1b[33m[HoverSource] Proceeding without freeing port ${expectedPort}. The dev server will likely fail.\x1b[0m`);
-      }
-
-      // Return the original port anyway — can't shift for Electron
-      const injection = buildPortInjection(framework, expectedPort);
-      return { port: expectedPort, ...injection };
+      return handleElectronBlocker(pid, procName, expectedPort, autoResolve, framework);
     }
   }
 

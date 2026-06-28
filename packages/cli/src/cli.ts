@@ -197,84 +197,93 @@ function resolveSubcommand(
   return { execCommand: `npm run ${subcommand}`, isElectron };
 }
 
-export function detectDevServerPort(projectRoot: string, execCommand?: string): number {
-  let configPort: number | undefined;
-
-  // 1. Try to find custom port from config file mentioned in execCommand
-  if (execCommand) {
-    try {
-      let actualCmd = execCommand;
-      const npmRunMatch = execCommand.match(/^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/);
-      if (npmRunMatch) {
-        const scriptName = npmRunMatch[1];
-        const pkgPath = path.join(projectRoot, "package.json");
-        if (fs.existsSync(pkgPath)) {
-          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-          if (pkg.scripts && pkg.scripts[scriptName]) {
-            actualCmd = pkg.scripts[scriptName];
-          }
+function findPortFromExecCommand(projectRoot: string, execCommand: string): number | undefined {
+  try {
+    let actualCmd = execCommand;
+    const npmRunMatch = execCommand.match(/^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/);
+    if (npmRunMatch) {
+      const scriptName = npmRunMatch[1];
+      const pkgPath = path.join(projectRoot, "package.json");
+      if (fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+        if (pkg.scripts?.[scriptName]) {
+          actualCmd = pkg.scripts[scriptName];
         }
       }
+    }
 
-      const configMatch = actualCmd.match(/(?:--config|-c)\s+([^\s"'\\]+)/);
-      let configPath = configMatch ? configMatch[1] : undefined;
-      if (!configPath) {
-        const fileMatch = actualCmd.match(/([^\s"'\\]+\.config\.[jt]s)/);
-        configPath = fileMatch ? fileMatch[1] : undefined;
+    const configMatch = actualCmd.match(/(?:--config|-c)\s+([^\s"'\\]+)/);
+    let configPath = configMatch ? configMatch[1] : undefined;
+    if (!configPath) {
+      const fileMatch = actualCmd.match(/([^\s"'\\]+\.config\.[jt]s)/);
+      configPath = fileMatch ? fileMatch[1] : undefined;
+    }
+
+    if (configPath) {
+      const fullPath = path.resolve(projectRoot, configPath);
+      if (fs.existsSync(fullPath)) {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const portMatch = content.match(/port:\s*(\d+)/);
+        if (portMatch) {
+          return Number.parseInt(portMatch[1], 10);
+        }
       }
+    }
+  } catch {}
+  return undefined;
+}
 
-      if (configPath) {
-        const fullPath = path.resolve(projectRoot, configPath);
-        if (fs.existsSync(fullPath)) {
-          const content = fs.readFileSync(fullPath, "utf-8");
-          const portMatch = content.match(/port:\s*(\d+)/);
-          if (portMatch) {
-            configPort = Number.parseInt(portMatch[1], 10);
-          }
+function findPortFromRootConfigs(projectRoot: string): number | undefined {
+  const commonConfigs = ["vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs"];
+  for (const file of commonConfigs) {
+    try {
+      const fullPath = path.join(projectRoot, file);
+      if (fs.existsSync(fullPath)) {
+        const content = fs.readFileSync(fullPath, "utf-8");
+        const portMatch = content.match(/port:\s*(\d+)/);
+        if (portMatch) {
+          return Number.parseInt(portMatch[1], 10);
         }
       }
     } catch {}
   }
+  return undefined;
+}
 
-  // 2. Try to find common config files in root
-  if (!configPort) {
-    const commonConfigs = ["vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs"];
-    for (const file of commonConfigs) {
-      try {
-        const fullPath = path.join(projectRoot, file);
-        if (fs.existsSync(fullPath)) {
-          const content = fs.readFileSync(fullPath, "utf-8");
-          const portMatch = content.match(/port:\s*(\d+)/);
-          if (portMatch) {
-            configPort = Number.parseInt(portMatch[1], 10);
-            break;
-          }
-        }
-      } catch {}
-    }
-  }
-
-  if (configPort && !Number.isNaN(configPort)) {
-    return configPort;
-  }
-
-  // 3. Fallback to package.json dependencies
-  const pkgPath = path.join(projectRoot, "package.json");
-  if (!fs.existsSync(pkgPath)) return 3000;
-
+function findPortFromDependencies(projectRoot: string): number | undefined {
   try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-    const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const pkgPath = path.join(projectRoot, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
 
-    if ("next" in allDeps) return 3000;
-    if ("nuxt" in allDeps) return 3000;
-    if ("vite" in allDeps) return 5173;
-    if ("@sveltejs/kit" in allDeps) return 5173;
-    if ("@angular/cli" in allDeps || "@angular/core" in allDeps) return 4200;
-    if ("webpack-dev-server" in allDeps) return 8080;
+      if ("next" in allDeps) return 3000;
+      if ("nuxt" in allDeps) return 3000;
+      if ("vite" in allDeps) return 5173;
+      if ("@sveltejs/kit" in allDeps) return 5173;
+      if ("@angular/cli" in allDeps || "@angular/core" in allDeps) return 4200;
+      if ("webpack-dev-server" in allDeps) return 8080;
+    }
   } catch {}
+  return undefined;
+}
 
-  return 3000;
+export function detectDevServerPort(projectRoot: string, execCommand?: string): number {
+  let configPort: number | undefined;
+
+  if (execCommand) {
+    configPort = findPortFromExecCommand(projectRoot, execCommand);
+  }
+
+  if (!configPort) {
+    configPort = findPortFromRootConfigs(projectRoot);
+  }
+
+  if (!configPort) {
+    configPort = findPortFromDependencies(projectRoot);
+  }
+
+  return configPort ?? 3000;
 }
 
 function openBrowser(url: string) {
@@ -423,13 +432,33 @@ async function handlePatchOption(
   return null;
 }
 
+async function attemptInteractiveResolve(
+  pid: number | undefined,
+  debugPort: number,
+  projectRoot: string,
+  autoResolve: boolean
+): Promise<{ resolvedDebugPort: number; patchRestorer?: () => void }> {
+  let portFreed = false;
+  if (pid) {
+    portFreed = await handleTerminationOption(pid, debugPort, autoResolve);
+  }
+
+  if (!portFreed) {
+    const patch = await handlePatchOption(debugPort, projectRoot, autoResolve);
+    if (patch) {
+      return { resolvedDebugPort: patch.newDebugPort, patchRestorer: patch.patchRestorer };
+    }
+  }
+  return { resolvedDebugPort: debugPort };
+}
+
 export async function resolveDebugPortConflicts(
   debugPort: number,
   projectRoot: string,
   autoResolve: boolean,
   args: any
 ): Promise<{ resolvedDebugPort: number; patchRestorer?: () => void }> {
-  let isDebugPortInUse = await checkDebugPortInUse(debugPort);
+  const isDebugPortInUse = await checkDebugPortInUse(debugPort);
   if (!isDebugPortInUse) {
     return { resolvedDebugPort: debugPort };
   }
@@ -438,24 +467,17 @@ export async function resolveDebugPortConflicts(
   const procName = pid ? await getProcessName(pid) : undefined;
   warnDebugPortInUse(debugPort, pid, procName);
 
-  const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
-  let portFreed = false;
-  if (isInteractive && pid) {
-    portFreed = await handleTerminationOption(pid, debugPort, autoResolve);
-  }
-
   let currentDebugPort = debugPort;
   let patchRestorer: (() => void) | undefined;
 
-  if (!portFreed && isInteractive) {
-    const patch = await handlePatchOption(currentDebugPort, projectRoot, autoResolve);
-    if (patch) {
-      currentDebugPort = patch.newDebugPort;
-      patchRestorer = patch.patchRestorer;
-    }
+  const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
+  if (isInteractive) {
+    const result = await attemptInteractiveResolve(pid, debugPort, projectRoot, autoResolve);
+    currentDebugPort = result.resolvedDebugPort;
+    patchRestorer = result.patchRestorer;
   }
 
-  if (currentDebugPort === debugPort && isDebugPortInUse) {
+  if (currentDebugPort === debugPort) {
     console.warn(`\x1b[33m[HoverSource] Proceeding with port ${currentDebugPort} anyway. Overlay connection might fail.\x1b[0m\n`);
     console.warn(`\x1b[33m[HoverSource] To fix: close the process using port ${currentDebugPort}, or pass --debug-port=<free-port>.\x1b[0m`);
   }

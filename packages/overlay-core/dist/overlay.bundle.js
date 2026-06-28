@@ -42,12 +42,28 @@
     return line.includes("hoversource-overlay.js") || line.includes("overlay.bundle.js") || line.includes("captureSourceLocation") || line.includes("setupVanillaMonkeyPatch") || line.includes("createElement") || line.includes("innerHTML");
   }
   function parseStackLine(line) {
-    const match = /([^\s(]+):(\d+):(\d+)/.exec(line);
-    if (!match)
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("at "))
       return null;
-    const urlStr = match[1];
-    const ln = match[2];
-    const col = match[3];
+    const cleanLine = trimmed.endsWith(")") ? trimmed.slice(0, -1) : trimmed;
+    const parts = cleanLine.split(":");
+    if (parts.length < 3)
+      return null;
+    const colStr = parts.at(-1);
+    const lnStr = parts.at(-2);
+    if (colStr === void 0 || lnStr === void 0)
+      return null;
+    const col = Number.parseInt(colStr, 10);
+    const ln = Number.parseInt(lnStr, 10);
+    if (Number.isNaN(col) || Number.isNaN(ln))
+      return null;
+    const pathParts = parts.slice(0, -2);
+    const fullPath = pathParts.join(":");
+    let urlStr = fullPath.slice(3).trim();
+    const openParenIdx = urlStr.indexOf("(");
+    if (openParenIdx !== -1) {
+      urlStr = urlStr.slice(openParenIdx + 1).trim();
+    }
     try {
       let filePath = "";
       if (urlStr.startsWith("file://")) {

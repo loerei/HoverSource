@@ -685,10 +685,6 @@ function handleValidateLine(req: http.IncomingMessage, res: http.ServerResponse,
   const corrected = verifyAndCorrectSourceLocation(absolutePath, lineVal, colVal, tagNameParam, classList);
 
   let displayPath = absolutePath;
-  if (absolutePath.startsWith(config.projectRoot)) {
-    displayPath = absolutePath.substring(config.projectRoot.length).replace(/^[/\\]+/, "");
-    displayPath = "[project]/" + displayPath.replaceAll("\\", "/");
-  }
 
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({

@@ -95,7 +95,7 @@ HoverSource supports resolving metadata for multiple frontend frameworks at diff
 | Metadata Field | React (Non-Invasive / Invasive) | Vue (Non-Invasive / **Invasive**) | Svelte (Non-Invasive) | Angular (Non-Invasive / **Invasive**) | SolidJS (Non-Invasive) | Preact (Non-Invasive) | Astro (Non-Invasive) | Vanilla / Fallback |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Component Name** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Fallback (DOM tag) |
-| **File Path** | Resolved | Resolved | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | **Resolved**\*\* |
+| **File Path** | Resolved | Resolved | Resolved | Unresolved / **Resolved**\* | Resolved | Resolved | Resolved | **Partially Resolved**\*\* |
 | **Line Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | **Resolved**\*\* |
 | **Column Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | **Resolved**\*\* |
 | **Tag Name & Classes** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved |

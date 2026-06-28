@@ -1016,6 +1016,9 @@
             line = data.corrected.line;
             col = data.corrected.column;
           }
+          if (data?.correctedFile) {
+            info.fileName = data.correctedFile;
+          }
           info.lineNumber = line;
           info.columnNumber = col;
           const classesToResolve = /* @__PURE__ */ new Set();

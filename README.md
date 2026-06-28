@@ -116,7 +116,12 @@ For projects not using a component framework, HoverSource resolves source locati
 - Parses the V8 stack trace to extract the file path, line, and column, and stores them in the `data-hs-source` attribute.
 
 #### Limitations of Vanilla Resolution
-- **Timing**: Only elements created or modified after the HoverSource overlay is loaded and the monkey patches are applied will have source metadata. Elements in the initial HTML payload or created before injection cannot be resolved.
+- **Timing & CDP Injection Delay**: Only elements created or modified after the HoverSource overlay is loaded and the monkey patches are applied will have source metadata. In Electron or SPA applications, elements in the initial HTML payload or rendered immediately during application boot time will be painted before the CDP injector connects. These elements will initially show `Unknown`.
+  * **Workaround A (Interactive)**: Simply perform any UI action that triggers a re-render or re-creates the DOM elements (e.g., toggling a favorite state, applying a search query, switching tabs, or clicking a refresh list button) once the HoverSource overlay is loaded.
+  * **Workaround B (Pre-Injection)**: For 100% accurate startup resolution without manual interaction, manually add the HoverSource overlay script tag at the very top of your project's main HTML file's `<head>` during active development:
+    ```html
+    <script src="http://127.0.0.1:7300/hoversource-overlay.js"></script>
+    ```
 - **Bundling/Transpilation**: If the code is bundled or transpiled without source maps, the captured stack trace will point to the bundled output rather than the original source files.
 
 ---

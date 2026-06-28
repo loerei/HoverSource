@@ -1327,17 +1327,22 @@ function runExecMode(
     const electronArgs = [...cmdArgs, `--remote-debugging-port=${portToUse}`];
     console.log(`[HoverSource] Launching target command with remote debugging: ${[resolvedCmd, ...electronArgs].join(" ")}`);
     
+    const env = {
+      ...process.env,
+      ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${portToUse}`
+    };
+
     const useShell = process.platform === "win32";
     const child = useShell
       ? spawn([resolvedCmd, ...electronArgs].join(" "), {
           shell: true,
-          env: process.env,
+          env,
           cwd: validateSafePath(projectRoot),
           stdio: "inherit",
         })
       : spawn(resolvedCmd, electronArgs, {
           shell: false,
-          env: process.env,
+          env,
           cwd: validateSafePath(projectRoot),
           stdio: "inherit",
           detached: true,

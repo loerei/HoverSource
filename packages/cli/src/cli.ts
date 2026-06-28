@@ -771,6 +771,31 @@ async function main() {
   } catch {}
 
   // суб-команда Start
+  // subcommand Restart
+  if (subcommand === "restart") {
+    console.log(`[HoverSource] Restarting companion server on port ${requestedPort}...`);
+    // Send shutdown request to the running server
+    const shutdownUrl = `http://127.0.0.1:${requestedPort}/shutdown`;
+    const req = http.get(shutdownUrl, (res) => {
+      res.resume();
+      console.log(`[HoverSource] Sent shutdown request to running instance on port ${requestedPort}.`);
+    });
+    req.on("error", () => {
+      console.log(`[HoverSource] No running instance found on port ${requestedPort}.`);
+    });
+    req.setTimeout(1000, () => {
+      req.destroy();
+    });
+    
+    // Wait a brief moment for the old process to exit, then start a new one
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    
+    const serverPort = await resolveCompanionPort(requestedPort);
+    await startCompanionServer({ port: serverPort, projectRoot, debugPort });
+    console.log(`[HoverSource] Companion server restarted on port ${serverPort}.`);
+    return;
+  }
+
   if (subcommand === "start" && !hasStartScript) {
     console.log(`[HoverSource] Starting companion server...`);
     const serverPort = await resolveCompanionPort(requestedPort);
@@ -815,6 +840,7 @@ Usage: hs [subcommand] [options]
 
 Subcommands:
   start                  Start the companion server only.
+  restart                Restart the running companion server.
   dev, start, etc.       Any package.json script name to execute with HoverSource overlay.
 
 Options:

@@ -21,41 +21,42 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 
 ## Benchmark: Human Language vs. HoverSource Metadata
 
-To measure the efficiency gains, we ran benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment (benchmarked and logged using [chronicle-mcp](https://github.com/loerei/chronicle-mcp) via the `js-tiktoken` tokenizer). We compared a pure natural language instruction (simulating a user who does not know the codebase) against the same instruction paired with the HoverSource Component Metadata.
+To measure the efficiency gains, we ran comprehensive benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment (logged using [chronicle-mcp](https://github.com/loerei/chronicle-mcp)). We compared three prompt variations:
+1. **Prompt A**: Pure Natural Language (simulating a user who does not know the codebase).
+2. **Prompt B**: Senior Developer Context (manual file path and component naming).
+3. **Prompt C**: HoverSource Metadata (automatic clipboard metadata block).
 
 The benchmarks were performed on two public open-source projects of different scales:
-1. **[Cal.com (cal.diy)](https://github.com/calcom/cal.diy)**: A giant enterprise-level monorepo (~7,700 source files, multiple apps/packages).
-2. **[YumeShelf](https://github.com/loerei/YumeShelf)**: A medium-sized desktop Electron application (~200 source files).
+1. **[Cal.com (cal.diy)](https://github.com/calcom/cal.diy)**: Giant enterprise-level monorepo (~7,700 source files, multiple apps/packages).
+2. **[YumeShelf](https://github.com/loerei/YumeShelf)**: Medium-sized desktop Electron application (~200 source files).
 
 ---
 
-### Benchmark 1: Cal.com Monorepo (Giant Enterprise Codebase)
-* **Task**: Modify the hover style of the `'destructive'` variant of the main UI Button component (change background hover class to `hover:bg-red-50` and border hover class to `hover:border-red-500`).
-* **Metadata provided**: Component: `Button`, Element: `button.bg-default.text-error`, File Path: `packages/ui/components/button/Button.tsx` (L122, C7).
-* **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/calcom-natural-language.md) | [Metadata Assisted Log](benchmark-logs/calcom-metadata.md)
+### Benchmark 1: Cal.com Monorepo (Giant Enterprise Codebase - 10 Tasks)
+* **Detailed Report & Logs**: [Cal.com Benchmark Report](benchmark-logs/calcom/calcom-benchmark.md)
 
-| Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
-| :--- | :---: | :---: | :---: |
-| **Agent Steps** | 69 | 9 | **-87.0%** |
-| **Tool Calls** | 33 | 3 | **-90.9%** |
-| **Execution Time** | 106s | 13s | **-87.7%** (8x faster) |
-| **Cumulative Input Tokens** | 499,995 | 6,908 | **-98.6%** (72.3x fewer tokens) |
-| **Peak Context Window** | 27,749 | 2,850 | **-89.7%** |
+| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (C vs A) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Task Achievement** | 60.0% (6/10) | 100.0% (10/10) | 100.0% (10/10) | **+66.7%** |
+| **Avg Agent Steps** | 65.6 | 18.0 | 17.1 | **-73.9%** |
+| **Avg Tool Calls** | 30.5 | 6.5 | 5.9 | **-80.7%** |
+| **Avg Execution Time** | 142.0s | 44.2s | 16.4s | **-88.5%** (8.7x faster) |
+| **Avg Cumulative Input Tokens** | 651,681 | 37,858 | 35,733 | **-94.5%** (18.2x fewer tokens) |
+| **Avg Peak Context Window** | 28,257 | 7,372 | 6,486 | **-77.0%** |
 
 ---
 
-### Benchmark 2: YumeShelf (Medium Codebase)
-* **Task**: Modify the hover state of the favorite star button on the game card (change background to `rgba(255, 215, 0, 0.12)` and color to `#ffd700` on hover).
-* **Metadata provided**: Element: `div.fav-btn`, File Path: `src/renderer/game-cards.ts` (L41), Source CSS: `src/styles/game-cards.css` (L267).
-* **Full Session Logs**: [Pure Natural Language Log](benchmark-logs/yumeshelf-natural-language.md) | [Metadata Assisted Log](benchmark-logs/yumeshelf-metadata.md)
+### Benchmark 2: YumeShelf (Medium Codebase - 5 Tasks)
+* **Detailed Report & Logs**: [YumeShelf Benchmark Report](benchmark-logs/yumeshelf/yumeshelf-benchmark.md)
 
-| Metric | Pure Natural Language | Guided by HoverSource Metadata | Performance Delta |
-| :--- | :---: | :---: | :---: |
-| **Agent Steps** | 19 | 11 | **-42.1%** |
-| **Tool Calls** | 8 | 4 | **-50.0%** |
-| **Execution Time** | 22s | 11s | **-50.0%** |
-| **Cumulative Input Tokens** | 65,379 | 13,033 | **-80.1%** |
-| **Peak Context Window** | 11,167 | 4,338 | **-61.2%** |
+| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (C vs A) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Task Achievement** | 100.0% (5/5) | 100.0% (5/5) | 100.0% (5/5) | - |
+| **Avg Agent Steps** | 34.4 | 22.0 | 26.0 | **-24.4%** |
+| **Avg Tool Calls** | 15.2 | 8.8 | 11.0 | **-27.6%** |
+| **Avg Execution Time** | 34.4s | 38.8s | 24.8s | **-27.9%** (1.4x faster) |
+| **Avg Cumulative Input Tokens** | 118,354 | 44,382 | 61,255 | **-48.2%** (1.9x fewer tokens) |
+| **Avg Peak Context Window** | 14,140 | 8,589 | 9,984 | **-29.4%** |
 
 ---
 

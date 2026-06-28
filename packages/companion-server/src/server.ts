@@ -200,15 +200,62 @@ function resolveFilePath(fileParam: string, projectRoot: string): string {
     cleanFile = cleanFile.substring(1);
   }
   
+  // 1. Direct match under project root
   let resolved = path.resolve(projectRoot, cleanFile);
   if (fs.existsSync(resolved)) {
     return resolved;
   }
   
-  // If not found directly, check if prepending "src/" works
+  // 2. Try prepending "src" (common fallback for src/ directories)
   const srcResolved = path.resolve(projectRoot, "src", cleanFile);
   if (fs.existsSync(srcResolved)) {
     return srcResolved;
+  }
+  
+  // 3. Symlink resolution via node_modules (monorepo packages)
+  const segments = cleanFile.replaceAll("\\", "/").split("/");
+  if (segments.length > 1) {
+    const firstSegment = segments[0];
+    const nodeModulesPath = path.resolve(projectRoot, "node_modules", firstSegment);
+    if (fs.existsSync(nodeModulesPath)) {
+      try {
+        const realPackagePath = fs.realpathSync(nodeModulesPath);
+        const remainingPath = segments.slice(1).join("/");
+        const symlinkResolved = path.resolve(realPackagePath, remainingPath);
+        if (fs.existsSync(symlinkResolved)) {
+          return symlinkResolved;
+        }
+      } catch {}
+    }
+  }
+
+  // 4. Monorepo directory mapping fallback (e.g., packages/* or apps/*)
+  const monorepoDirs = ["packages", "apps"];
+  for (const dir of monorepoDirs) {
+    const dirPath = path.resolve(projectRoot, dir);
+    if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+      try {
+        const subdirs = fs.readdirSync(dirPath);
+        for (const subdir of subdirs) {
+          const subdirPath = path.resolve(dirPath, subdir);
+          if (fs.statSync(subdirPath).isDirectory()) {
+            // Case A: CleanFile exists directly inside package (e.g., components/button/Button.tsx inside packages/ui)
+            const pkgResolved = path.resolve(subdirPath, cleanFile);
+            if (fs.existsSync(pkgResolved)) {
+              return pkgResolved;
+            }
+            // Case B: CleanFile starts with package folder name (e.g., "ui/components/button/Button.tsx")
+            if (cleanFile.startsWith(subdir + "/")) {
+              const stripped = cleanFile.substring(subdir.length + 1);
+              const pkgStrippedResolved = path.resolve(subdirPath, stripped);
+              if (fs.existsSync(pkgStrippedResolved)) {
+                return pkgStrippedResolved;
+              }
+            }
+          }
+        }
+      } catch {}
+    }
   }
   
   return resolved;

@@ -7,6 +7,7 @@ import { PreactAdapter } from "./adapters/PreactAdapter.js";
 import { SolidAdapter } from "./adapters/SolidAdapter.js";
 import { AstroAdapter } from "./adapters/AstroAdapter.js";
 import { AngularAdapter } from "./adapters/AngularAdapter.js";
+import { VanillaAdapter } from "./adapters/VanillaAdapter.js";
 
 export * from "./adapters/types.js";
 export * from "./adapters/ReactFiberAdapter.js";
@@ -17,6 +18,7 @@ export * from "./adapters/PreactAdapter.js";
 export * from "./adapters/SolidAdapter.js";
 export * from "./adapters/AstroAdapter.js";
 export * from "./adapters/AngularAdapter.js";
+export * from "./adapters/VanillaAdapter.js";
 
 export class SourceResolver {
   private readonly adapters: SourceAdapter[] = [];
@@ -34,7 +36,8 @@ export class SourceResolver {
       new PreactAdapter(),
       new SolidAdapter(),
       new AstroAdapter(),
-      new AngularAdapter()
+      new AngularAdapter(),
+      new VanillaAdapter()
     );
     this.setupMutationObserver();
   }

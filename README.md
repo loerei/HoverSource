@@ -90,12 +90,14 @@ HoverSource supports resolving metadata for multiple frontend frameworks at diff
 | Metadata Field | React (Non-Invasive / Invasive) | Vue (Non-Invasive / **Invasive**) | Svelte (Non-Invasive) | Angular (Non-Invasive / **Invasive**) | SolidJS (Non-Invasive) | Preact (Non-Invasive) | Astro (Non-Invasive) | Vanilla / Fallback |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Component Name** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Fallback (DOM tag) |
-| **File Path** | Resolved | Resolved | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | None |
-| **Line Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | None |
-| **Column Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | None |
+| **File Path** | Resolved | Resolved | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | **Resolved**\*\* |
+| **Line Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | **Resolved**\*\* |
+| **Column Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | **Resolved**\*\* |
 | **Tag Name & Classes** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved |
 
 \* *Note: Vue and Angular require compile-time template tagging (Invasive mode via `hs install --vue` or `hs install --angular`) to expose line/column locations (and file path for Angular). Other frameworks resolve them out-of-the-box in development mode (Non-Invasive). For server-side environments (React Server Components / SSR in Next.js), React utilizes automatic, zero-config on-disk runtime patching during dev server execution.*
+
+\*\* *Note: Vanilla JS/TS resolves source locations dynamically via runtime monkey patching of DOM creation APIs (`document.createElement` and `Element.prototype.innerHTML` setter). Static elements in `index.html` or elements created before the overlay is injected will remain unresolved (`Unknown`).*
 
 ### Next.js & React Server Components (RSC) Support
 
@@ -103,6 +105,19 @@ For Next.js 14+ projects, HoverSource automatically resolves source code locatio
 
 - **Mechanism**: HoverSource temporarily patches the standard React CJS development runtimes and Next.js's vendored app-page router runtimes on disk during development server execution. All patched files are restored to their original state upon process exit or CLI shutdown.
 - **Optimized SWC Integration**: For elements compiled with dev-mode source tracking (`__source`), HoverSource reads the source locations directly without performance overhead. For RSC elements where compiler-level source attributes are stripped, HoverSource resolves locations dynamically on the server.
+
+---
+
+### Vanilla JS/TS Source Resolution
+
+For projects not using a component framework, HoverSource resolves source locations dynamically using a runtime monkey-patching approach:
+- Overrides `document.createElement` to capture the stack trace when an element is instantiated.
+- Overrides the `Element.prototype.innerHTML` setter to capture the stack trace and tag the element and its direct children.
+- Parses the V8 stack trace to extract the file path, line, and column, and stores them in the `data-hs-source` attribute.
+
+#### Limitations of Vanilla Resolution
+- **Timing**: Only elements created or modified after the HoverSource overlay is loaded and the monkey patches are applied will have source metadata. Elements in the initial HTML payload or created before injection cannot be resolved.
+- **Bundling/Transpilation**: If the code is bundled or transpiled without source maps, the captured stack trace will point to the bundled output rather than the original source files.
 
 ---
 

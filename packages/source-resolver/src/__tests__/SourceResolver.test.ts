@@ -8,6 +8,7 @@ import { PreactAdapter } from "../adapters/PreactAdapter.js";
 import { SolidAdapter } from "../adapters/SolidAdapter.js";
 import { AstroAdapter } from "../adapters/AstroAdapter.js";
 import { AngularAdapter } from "../adapters/AngularAdapter.js";
+import { VanillaAdapter } from "../adapters/VanillaAdapter.js";
 
 // Mock global getComputedStyle for Node environment test execution
 beforeAll(() => {
@@ -316,6 +317,67 @@ describe("AngularAdapter", () => {
   });
 });
 
+describe("VanillaAdapter", () => {
+  it("should resolve vanilla metadata from data-hs-source attribute", () => {
+    const adapter = new VanillaAdapter();
+    const mockElement = {
+      tagName: "DIV",
+      classList: ["container"],
+      closest: (selector: string) => {
+        if (selector === "[data-hs-source]") {
+          return mockElement;
+        }
+        return null;
+      },
+      dataset: {
+        hsSource: "src/main.ts:15:8"
+      }
+    } as any;
+
+    verifyResolution(adapter, mockElement, {
+      fileName: "src/main.ts",
+      lineNumber: 15,
+      columnNumber: 8,
+      framework: "Vanilla"
+    });
+  });
+
+  it("should resolve vanilla metadata from ancestor with data-hs-source attribute", () => {
+    const adapter = new VanillaAdapter();
+    const mockParent = {
+      tagName: "DIV",
+      classList: ["parent"],
+      closest: (selector: string) => {
+        if (selector === "[data-hs-source]") {
+          return mockParent;
+        }
+        return null;
+      },
+      dataset: {
+        hsSource: "src/app.ts:22:4"
+      }
+    } as any;
+
+    const mockElement = {
+      tagName: "SPAN",
+      classList: ["child"],
+      closest: (selector: string) => {
+        if (selector === "[data-hs-source]") {
+          return mockParent;
+        }
+        return null;
+      }
+    } as any;
+
+    verifyResolution(adapter, mockElement, {
+      fileName: "src/app.ts",
+      lineNumber: 22,
+      columnNumber: 4,
+      framework: "Vanilla"
+    });
+  });
+});
+
 describe("SourceResolver", () => {
   it("should route resolution to the correct adapter", () => {
     const resolver = new SourceResolver();
@@ -362,6 +424,19 @@ describe("SourceResolver", () => {
         ngSourceFile: "AngularFile.ts"
       }
     } as any;
+    const mockVanilla = {
+      tagName: "DIV",
+      classList: [],
+      closest: (selector: string) => {
+        if (selector === "[data-hs-source]") {
+          return mockVanilla;
+        }
+        return null;
+      },
+      dataset: {
+        hsSource: "VanillaFile.ts:30:10"
+      }
+    } as any;
 
     const reactResult = resolver.resolve(mockReact);
     expect(reactResult?.framework).toBe("React");
@@ -386,6 +461,12 @@ describe("SourceResolver", () => {
     const angularResult = resolver.resolve(mockAngular);
     expect(angularResult?.framework).toBe("Angular");
     expect(angularResult?.fileName).toBe("AngularFile.ts");
+
+    const vanillaResult = resolver.resolve(mockVanilla);
+    expect(vanillaResult?.framework).toBe("Vanilla");
+    expect(vanillaResult?.fileName).toBe("VanillaFile.ts");
+    expect(vanillaResult?.lineNumber).toBe(30);
+    expect(vanillaResult?.columnNumber).toBe(10);
   });
 
   it("should resolve ancestors layout and framework metadata", () => {

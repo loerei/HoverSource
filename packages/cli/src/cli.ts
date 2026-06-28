@@ -12,6 +12,9 @@ import https from "node:https";
 import readline from "node:readline";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { restoreLeftoverPatches, recordPatchState, removePatchState } from "./utils/patchState.js";
+import { WebProxyLauncher } from "./launcher/WebProxyLauncher.js";
+import { ElectronCdpLauncher } from "./launcher/ElectronCdpLauncher.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -172,7 +175,7 @@ function resolveSubcommand(
   return { execCommand: `npm run ${subcommand}`, isElectron };
 }
 
-function detectDevServerPort(projectRoot: string, execCommand?: string): number {
+export function detectDevServerPort(projectRoot: string, execCommand?: string): number {
   let configPort: number | undefined;
 
   // 1. Try to find custom port from config file mentioned in execCommand
@@ -375,7 +378,7 @@ function openBrowser(url: string) {
   });
 }
 
-function askQuestion(query: string): Promise<string> {
+export function askQuestion(query: string): Promise<string> {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -386,7 +389,7 @@ function askQuestion(query: string): Promise<string> {
   }));
 }
 
-function getPidUsingPort(port: number): Promise<number | undefined> {
+export function getPidUsingPort(port: number): Promise<number | undefined> {
   return new Promise((resolve) => {
     if (process.platform === "win32") {
       exec(`netstat -ano | findstr :${port}`, (err, stdout) => {
@@ -418,7 +421,7 @@ function getPidUsingPort(port: number): Promise<number | undefined> {
   });
 }
 
-function getProcessName(pid: number): Promise<string | undefined> {
+export function getProcessName(pid: number): Promise<string | undefined> {
   return new Promise((resolve) => {
     if (process.platform === "win32") {
       exec(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`, (err, stdout) => {
@@ -496,7 +499,7 @@ function killProcessWindowsUac(pid: number, port: number): Promise<boolean> {
   });
 }
 
-function killProcess(pid: number, port: number): Promise<boolean> {
+export function killProcess(pid: number, port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const cmd = process.platform === "win32" ? `taskkill /F /PID ${pid}` : `kill -9 ${pid}`;
     exec(cmd, (err, stdout, stderr) => {
@@ -528,349 +531,7 @@ function killProcess(pid: number, port: number): Promise<boolean> {
       }
     });
   });
-}
-
-const PATCH_STATE_FILE = path.join(os.tmpdir(), "hoversource_patches.json");
-
-function recordPatchState(filePath: string, originalContent: string) {
-  let state: Record<string, string> = {};
-  if (fs.existsSync(PATCH_STATE_FILE)) {
-    try {
-      state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8"));
-    } catch (err) {
-      console.debug("[HoverSource] Failed to parse patch state:", err);
-    }
-  }
-  state[filePath] = originalContent;
-  try {
-    fs.writeFileSync(PATCH_STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
-  } catch (err) {
-    console.debug("[HoverSource] Failed to write patch state:", err);
-  }
-}
-
-function removePatchState(filePath: string) {
-  if (!fs.existsSync(PATCH_STATE_FILE)) return;
-  try {
-    const state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8"));
-    delete state[filePath];
-    if (Object.keys(state).length === 0) {
-      fs.unlinkSync(PATCH_STATE_FILE);
-    } else {
-      fs.writeFileSync(PATCH_STATE_FILE, JSON.stringify(state, null, 2), "utf-8");
-    }
-  } catch (err) {
-    console.debug("[HoverSource] Failed to remove patch state:", err);
-  }
-}
-
-function restoreLeftoverPatches() {
-  if (!fs.existsSync(PATCH_STATE_FILE)) return;
-  try {
-    const state = JSON.parse(fs.readFileSync(PATCH_STATE_FILE, "utf-8")) as Record<string, string>;
-    for (const [filePath, originalContent] of Object.entries(state)) {
-      if (fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, originalContent, "utf-8");
-        console.log(`[HoverSource] [Self-Healing] Restored leftover patch in ${filePath}`);
-      }
-    }
-    fs.unlinkSync(PATCH_STATE_FILE);
-  } catch (err) {
-    console.debug("[HoverSource] Leftover patch restore failed:", err);
-  }
-}
-const patchedReactRuntimesList: { path: string; originalContent: string }[] = [];
-
-function patchVendoredReactRuntime(content: string, relPath: string): string | null {
-  const exportsIdx = content.indexOf("module.exports");
-  if (exportsIdx === -1) {
-    return null;
-  }
-  const equalsIdx = content.indexOf("=", exportsIdx);
-  const endIdx = content.indexOf(";", exportsIdx);
-  if (equalsIdx === -1 || endIdx === -1 || equalsIdx >= endIdx) {
-    return null;
-  }
-
-  const originalExpr = content.slice(equalsIdx + 1, endIdx).trim();
-  const isDev = relPath.includes("dev");
-  let wrappedContent = "";
-  if (isDev) {
-    wrappedContent = `
-const original = ${originalExpr};
-exports.Fragment = original.Fragment;
-exports.jsxDEV = function(type, config, maybeKey, isStaticChildren, source, self) {
-  globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config, source);
-  return original.jsxDEV(type, config, maybeKey, isStaticChildren, source, self);
-};
-`;
-  } else {
-    wrappedContent = `
-const original = ${originalExpr};
-exports.Fragment = original.Fragment;
-exports.jsx = function(type, config, maybeKey, ...args) {
-  globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config);
-  return original.jsx.call(this, type, config, maybeKey, ...args);
-};
-exports.jsxs = function(type, config, maybeKey, ...args) {
-  globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config);
-  return original.jsxs.call(this, type, config, maybeKey, ...args);
-};
-`;
-  }
-
-  return (content.includes('"use strict";') ? '"use strict";\n' : "") + `
-// HoverSource Injection Patch
-if (!globalThis.__HOVERSOURCE_INJECT_SOURCE__) {
-  globalThis.__HOVERSOURCE_INJECT_SOURCE__ = (function() {
-    const path = require("path");
-    let ssrLogCount = 0;
-    
-    function getJSXSourceLocation(type) {
-      const err = new Error();
-      const stack = err.stack || "";
-
-      if (typeof window === "undefined" && ssrLogCount < 200) {
-        ssrLogCount++;
-        try {
-          const lines = stack.split("\\n");
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i];
-            if (!line) continue;
-            const normalizedLine = line.replace(/\\\\/g, "/");
-            const isFramework = 
-              line.includes("jsxDEV") ||
-              line.includes("jsxsDEV") ||
-              line.includes("node:internal") ||
-              line.includes("Module._compile") ||
-              line.includes("next-dev-server") ||
-              /node_modules[\\/_]react[\\/_]/i.test(normalizedLine) ||
-              /node_modules[\\/_]react-dom[\\/_]/i.test(normalizedLine) ||
-              /node_modules[\\/_]next[\\/_]/i.test(normalizedLine) ||
-              /node_modules[\\/_]scheduler[\\/_]/i.test(normalizedLine) ||
-              line.includes("react-jsx-dev-runtime") ||
-              line.includes("react-jsx-runtime");
-
-            if (isFramework) {
-              continue;
-            }
-            const match = line.match(/(?:at\\\\s+.*?\\\\s+\\\\(|at\\\\s+)(.*?):(\\\\d+):(\\\\d+)\\\\)?$/);
-            if (match) {
-              return {
-                fileName: match[1],
-                lineNumber: parseInt(match[2], 10),
-                columnNumber: parseInt(match[3], 10)
-              };
-            }
-          }
-        } catch {}
-      }
-      return null;
-    }
-
-    return function(type, config, source) {
-      if (!config || typeof type !== "string") return;
-      if (config["data-hoversource-loc"]) return;
-      
-      const loc = source || getJSXSourceLocation(type);
-      if (loc) {
-        let filePath = loc.fileName || "";
-        try {
-          if (path.isAbsolute(filePath)) {
-            filePath = path.relative(process.cwd(), filePath).replace(/\\\\/g, "/");
-          }
-        } catch {}
-        config["data-hoversource-loc"] = \`\${filePath}:\${loc.lineNumber}:\${loc.columnNumber}\`;
-      }
-    };
-  })();
-}
-${wrappedContent}
-`;
-}
-
-function patchSingleReactRuntime(fullPath: string, relPath: string, projectRoot: string) {
-  try {
-    const content = fs.readFileSync(fullPath, "utf-8");
-    if (content.includes("HoverSource Injection Patch")) {
-      return;
-    }
-
-    let newContent = content;
-
-    if (relPath.includes("vendored")) {
-      const patched = patchVendoredReactRuntime(content, relPath);
-      if (patched) {
-        newContent = patched;
-      }
-    } else {
-      // 1. For anonymous function exports, prepend injection as the first statement in the body
-      newContent = newContent.replace(
-        /exports\.jsxDEV\s*=\s*function\s*\(\s*type,\s*config,\s*maybeKey,\s*isStaticChildren\s*\)\s*\{/g,
-        "exports.jsxDEV = function(type, config, maybeKey, isStaticChildren) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config, arguments[4]);"
-      );
-      newContent = newContent.replace(
-        /exports\.jsx\s*=\s*function\s*\(\s*type,\s*config,\s*maybeKey\s*\)\s*\{/g,
-        "exports.jsx = function(type, config, maybeKey) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config);"
-      );
-      newContent = newContent.replace(
-        /exports\.jsxs\s*=\s*function\s*\(\s*type,\s*config,\s*maybeKey\s*\)\s*\{/g,
-        "exports.jsxs = function(type, config, maybeKey) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(type, config);"
-      );
-
-      // 2. For variable assignments, replace with top-level wrappers at module scope
-      newContent = newContent.replace(
-        "exports.jsxDEV = jsxDEV$1;",
-        "exports.jsxDEV = function(t, c, k, s, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c, s); return jsxDEV$1(t, c, k, s, ...args); };"
-      );
-      newContent = newContent.replace(
-        "exports.jsxDEV = jsxDEV;",
-        "exports.jsxDEV = function(t, c, k, s, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c, s); return jsxDEV(t, c, k, s, ...args); };"
-      );
-      newContent = newContent.replace(
-        "exports.jsx = jsx;",
-        "exports.jsx = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsx(t, c, k, ...args); };"
-      );
-      newContent = newContent.replace(
-        "exports.jsx = jsxWithValidationDynamic;",
-        "exports.jsx = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsxWithValidationDynamic(t, c, k, ...args); };"
-      );
-      newContent = newContent.replace(
-        "exports.jsxs = jsxs;",
-        "exports.jsxs = function(t, c, k, ...args) { globalThis.__HOVERSOURCE_INJECT_SOURCE__(t, c); return jsxs(t, c, k, ...args); };"
-      );
-
-      // 3. Append the global helper block to the end of the file
-      newContent = newContent + `
-// HoverSource Injection Patch
-globalThis.__HOVERSOURCE_INJECT_SOURCE__ = (function() {
-  const path = require("path");
-  let ssrLogCount = 0;
-  
-  function getJSXSourceLocation(type) {
-    const err = new Error();
-    const stack = err.stack || "";
-
-    if (typeof window === "undefined" && ssrLogCount < 200) {
-      ssrLogCount++;
-      try {
-        const lines = stack.split("\\n");
-        for (let i = 1; i < lines.length; i++) {
-          const line = lines[i];
-          if (!line) continue;
-          const normalizedLine = line.replace(/\\\\/g, "/");
-          const isFramework = 
-            line.includes("jsxDEV") ||
-            line.includes("jsxsDEV") ||
-            line.includes("node:internal") ||
-            line.includes("Module._compile") ||
-            line.includes("next-dev-server") ||
-            /node_modules[\\/_]react[\\/_]/i.test(normalizedLine) ||
-            /node_modules[\\/_]react-dom[\\/_]/i.test(normalizedLine) ||
-            /node_modules[\\/_]next[\\/_]/i.test(normalizedLine) ||
-            /node_modules[\\/_]scheduler[\\/_]/i.test(normalizedLine) ||
-            line.includes("react-jsx-dev-runtime") ||
-            line.includes("react-jsx-runtime");
-
-          if (isFramework) {
-            continue;
-          }
-          const match = line.match(/(?:at\\\\s+.*?\\\\s+\\\\(|at\\\\s+)(.*?):(\\\\d+):(\\\\d+)\\\\)?$/);
-          if (match) {
-            return {
-              fileName: match[1],
-              lineNumber: parseInt(match[2], 10),
-              columnNumber: parseInt(match[3], 10)
-            };
-          }
-        }
-      } catch {}
-    }
-    return null;
-  }
-
-  return function(type, config, source) {
-    if (!config || typeof type !== "string") return;
-    if (config["data-hoversource-loc"]) return;
-    
-    const loc = source || getJSXSourceLocation(type);
-    if (loc) {
-      let filePath = loc.fileName || "";
-      try {
-        if (path.isAbsolute(filePath)) {
-          filePath = path.relative(process.cwd(), filePath).replace(/\\\\/g, "/");
-        }
-      } catch {}
-      config["data-hoversource-loc"] = \`\${filePath}:\${loc.lineNumber}:\${loc.columnNumber}\`;
-    }
-  };
-})();
-`;
-    }
-
-    if (newContent !== content) {
-      recordPatchState(fullPath, content);
-      patchedReactRuntimesList.push({ path: fullPath, originalContent: content });
-      fs.writeFileSync(fullPath, newContent, "utf-8");
-      console.log(`[HoverSource] Temporarily patched React development runtime on disk: ${path.relative(projectRoot, fullPath)}`);
-    }
-  } catch (err: any) {
-    console.warn(`[HoverSource] Failed to patch React runtime in ${path.relative(projectRoot, fullPath)}:`, err.message);
-  }
-}
-
-function patchReactRuntimes(projectRoot: string) {
-  process.once("exit", restoreReactRuntimes);
-
-  const searchDirs = [
-    projectRoot,
-    path.join(projectRoot, "apps/web")
-  ];
-
-  const relativePaths = [
-    "node_modules/react/cjs/react-jsx-dev-runtime.development.js",
-    "node_modules/next/dist/compiled/react/cjs/react-jsx-dev-runtime.development.js",
-    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-dev-runtime.development.js",
-    "node_modules/next/dist/compiled/react/cjs/react-jsx-dev-runtime.react-server.development.js",
-    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-dev-runtime.react-server.development.js",
-    "node_modules/react/cjs/react-jsx-runtime.development.js",
-    "node_modules/next/dist/compiled/react/cjs/react-jsx-runtime.development.js",
-    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-runtime.development.js",
-    "node_modules/next/dist/compiled/react/cjs/react-jsx-runtime.react-server.development.js",
-    "node_modules/next/dist/compiled/react-experimental/cjs/react-jsx-runtime.react-server.development.js",
-    // Next.js App Router vendored runtimes
-    "node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime.js",
-    "node_modules/next/dist/server/route-modules/app-page/vendored/rsc/react-jsx-runtime.js",
-    "node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js",
-    "node_modules/next/dist/server/route-modules/app-page/vendored/ssr/react-jsx-runtime.js",
-    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/rsc/react-jsx-dev-runtime.js",
-    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/rsc/react-jsx-runtime.js",
-    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/ssr/react-jsx-dev-runtime.js",
-    "node_modules/next/dist/esm/server/route-modules/app-page/vendored/ssr/react-jsx-runtime.js"
-  ];
-
-  for (const dir of searchDirs) {
-    for (const relPath of relativePaths) {
-      const fullPath = path.resolve(dir, relPath);
-      if (fs.existsSync(fullPath)) {
-        patchSingleReactRuntime(fullPath, relPath, projectRoot);
-      }
-    }
-  }
-}
-
-function restoreReactRuntimes() {
-  for (const file of patchedReactRuntimesList) {
-    try {
-      fs.writeFileSync(file.path, file.originalContent, "utf-8");
-      removePatchState(file.path);
-      console.log(`[HoverSource] Restored React development runtime: ${file.path}`);
-    } catch (err: any) {
-      console.error(`[HoverSource] Failed to restore React runtime ${file.path}:`, err.message);
-    }
-  }
-  patchedReactRuntimesList.length = 0;
-}
+}// On-disk patching functions moved to patcher/ReactRuntimePatcher.ts and utils/patchState.ts= 0;
 
 function patchSingleFileForDebugPort(
   fullPath: string,
@@ -1002,7 +663,7 @@ async function handlePatchOption(
   return null;
 }
 
-async function resolveDebugPortConflicts(
+export async function resolveDebugPortConflicts(
   debugPort: number,
   projectRoot: string,
   autoResolve: boolean,
@@ -1042,7 +703,7 @@ async function resolveDebugPortConflicts(
   return { resolvedDebugPort: currentDebugPort, patchRestorer };
 }
 
-async function runProxyMode(targetUrl: string, serverPort: number, args: any): Promise<void> {
+export async function runProxyMode(targetUrl: string, serverPort: number, args: any): Promise<void> {
   let targetPort = 3000;
   try {
     targetPort = Number.parseInt(new URL(targetUrl).port || "3000", 10);
@@ -1080,7 +741,7 @@ async function runProxyMode(targetUrl: string, serverPort: number, args: any): P
   }
 }
 
-async function waitForServer(
+export async function waitForServer(
   port: number,
   timeoutMs = 120_000,
   hasExitedCheck?: () => boolean
@@ -1125,123 +786,9 @@ async function waitForServer(
   return false;
 }
 
-async function runWebAppMode(
-  execCommand: string,
-  projectRoot: string,
-  serverPort: number,
-  args: any
-): Promise<{ child: ReturnType<typeof spawn> }> {
-  const config = loadMergedConfig(projectRoot);
-  const timeoutSec = config.webAppDevServerTimeout ?? 120;
-  const timeoutMs = timeoutSec * 1000;
+// runWebAppMode has been moved to launcher/WebProxyLauncher.ts
 
-  const devPort = detectDevServerPort(projectRoot, execCommand);
-  console.log(`[HoverSource] Web app detected. Dev server expected on port ${devPort}.`);
-
-  const devPortFree = await isPortFree(devPort);
-  if (!devPortFree) {
-    const pid = await getPidUsingPort(devPort);
-    const procName = pid ? await getProcessName(pid) : undefined;
-    console.warn(`\n\x1b[33m[HoverSource] ⚠️  WARNING: Dev server port ${devPort} is already in use by another process!\x1b[0m`);
-    if (pid) {
-      console.warn(`\x1b[33m[HoverSource] Process: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
-    } else {
-      console.warn(`\x1b[33m[HoverSource] Could not identify the process holding the port.\x1b[0m`);
-    }
-    
-    const autoResolve = args["auto-resolve"] === true;
-    const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
-    
-    let resolvedConflict = false;
-    if (pid && isInteractive) {
-      let shouldKill = autoResolve;
-      if (shouldKill) {
-        console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically terminating process ${pid}...`);
-      } else {
-        const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${devPort}? (y/N): \x1b[0m`);
-        shouldKill = answer.trim().toLowerCase() === "y";
-      }
-      
-      if (shouldKill) {
-        console.log(`[HoverSource] Terminating process ${pid}...`);
-        const success = await killProcess(pid, devPort);
-        if (success) {
-          console.log(`[HoverSource] Process terminated successfully. Port ${devPort} is now free.`);
-          resolvedConflict = true;
-          // Wait a brief moment for OS to release the socket
-          await new Promise((r) => setTimeout(r, 700));
-        } else {
-          console.error(`[HoverSource] Failed to terminate process. You may need to run as administrator or close it manually.`);
-        }
-      }
-    }
-    
-    if (!resolvedConflict) {
-      console.warn(`[HoverSource] Continuing anyway. If it fails, please close the process using port ${devPort} manually.`);
-    }
-  }
-
-  // Set NODE_OPTIONS to preload our bootstrap script in all Node processes spawned by the dev server
-  const bootstrapPath = path.resolve(__dirname, "./bootstrap.js");
-  const bootstrapUrl = pathToFileURL(bootstrapPath).href;
-  const env = { ...process.env };
-  const currentOptions = env.NODE_OPTIONS || "";
-  env.NODE_OPTIONS = `${currentOptions} --import "${bootstrapUrl}"`.trim();
-
-  // Spawn the dev server
-  const { command, args: cmdArgs } = parseCommand(execCommand);
-  const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
-  const useShell = process.platform === "win32";
-  const child = useShell
-    ? spawn([resolvedCmd, ...cmdArgs].join(" "), {
-        shell: true,
-        env,
-        cwd: validateSafePath(projectRoot),
-        stdio: "inherit",
-      })
-    : spawn(resolvedCmd, cmdArgs, {
-        shell: false,
-        env,
-        cwd: validateSafePath(projectRoot),
-        stdio: "inherit",
-        detached: true,
-      });
-
-  child.on("error", (err) => {
-    console.error(`[HoverSource] Dev server failed to start:`, err.message);
-  });
-
-  let hasExited = false;
-  let exitCode: number | null = null;
-  child.on("exit", (code) => {
-    hasExited = true;
-    exitCode = code;
-  });
-
-  // Wait for the dev server to be ready
-  console.log(`[HoverSource] Waiting for dev server on port ${devPort} (timeout: ${timeoutSec}s)...`);
-  const ready = await waitForServer(devPort, timeoutMs, () => hasExited);
-
-  if (!ready) {
-    if (hasExited) {
-      console.error(`\n\x1b[31m[HoverSource] Error: Dev server process exited early with code ${exitCode}.\x1b[0m`);
-      console.error(`[HoverSource] Please make sure your dev server is built and can run successfully.`);
-      console.error(`[HoverSource] If it's a production server, ensure you have built it first (e.g. npm run build)`);
-      console.error(`[HoverSource] or run the development server instead (e.g. hs dev).`);
-      return { child };
-    }
-    console.error(`[HoverSource] Dev server did not respond on port ${devPort} within timeout.`);
-    console.error(`[HoverSource] If your dev server uses a different port, run it separately and use:`);
-    console.error(`\x1b[36m[HoverSource]   hs -t http://localhost:<your-port>\x1b[0m`);
-    return { child };
-  }
-
-  console.log(`[HoverSource] Dev server is ready on port ${devPort}.`);
-  await runProxyMode(`http://localhost:${devPort}`, serverPort, args);
-  return { child };
-}
-
-function cleanArgument(arg: string): string {
+export function cleanArgument(arg: string): string {
   const first = arg[0];
   if ((first === '"' || first === "'") && arg.endsWith(first)) {
     return arg.slice(1, -1).replace(/\\(.)/g, "$1");
@@ -1249,7 +796,7 @@ function cleanArgument(arg: string): string {
   return arg;
 }
 
-function parseCommand(cmdString: string): { command: string; args: string[] } {
+export function parseCommand(cmdString: string): { command: string; args: string[] } {
   const matches = cmdString.match(/[^"'\s]+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g) || [];
   const parts = matches.map(cleanArgument);
   return {
@@ -1258,7 +805,7 @@ function parseCommand(cmdString: string): { command: string; args: string[] } {
   };
 }
 
-function resolveWindowsCommand(command: string): string {
+export function resolveWindowsCommand(command: string): string {
   if (process.platform === "win32") {
     const commonCmds = ["npm", "npx", "yarn", "pnpm", "gulp", "tsc"];
     if (commonCmds.includes(command.toLowerCase())) {
@@ -1268,7 +815,7 @@ function resolveWindowsCommand(command: string): string {
   return command;
 }
 
-function findScriptPath(projectRoot: string): string {
+export function findScriptPath(projectRoot: string): string {
   const pathsToTry = [
     path.resolve(__dirname, "../../overlay-core/dist/overlay.bundle.js"),
     path.resolve(__dirname, "../node_modules/@hoversource/overlay-core/dist/overlay.bundle.js"),
@@ -1286,7 +833,7 @@ function findScriptPath(projectRoot: string): string {
   process.exit(1);
 }
 
-async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string): Promise<void> {
+export async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string): Promise<void> {
   console.log(`[HoverSource] Watching debug port :${debugPort} for Chromium targets...`);
   
   let isInjected = false;
@@ -1313,100 +860,7 @@ async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string)
   setInterval(pollAndInject, 2500);
 }
 
-function runExecMode(
-  execCommand: string,
-  projectRoot: string,
-  debugPort: number,
-  serverPort: number,
-  args: any
-): void {
-  const { command, args: cmdArgs } = parseCommand(execCommand);
-  const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
-
-  const runWithCdp = (portToUse: number, patchRestorer?: () => void) => {
-    const electronArgs = [...cmdArgs, `--remote-debugging-port=${portToUse}`];
-    console.log(`[HoverSource] Launching target command with remote debugging: ${[resolvedCmd, ...electronArgs].join(" ")}`);
-    
-    const env = {
-      ...process.env,
-      ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${portToUse}`
-    };
-
-    const useShell = process.platform === "win32";
-    const child = useShell
-      ? spawn([resolvedCmd, ...electronArgs].join(" "), {
-          shell: true,
-          env,
-          cwd: validateSafePath(projectRoot),
-          stdio: "inherit",
-        })
-      : spawn(resolvedCmd, electronArgs, {
-          shell: false,
-          env,
-          cwd: validateSafePath(projectRoot),
-          stdio: "inherit",
-          detached: true,
-        });
-
-    child.on("error", (err) => {
-      console.error(`[HoverSource] Exec command failed to start: ${err.message}`);
-    });
-
-    const scriptPath = findScriptPath(projectRoot);
-    const scriptContent = fs.readFileSync(validateSafePath(scriptPath), "utf-8");
-    const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
-    const scriptWithPort = portBootstrap + scriptContent;
-    
-    startCdpInjectionWatch(portToUse, scriptWithPort);
-
-    const cleanup = () => {
-      if (patchRestorer) patchRestorer();
-      process.exit();
-    };
-
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
-    child.on("exit", cleanup);
-  };
-
-  const autoResolve = args["auto-resolve"] === true;
-  resolveDebugPortConflicts(debugPort, projectRoot, autoResolve, args).then((resolved) => {
-    runWithCdp(resolved.resolvedDebugPort, resolved.patchRestorer);
-  });
-}
-
-async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
-  const safeTarget = validateSafeUrl(targetUrl);
-  return new Promise((resolve) => {
-    try {
-      const url = new URL(safeTarget);
-      const schemesList = ["http:", "https:"];
-      if (schemesList.includes(url.protocol)) {
-        const isHttps = url.protocol === "https:";
-        const req = isHttps
-          ? https.get(url, (res) => {
-              res.resume();
-              resolve(true);
-            })
-          : http.get(url, (res) => {
-              res.resume();
-              resolve(true);
-            });
-        req.setTimeout(2000, () => {
-          req.destroy();
-          resolve(false);
-        });
-        req.on("error", () => resolve(false));
-      } else {
-        resolve(false);
-      }
-    } catch {
-      resolve(false);
-    }
-  });
-}
-
-async function handleExecMode(
+export async function handleExecMode(
   execArg: string,
   subcommand: string | undefined,
   projectRoot: string,
@@ -1448,35 +902,48 @@ async function handleExecMode(
     }
   }
 
-  if (resolved.isElectron) {
-    console.log(`[HoverSource] Electron app detected. Running in exec mode.`);
-    runExecMode(resolved.execCommand, projectRoot, debugPort, serverPort, args);
-  } else {
-    console.log(`[HoverSource] Web application detected. Running in web-app mode.`);
-    patchReactRuntimes(projectRoot);
-    const { child } = await runWebAppMode(resolved.execCommand, projectRoot, serverPort, args);
-    
-    const cleanup = () => {
-      restoreReactRuntimes();
-      if (child.pid) {
-        try {
-          if (process.platform === "win32") {
-            exec(`taskkill /F /T /PID ${child.pid}`);
-          } else {
-            process.kill(-child.pid, "SIGKILL");
-          }
-        } catch {
-          child.kill();
-        }
+  const launcher = resolved.isElectron
+    ? new ElectronCdpLauncher()
+    : new WebProxyLauncher();
+
+  await launcher.launch({
+    execCommand: resolved.execCommand,
+    projectRoot,
+    serverPort,
+    debugPort,
+    args
+  });
+}
+
+async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
+  const safeTarget = validateSafeUrl(targetUrl);
+  return new Promise((resolve) => {
+    try {
+      const url = new URL(safeTarget);
+      const schemesList = ["http:", "https:"];
+      if (schemesList.includes(url.protocol)) {
+        const isHttps = url.protocol === "https:";
+        const req = isHttps
+          ? https.get(url, (res) => {
+              res.resume();
+              resolve(true);
+            })
+          : http.get(url, (res) => {
+              res.resume();
+              resolve(true);
+            });
+        req.setTimeout(2000, () => {
+          req.destroy();
+          resolve(false);
+        });
+        req.on("error", () => resolve(false));
       } else {
-        child.kill();
+        resolve(false);
       }
-      process.exit();
-    };
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
-    child.on("exit", cleanup);
-  }
+    } catch {
+      resolve(false);
+    }
+  });
 }
 
 async function main() {

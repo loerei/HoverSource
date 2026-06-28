@@ -72,9 +72,11 @@ export async function isPortFree(port: number): Promise<boolean> {
 }
 
 export async function findFreePort(startPort: number, excludePorts?: number | number[], maxPort = 65535): Promise<number> {
-  const excluded = new Set(
-    excludePorts === undefined ? [] : Array.isArray(excludePorts) ? excludePorts : [excludePorts]
-  );
+  let excludeArray: number[] = [];
+  if (excludePorts !== undefined) {
+    excludeArray = Array.isArray(excludePorts) ? excludePorts : [excludePorts];
+  }
+  const excluded = new Set(excludeArray);
   let port = startPort;
   while (port <= maxPort) {
     if (excluded.has(port)) {
@@ -266,7 +268,7 @@ export function isZombieOfProject(pid: number, projectRoot: string): Promise<boo
       });
     } else {
       exec(`ps -p ${pid} -o args=`, (err, stdout) => {
-        if (!err && stdout && stdout.toLowerCase().includes(normalizedRoot)) {
+        if (!err && stdout?.toLowerCase().includes(normalizedRoot)) {
           return resolve(true);
         }
         exec(`lsof -a -d cwd -p ${pid} -fn`, (lsofErr, lsofStdout) => {
@@ -361,7 +363,7 @@ function detectFramework(projectRoot: string, execCommand?: string): Framework {
 
       // Resolve npm run <script> to the actual command
       if (execCommand) {
-        const npmRunMatch = execCommand.match(/^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/);
+        const npmRunMatch = /^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/.exec(execCommand);
         if (npmRunMatch && pkg.scripts?.[npmRunMatch[1]]) {
           scriptCmd = pkg.scripts[npmRunMatch[1]].toLowerCase();
         } else {
@@ -497,7 +499,9 @@ export async function resolveDevServerPort(opts: {
       // Auto-kill the blocker: either --auto-resolve is set, or we default to killing
       // because there's no other viable option for Electron projects.
       let shouldKill = autoResolve;
-      if (!shouldKill) {
+      if (shouldKill) {
+        console.log(`[HoverSource] --auto-resolve: Automatically terminating blocker on port ${expectedPort}...`);
+      } else {
         const isInteractive = process.stdout.isTTY && process.stdin.isTTY;
         if (isInteractive) {
           const answer = await askQuestion(`\x1b[36m[HoverSource] Terminate this process to free port ${expectedPort}? (Y/n): \x1b[0m`);
@@ -508,8 +512,6 @@ export async function resolveDevServerPort(opts: {
           shouldKill = true;
           console.log(`[HoverSource] Non-interactive mode. Automatically terminating blocker on port ${expectedPort}...`);
         }
-      } else {
-        console.log(`[HoverSource] --auto-resolve: Automatically terminating blocker on port ${expectedPort}...`);
       }
 
       if (shouldKill) {
@@ -589,7 +591,7 @@ export async function resolveAllPorts(opts: {
     const debugFree = await isPortFree(debugPort);
     if (!debugFree || debugPort === companionPort || debugPort === devResult.port) {
       resolvedDebugPort = await findFreePort(
-        debugPort === companionPort || debugPort === devResult.port ? debugPort + 1 : debugPort + 1,
+        debugPort + 1,
         [companionPort, devResult.port]
       );
       if (resolvedDebugPort !== debugPort) {

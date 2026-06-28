@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { startCompanionServer, loadMergedConfig } from "@hoversource/companion-server";
+import { startCompanionServer } from "@hoversource/companion-server";
 import { injectOverlayScript } from "@hoversource/client-injector";
 import { startProxy } from "./proxy.js";
-import { exec, spawn } from "node:child_process";
+import { exec } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
 import net from "node:net";
@@ -18,10 +18,7 @@ import {
   getProcessName,
   killProcess,
   askQuestion,
-  isZombieOfProject,
-  resolveCompanionPort,
-  resolveDevServerPort,
-  resolveAllPorts
+  resolveCompanionPort
 } from "./port.js";
 
 // Re-export port functions for backward compatibility

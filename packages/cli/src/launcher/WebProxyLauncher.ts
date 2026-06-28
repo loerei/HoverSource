@@ -17,7 +17,7 @@ import {
 import { resolveDevServerPort } from "../port.js";
 
 export class WebProxyLauncher implements AppLauncher {
-  private patcher = new ReactRuntimePatcher();
+  private readonly patcher = new ReactRuntimePatcher();
 
   async launch(config: LaunchConfig): Promise<void> {
     const { execCommand, projectRoot, serverPort, args } = config;
@@ -116,7 +116,10 @@ export class WebProxyLauncher implements AppLauncher {
       if (child.pid) {
         try {
           if (process.platform === "win32") {
-            spawn("taskkill", ["/F", "/T", "/PID", String(child.pid)]);
+            const taskkillPath = process.env.SystemRoot
+              ? path.join(process.env.SystemRoot, "System32", "taskkill.exe")
+              : "taskkill";
+            spawn(taskkillPath, ["/F", "/T", "/PID", String(child.pid)]);
           } else {
             process.kill(-child.pid, "SIGKILL");
           }

@@ -35,6 +35,14 @@ export interface HoverSourceConfig {
     openDashboard: ShortcutKey;
     toggleMode: ShortcutKey;
   };
+  metadataFilter?: {
+    panelPosition?: { x: number; y: number };
+    filters?: {
+      component?: Record<string, boolean>;
+      layer?: Record<string, boolean>;
+      design?: Record<string, boolean>;
+    };
+  };
 }
 
 export interface ServerConfig {
@@ -61,6 +69,37 @@ const DEFAULT_CONFIG: HoverSourceConfig = {
     copyAllLayers: { key: "c", altKey: true, ctrlKey: false, shiftKey: true },
     openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
     toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
+  },
+  metadataFilter: {
+    filters: {
+      component: {
+        componentName: true,
+        elementSelector: true,
+        filePath: true,
+        framework: true,
+        dimensions: true,
+        keyStyles: true,
+        parentStyles: true,
+        layoutConstraints: true,
+        sourceComments: true,
+        sourceAttributes: true
+      },
+      layer: {
+        layerSummary: true,
+        layer1: true,
+        layer2: true,
+        htmlStructure: true
+      },
+      design: {
+        compInfo: true,
+        horizontalAnchor: true,
+        verticalAnchor: true,
+        layoutContext: true,
+        suggestedCss: true,
+        sourceFiles: true,
+        aiInstructions: true
+      }
+    }
   }
 };
 
@@ -183,36 +222,23 @@ function escapeRegExp(str: string): string {
   return str.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
-// Resolve a file param (possibly relative) to an absolute path
-function resolveFilePath(fileParam: string, projectRoot: string): string {
-  if (path.isAbsolute(fileParam)) return fileParam;
-  
-  let cleanFile = fileParam;
-  if (cleanFile.startsWith("[project]/")) {
-    cleanFile = cleanFile.substring("[project]/".length);
-  }
-  // Strip leading host/port prefixes like "5173/", "localhost:3000/", etc.
-  cleanFile = cleanFile.replace(/^(?:https?:\/\/)?(?:[a-zA-Z0-9.-]+)?(?::\d+)?\//, "");
-  // If the path starts with digits followed by a slash (e.g., "5173/"), strip it
-  cleanFile = cleanFile.replace(/^\d+\//, "");
-  // If it starts with "/", strip it
-  if (cleanFile.startsWith("/")) {
-    cleanFile = cleanFile.substring(1);
-  }
-  
-  // 1. Direct match under project root
-  let resolved = path.resolve(projectRoot, cleanFile);
+function tryDirectPath(projectRoot: string, cleanFile: string): string | undefined {
+  const resolved = path.resolve(projectRoot, cleanFile);
   if (fs.existsSync(resolved)) {
     return resolved;
   }
-  
-  // 2. Try prepending "src" (common fallback for src/ directories)
+  return undefined;
+}
+
+function trySrcPath(projectRoot: string, cleanFile: string): string | undefined {
   const srcResolved = path.resolve(projectRoot, "src", cleanFile);
   if (fs.existsSync(srcResolved)) {
     return srcResolved;
   }
-  
-  // 3. Symlink resolution via node_modules (monorepo packages)
+  return undefined;
+}
+
+function trySymlinkPath(projectRoot: string, cleanFile: string): string | undefined {
   const segments = cleanFile.replaceAll("\\", "/").split("/");
   if (segments.length > 1) {
     const firstSegment = segments[0];
@@ -228,8 +254,10 @@ function resolveFilePath(fileParam: string, projectRoot: string): string {
       } catch {}
     }
   }
+  return undefined;
+}
 
-  // 4. Monorepo directory mapping fallback (e.g., packages/* or apps/*)
+function tryMonorepoPath(projectRoot: string, cleanFile: string): string | undefined {
   const monorepoDirs = ["packages", "apps"];
   for (const dir of monorepoDirs) {
     const dirPath = path.resolve(projectRoot, dir);
@@ -257,8 +285,33 @@ function resolveFilePath(fileParam: string, projectRoot: string): string {
       } catch {}
     }
   }
+  return undefined;
+}
+
+// Resolve a file param (possibly relative) to an absolute path
+function resolveFilePath(fileParam: string, projectRoot: string): string {
+  if (path.isAbsolute(fileParam)) return fileParam;
   
-  return resolved;
+  let cleanFile = fileParam;
+  if (cleanFile.startsWith("[project]/")) {
+    cleanFile = cleanFile.substring("[project]/".length);
+  }
+  // Strip leading host/port prefixes like "5173/", "localhost:3000/", etc.
+  cleanFile = cleanFile.replace(/^(?:https?:\/\/)?(?:[a-zA-Z0-9.-]+)?(?::\d+)?\//, "");
+  // If the path starts with digits followed by a slash (e.g., "5173/"), strip it
+  cleanFile = cleanFile.replace(/^\d+\//, "");
+  // If it starts with "/", strip it
+  if (cleanFile.startsWith("/")) {
+    cleanFile = cleanFile.substring(1);
+  }
+  
+  return (
+    tryDirectPath(projectRoot, cleanFile) ??
+    trySrcPath(projectRoot, cleanFile) ??
+    trySymlinkPath(projectRoot, cleanFile) ??
+    tryMonorepoPath(projectRoot, cleanFile) ??
+    path.resolve(projectRoot, cleanFile)
+  );
 }
 
 // Simple deep helper
@@ -543,11 +596,6 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
       let targetPath = "";
       if (target === "global") {
         targetPath = getGlobalConfigPath();
-        // Preserve recentProjects key in global config if it existed
-        const existingGlobal = fs.existsSync(targetPath) ? JSON.parse(fs.readFileSync(targetPath, "utf-8")) : {};
-        if (existingGlobal.recentProjects) {
-          newConfig.recentProjects = existingGlobal.recentProjects;
-        }
       } else if (target === "local") {
         targetPath = getLocalConfigPath(config.projectRoot);
       } else if (target === "custom" && customPath) {
@@ -559,17 +607,41 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
         return;
       }
 
-      fs.writeFileSync(targetPath, JSON.stringify(newConfig, null, 2), "utf-8");
-      console.log(`[HoverSource] Configuration saved to: ${targetPath}`);
+      // Read existing target config to merge delta
+      let targetConfig = {};
+      if (fs.existsSync(targetPath)) {
+        try {
+          targetConfig = JSON.parse(fs.readFileSync(targetPath, "utf-8"));
+        } catch (e) {
+          console.warn(`[HoverSource] Failed to parse existing config at ${targetPath}, overwriting.`, e);
+        }
+      }
+
+      // Deep merge the delta
+      targetConfig = mergeDeep(targetConfig, newConfig);
+
+      // Preserve recentProjects key in global config if it existed
+      if (target === "global") {
+        const existingGlobal = fs.existsSync(targetPath) ? JSON.parse(fs.readFileSync(targetPath, "utf-8")) : {};
+        if (existingGlobal.recentProjects) {
+          (targetConfig as any).recentProjects = existingGlobal.recentProjects;
+        }
+      }
+
+      fs.writeFileSync(targetPath, JSON.stringify(targetConfig, null, 2), "utf-8");
+      console.log(`[HoverSource] Configuration delta merged and saved to: ${targetPath}`);
+
+      // Load the fully merged configuration to broadcast
+      const fullyMerged = loadMergedConfig(config.projectRoot);
 
       // Broadcast configuration hot-reload trigger to active app pages
-      const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(newConfig)} }, "*");`;
+      const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(fullyMerged)} }, "*");`;
       broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
         console.error("[HoverSource] Broadcast failed:", e)
       );
 
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ success: true, savedTo: targetPath }));
+      res.end(JSON.stringify({ success: true, savedTo: targetPath, config: fullyMerged }));
     } catch (e: any) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: `Failed to save config: ${e.message}` }));

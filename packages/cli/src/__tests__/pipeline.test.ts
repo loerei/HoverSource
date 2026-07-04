@@ -65,7 +65,7 @@ describe("ProxyResponsePipeline", () => {
     it("should return empty buffer if body is empty", () => {
       const body = Buffer.alloc(0);
       const result = pipeline.transform(body, "", options);
-      expect(result.length).toBe(0);
+      expect(result).toHaveLength(0);
     });
   });
 });

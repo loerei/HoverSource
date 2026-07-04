@@ -21,6 +21,9 @@ export interface OverlayController {
   
   /** Gets the active configuration */
   getConfig(): any;
+
+  /** Saves configuration changes back to the project */
+  saveConfig(newConfig: any): Promise<void>;
   
   /** Tells the engine to freeze or unfreeze global pointer events */
   setFreezeMode(frozen: boolean): void;

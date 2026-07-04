@@ -81,3 +81,70 @@ describe("InspectorAdapter - Two-Phase Debounced Hover", () => {
         vi.useRealTimers();
     });
 });
+describe("InspectorAdapter - Metadata Filtering", () => {
+    it("should filter out metadata fields based on config settings", () => {
+        const mockController = {
+            getConfig: () => ({
+                metadataFilter: {
+                    filters: {
+                        component: {
+                            componentName: true,
+                            elementSelector: false, // disabled
+                            filePath: true,
+                            framework: false, // disabled
+                            dimensions: true,
+                            keyStyles: false, // disabled
+                            parentStyles: true,
+                            layoutConstraints: true,
+                            sourceComments: true,
+                            sourceAttributes: true
+                        }
+                    }
+                }
+            }),
+            isUIVisible: () => true,
+            drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
+            drawTooltip: vi.fn(),
+            clear: vi.fn(),
+            setFreezeMode: vi.fn(),
+        };
+        const adapter = new InspectorAdapter();
+        adapter.activate(mockController);
+        const mockElement = {
+            tagName: "DIV",
+            classList: {
+                contains: () => false,
+                [Symbol.iterator]: function* () { }
+            },
+            className: "",
+            parentElement: null,
+            offsetWidth: 120,
+            offsetHeight: 40,
+        };
+        const mockInfo = {
+            componentName: "UserProfileCard",
+            tagName: "div",
+            framework: "React",
+            fileName: "src/components/UserProfileCard.tsx",
+            lineNumber: 45,
+            columnNumber: 8,
+            classList: [],
+            visualContext: null,
+            staticMetadata: null
+        };
+        const formatted = adapter["formatElementMetadata"](mockElement, mockInfo);
+        // Checked fields should be present
+        expect(formatted).toContain("Component");
+        expect(formatted).toContain("UserProfileCard");
+        expect(formatted).toContain("File Path");
+        expect(formatted).toContain("src/components/UserProfileCard.tsx");
+        expect(formatted).toContain("Dimensions");
+        expect(formatted).toContain("120x40");
+        // Unchecked fields should NOT be present
+        expect(formatted).not.toContain("Element");
+        expect(formatted).not.toContain("Framework");
+        expect(formatted).not.toContain("Key Styles");
+    });
+});

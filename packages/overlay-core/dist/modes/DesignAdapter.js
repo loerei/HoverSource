@@ -728,48 +728,55 @@ export class DesignAdapter {
         return `${tagName}${idStr}${classStr}`;
     }
     buildMetadataText(p) {
-        return `
-### HoverSource Design Placement Metadata
-* **Component**: \`${p.component}\`
-* **Element**: \`${p.selector}\`
-* **File Path**: \`${p.filePath}\`${p.line ? ` (Line: ${p.line}, Column: ${p.column})` : ""}
-* **Framework**: ${p.framework}
-* **Horizontal Anchor**:
+        const config = this.controller.getConfig();
+        const filters = config?.metadataFilter?.filters?.design;
+        const isChecked = (key) => filters ? (filters[key] !== false) : true;
+        let lines = ["### HoverSource Design Placement Metadata"];
+        if (isChecked("compInfo")) {
+            lines.push(`* **Component**: \`${p.component}\``);
+            lines.push(`* **Element**: \`${p.selector}\``);
+            lines.push(`* **File Path**: \`${p.filePath}\`${p.line ? ` (Line: ${p.line}, Column: ${p.column})` : ""}`);
+            lines.push(`* **Framework**: ${p.framework}`);
+        }
+        if (isChecked("horizontalAnchor")) {
+            lines.push(`* **Horizontal Anchor**:
   - Selector: \`${p.selectorH}\`
   - Boundary: \`${p.boundaryH}\`
-  - Crosshair distance from boundary (NOT a CSS value): \`${p.signH}${p.offsetH}px\` (${p.isSnappedHText})
-* **Vertical Anchor**:
+  - Crosshair distance from boundary (NOT a CSS value): \`${p.signH}${p.offsetH}px\` (${p.isSnappedHText})`);
+        }
+        if (isChecked("verticalAnchor")) {
+            lines.push(`* **Vertical Anchor**:
   - Selector: \`${p.selectorV}\`
   - Boundary: \`${p.boundaryV}\`
-  - Crosshair distance from boundary (NOT a CSS value): \`${p.signV}${p.offsetV}px\` (${p.isSnappedVText})
-
-#### Layout Context (auto-resolved at runtime)
+  - Crosshair distance from boundary (NOT a CSS value): \`${p.signV}${p.offsetV}px\` (${p.isSnappedVText})`);
+        }
+        if (isChecked("layoutContext")) {
+            lines.push(`#### Layout Context (auto-resolved at runtime)
 * **Positioned Ancestor**: ${p.posAncLine}
 * **Anchor Element**: \`${p.anchorForContextSelector}\` (display: ${p.anchorElementDisplay})
-${p.anchorNoteStr}\
-* **Direct Parent of Anchor**: ${p.directParentLine}
-${p.warningStr}\
-* **USE THIS CSS** (do not use the distance values above as CSS — use this block):
+${p.anchorNoteStr}\\\n* **Direct Parent of Anchor**: ${p.directParentLine}
+${p.warningStr}\\`);
+        }
+        if (isChecked("suggestedCss")) {
+            lines.push(`* **USE THIS CSS** (do not use the distance values above as CSS — use this block):
 \`\`\`css
 ${p.cssRules}
-\`\`\`
-* **Source Files to Examine**:
-${p.filesSection}
-
-#### For the AI Agent
+\`\`\``);
+        }
+        if (isChecked("sourceFiles")) {
+            lines.push(`* **Source Files to Examine**:
+${p.filesSection}`);
+        }
+        if (isChecked("aiInstructions")) {
+            lines.push(`#### For the AI Agent
 The CSS above assumes the new element will be a direct child of the Positioned Ancestor.
 You must determine the actual DOM insertion point by examining the source files above.
 The following is NOT resolved automatically and requires your judgment:
 - **DOM insertion point**: where in the JSX/template tree the new element belongs
   (sibling of anchor, child of a wrapper, inside a portal, etc.)
-- **Whether \`position: absolute\` is appropriate**: if the anchor or its parent is a flex/grid
-  container, a flex/grid child approach may be more appropriate
-- **Whether the Positioned Ancestor has \`position: relative\` in source**: verify
-  it is not conditionally applied
-
-Suggested layout insertion (heuristic only):
-* Target DOM Parent: \`${p.targetParentSelector}\` (${p.targetParentType})
-`.trim();
+- **Whether \`position: absolute\` is appropriate**: if the anchor or its parent is a flex/grid`);
+        }
+        return lines.join("\n");
     }
     getLayoutContextInfo(info, anchorForContext, ancestors) {
         const positionedAncestor = ancestors.find(a => a.position !== "static") ?? null;

@@ -14,6 +14,8 @@ export interface OverlayController {
     copyToClipboard(text: string): Promise<void>;
     /** Gets the active configuration */
     getConfig(): any;
+    /** Saves configuration changes back to the project */
+    saveConfig(newConfig: any): Promise<void>;
     /** Tells the engine to freeze or unfreeze global pointer events */
     setFreezeMode(frozen: boolean): void;
     /** Gets whether the UI is currently visible (so adapters can skip heavy DOM queries) */

@@ -30,17 +30,17 @@ describe("inspectVisualContext", () => {
         try {
             // First call
             const first = inspectVisualContext(targetEl);
-            expect(first.parentEffects.length).toBe(2); // position: sticky & overflow-y: auto
+            expect(first.parentEffects).toHaveLength(2); // position: sticky & overflow-y: auto
             expect(spy).toHaveBeenCalledTimes(2); // targetEl + parentEl
             // Second call (should be fully cached)
             const second = inspectVisualContext(targetEl);
-            expect(second.parentEffects.length).toBe(2);
+            expect(second.parentEffects).toHaveLength(2);
             expect(spy).toHaveBeenCalledTimes(2); // No new calls to getComputedStyle
             // Clear cache
             clearInspectorCache();
             // Third call (should re-evaluate)
             const third = inspectVisualContext(targetEl);
-            expect(third.parentEffects.length).toBe(2);
+            expect(third.parentEffects).toHaveLength(2);
             expect(spy).toHaveBeenCalledTimes(4); // 2 more calls
         }
         finally {
@@ -62,7 +62,7 @@ describe("inspectVisualContext", () => {
         // 34 parents. Max depth is capped at 32.
         // The first parent computed starts from element.parentElement.
         // So target has 34 parents. The walk should traverse exactly 32 levels.
-        expect(context.parentEffects.length).toBe(32);
+        expect(context.parentEffects).toHaveLength(32);
     });
     it("should respect custom maxDepth in inspectVisualContext", () => {
         // Build a chain of 15 elements
@@ -77,7 +77,7 @@ describe("inspectVisualContext", () => {
         }
         // Pass custom maxDepth = 10
         const context = inspectVisualContext(currentEl, 10);
-        expect(context.parentEffects.length).toBe(10);
+        expect(context.parentEffects).toHaveLength(10);
     });
     it("should capture relative, absolute, flex, grid, transform, and clip-path styles and element reference", () => {
         const parentEl = {

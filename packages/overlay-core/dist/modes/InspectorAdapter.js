@@ -661,36 +661,52 @@ export class InspectorAdapter {
         const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
         const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
         const directionStr = data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : "";
-        let text = `* **Component**: \`${data.component}\`
-* **Element**: ${selectorLabel}
-* **File Path**: \`${data.file || "Unknown"}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
-* **Framework**: ${data.framework}
-* **Dimensions**: ${data.dimensions}
-* **Key Styles**:
+        const config = this.controller.getConfig();
+        const filters = config?.metadataFilter?.filters?.component;
+        const isChecked = (key) => filters ? (filters[key] !== false) : true;
+        let lines = [];
+        if (isChecked("componentName")) {
+            lines.push(`* **Component**: \`${data.component}\``);
+        }
+        if (isChecked("elementSelector")) {
+            lines.push(`* **Element**: ${selectorLabel}`);
+        }
+        if (isChecked("filePath")) {
+            lines.push(`* **File Path**: \`${data.file || "Unknown"}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}`);
+        }
+        if (isChecked("framework")) {
+            lines.push(`* **Framework**: ${data.framework}`);
+        }
+        if (isChecked("dimensions")) {
+            lines.push(`* **Dimensions**: ${data.dimensions}`);
+        }
+        if (isChecked("keyStyles")) {
+            lines.push(`* **Key Styles**:
   - Color: \`${data.styles.color}\`
   - Background: \`${data.styles.backgroundColor}\`
   - Box Shadow: \`${data.styles.boxShadow}\`
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
-  - Display: \`${data.styles.display}\` ${directionStr}`;
-        if (info.visualContext && info.visualContext.parentEffects.length > 0) {
-            const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
-            text += `\n* **Parent Styles**:\n${parentList}`;
+  - Display: \`${data.styles.display}\` ${directionStr}`);
         }
-        if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
+        if (isChecked("parentStyles") && info.visualContext && info.visualContext.parentEffects.length > 0) {
+            const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
+            lines.push(`* **Parent Styles**:\n${parentList}`);
+        }
+        if (isChecked("layoutConstraints") && info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
             const layoutList = this.formatLayoutConstraints(info.visualContext.layoutConstraints);
-            text += `\n* **Layout Constraints**:\n${layoutList}`;
+            lines.push(`* **Layout Constraints**:\n${layoutList}`);
         }
         if (info.staticMetadata) {
-            if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+            if (isChecked("sourceComments") && info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
                 const commentList = this.formatSourceComments(info.staticMetadata.comments);
-                text += `\n* **Source Comments**:\n${commentList}`;
+                lines.push(`* **Source Comments**:\n${commentList}`);
             }
-            if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+            if (isChecked("sourceAttributes") && info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
                 const attrList = this.formatSourceAttributes(info.staticMetadata.rawAttributes);
-                text += `\n* **Source Attributes**:\n${attrList}`;
+                lines.push(`* **Source Attributes**:\n${attrList}`);
             }
         }
-        return text;
+        return lines.join("\n");
     }
     copyMetadata() {
         if (!this.currentSourceInfo || !this.currentElement)
@@ -763,9 +779,20 @@ export class InspectorAdapter {
     copyAllLayers() {
         if (this.layerStack.length === 0)
             return;
-        let text = `### HoverSource Component Metadata\n`;
-        text += `Found ${this.layerStack.length} layer(s), ordered from leaf (Layer 1) to root:\n\n`;
+        const config = this.controller.getConfig();
+        const filters = config?.metadataFilter?.filters?.layer;
+        const isChecked = (key) => filters ? (filters[key] !== false) : true;
+        let text = "";
+        if (isChecked("layerSummary")) {
+            text += `### HoverSource Component Metadata\n`;
+            text += `Found ${this.layerStack.length} layer(s), ordered from leaf (Layer 1) to root:\n\n`;
+        }
         this.layerStack.forEach((el, index) => {
+            const isLeaf = index === 0;
+            if (isLeaf && !isChecked("layer1"))
+                return;
+            if (!isLeaf && !isChecked("layer2"))
+                return;
             let info;
             if (el === this.currentElement && this.currentSourceInfo) {
                 info = this.currentSourceInfo;
@@ -789,12 +816,14 @@ export class InspectorAdapter {
             text += `#### Layer ${layerNum}/${totalLayers}: \`${info.componentName || el.tagName.toLowerCase()}\` (${el.tagName.toLowerCase()})\n`;
             text += this.formatElementMetadata(el, info) + "\n\n";
         });
-        const activeEl = this.layerStack[this.activeLayerIndex] || this.layerStack[0];
-        if (activeEl) {
-            const targetElToCopy = this.getTargetHTMLToCopy(activeEl);
-            const label = targetElToCopy === activeEl ? `Layer ${this.activeLayerIndex + 1}` : `Layer ${this.activeLayerIndex + 1} with siblings`;
-            text += `### Target Element HTML Structure (${label})\n`;
-            text += `\`\`\`html\n${this.getMinifiedHTML(targetElToCopy)}\n\`\`\`\n`;
+        if (isChecked("htmlStructure")) {
+            const activeEl = this.layerStack[this.activeLayerIndex] || this.layerStack[0];
+            if (activeEl) {
+                const targetElToCopy = this.getTargetHTMLToCopy(activeEl);
+                const label = targetElToCopy === activeEl ? `Layer ${this.activeLayerIndex + 1}` : `Layer ${this.activeLayerIndex + 1} with siblings`;
+                text += `### Target Element HTML Structure (${label})\n`;
+                text += `\`\`\`html\n${this.getMinifiedHTML(targetElToCopy)}\n\`\`\`\n`;
+            }
         }
         this.controller.copyToClipboard(text.trim());
     }

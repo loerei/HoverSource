@@ -15,6 +15,9 @@ class OverlayEngine {
     container = null;
     outlineBox = null;
     tooltipBox = null;
+    filterPanel = null;
+    isFilterPanelVisible = false;
+    currentMetadataTypeIndex = 0;
     parentHighlightElements = [];
     uiVisible = true;
     isFrozen = false;
@@ -320,6 +323,101 @@ class OverlayEngine {
         border-top: 1px dashed ${colors.borderSep};
         padding-top: 4px;
       }
+      .hoversource-config-panel {
+        position: fixed;
+        width: 280px;
+        background: ${colors.tooltipBg};
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.3)" : "rgba(37, 99, 235, 0.3)"};
+        color: ${colors.tooltipText};
+        padding: 10px 12px;
+        border-radius: 8px;
+        box-shadow: 0 0 12px ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.2)" : "rgba(37, 99, 235, 0.2)"}, 0 8px 20px -5px rgba(0, 0, 0, 0.5);
+        z-index: 1000000;
+        user-select: none;
+        box-sizing: border-box;
+        pointer-events: auto;
+      }
+      .hoversource-config-panel .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+        border-bottom: 1px solid ${colors.borderSep};
+        padding-bottom: 4px;
+        cursor: move;
+      }
+      .hoversource-config-panel .nav-btn {
+        background: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"};
+        border: 1px solid ${colors.borderSep};
+        color: ${colors.tooltipText};
+        cursor: pointer;
+        font-size: 10px;
+        padding: 1px 6px;
+        border-radius: 3px;
+        transition: all 0.2s ease;
+      }
+      .hoversource-config-panel .nav-btn:hover {
+        background: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)"};
+      }
+      .hoversource-config-panel .title {
+        font-weight: 700;
+        font-size: 11.5px;
+        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        text-shadow: 0 0 6px ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.4)" : "rgba(37, 99, 235, 0.4)"};
+        letter-spacing: 0.02em;
+      }
+      .hoversource-config-panel table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .hoversource-config-panel tr {
+        transition: background-color 0.15s ease;
+      }
+      .hoversource-config-panel tr:hover {
+        background-color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.02)"};
+      }
+      .hoversource-config-panel td {
+        padding: 4px 0;
+        font-size: 10.5px;
+        vertical-align: middle;
+      }
+      .hoversource-config-panel td.label-col {
+        color: ${colors.labelColor};
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .hoversource-config-panel tr:hover td.label-col {
+        color: ${colors.tooltipText};
+      }
+      .hoversource-config-panel td.check-col {
+        text-align: right;
+        width: 24px;
+      }
+      .hoversource-config-panel .icon-wrapper {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        width: 12px;
+        height: 12px;
+        opacity: 0.75;
+      }
+      .hoversource-config-panel tr:hover .icon-wrapper {
+        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#60a5fa" : "#3b82f6"};
+      }
+      .hoversource-config-panel tr.hs-row-disabled {
+        opacity: 0.5;
+      }
+      .hoversource-config-panel input[type="checkbox"] {
+        cursor: pointer;
+        accent-color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        width: 12px;
+        height: 12px;
+      }
     `;
         if (this.container) {
             this.container.appendChild(style);
@@ -341,6 +439,10 @@ class OverlayEngine {
         this.tooltipBox.className = "hoversource-tooltip";
         this.tooltipBox.style.display = "none";
         this.container.appendChild(this.tooltipBox);
+        this.filterPanel = document.createElement("div");
+        this.filterPanel.className = "hoversource-config-panel";
+        this.filterPanel.style.display = "none";
+        this.container.appendChild(this.filterPanel);
         document.body.appendChild(this.container);
     }
     ensureUI() {
@@ -381,6 +483,11 @@ class OverlayEngine {
         }
     }
     handleKeyDown = (e) => {
+        if (e.altKey && e.ctrlKey && e.key.toLowerCase() === "d") {
+            e.preventDefault();
+            this.toggleFilterPanel();
+            return;
+        }
         const shortcuts = this.config?.shortcuts;
         if (!shortcuts)
             return;
@@ -398,6 +505,224 @@ class OverlayEngine {
             return;
         this.handleModeShortcuts(e, shortcuts);
     };
+    toggleFilterPanel() {
+        if (!this.filterPanel)
+            return;
+        this.isFilterPanelVisible = !this.isFilterPanelVisible;
+        if (this.isFilterPanelVisible) {
+            this.filterPanel.style.display = "block";
+            // Restore position if saved
+            const savedPos = this.config?.metadataFilter?.panelPosition;
+            if (savedPos) {
+                this.filterPanel.style.left = savedPos.x + "px";
+                this.filterPanel.style.top = savedPos.y + "px";
+                this.filterPanel.style.right = "auto";
+            }
+            else {
+                // Default position: top right
+                this.filterPanel.style.top = "100px";
+                this.filterPanel.style.right = "40px";
+                this.filterPanel.style.left = "auto";
+            }
+            this.renderFilterPanel();
+        }
+        else {
+            this.filterPanel.style.display = "none";
+        }
+    }
+    renderFilterPanel() {
+        if (!this.filterPanel)
+            return;
+        const metadataTypes = [
+            { id: "component", name: "Component Metadata" },
+            { id: "layer", name: "Layer Stack Metadata" },
+            { id: "design", name: "Design Placement" }
+        ];
+        const activeType = metadataTypes[this.currentMetadataTypeIndex];
+        const fieldsMap = {
+            component: [
+                { key: "componentName", label: "Component Name" },
+                { key: "elementSelector", label: "Element Selector" },
+                { key: "filePath", label: "File Path & Line" },
+                { key: "framework", label: "Framework" },
+                { key: "dimensions", label: "Dimensions" },
+                { key: "keyStyles", label: "Key Styles" },
+                { key: "parentStyles", label: "Parent Styles" },
+                { key: "layoutConstraints", label: "Layout Constraints" },
+                { key: "sourceComments", label: "Source Comments" },
+                { key: "sourceAttributes", label: "Source Attributes" }
+            ],
+            layer: [
+                { key: "layerSummary", label: "Layers Summary" },
+                { key: "layer1", label: "Layer 1: Leaf" },
+                { key: "layer2", label: "Layer 2: Parents" },
+                { key: "htmlStructure", label: "HTML Structure Block" }
+            ],
+            design: [
+                { key: "compInfo", label: "Component & Element" },
+                { key: "horizontalAnchor", label: "Horizontal Anchor" },
+                { key: "verticalAnchor", label: "Vertical Anchor" },
+                { key: "layoutContext", label: "Layout Context" },
+                { key: "suggestedCss", label: "Suggested CSS Block" },
+                { key: "sourceFiles", label: "Source Files" },
+                { key: "aiInstructions", label: "AI Instructions" }
+            ]
+        };
+        const iconsMap = {
+            componentName: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" /></svg>`,
+            elementSelector: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 8.25h15m-16.5 6h15m-1.875-10.5l-3.375 15m-1.5-15l-3.375 15" /></svg>`,
+            filePath: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>`,
+            framework: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 21l8.97-8.97m-8.97 8.97L15 15M9 21l-3.75-3.75M5.25 17.25L13.5 9M18.75 5.25l-.323.323m0 0a1.875 1.875 0 11-2.652-2.652L16.1 3.25m2.652 2.652L19.5 5.25m-3.077-1.427L15.6 4.5m0 0l-1.5-1.5M16.1 3.25l-1.427 1.427m3.077 1.427l1.5 1.5" /></svg>`,
+            dimensions: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v16.5m0-16.5h16.5m-16.5 0L19.5 19.5M19.5 3.75v16.5m0-16.5H3.75m15.75 15.75H3.75" /></svg>`,
+            keyStyles: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-2.225.016 9.778 9.778 0 00-2.524 1.307c-.152.1-.347.052-.44-.1a9.033 9.033 0 01-1.19-4.358 9 9 0 0117.189-3.674a5.006 5.006 0 00-.834-.055 3.99 3.99 0 00-2.827 1.172 5.006 5.006 0 00-1.172 2.827 3.99 3.99 0 001.172 2.827c.29.29.616.536.969.736a9.07 9.07 0 01-5.267 1.258c-.347-.008-.7-.04-1.045-.097z" /></svg>`,
+            parentStyles: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.999 5.999 0 00-5.414-5.74M6 18.72a9.094 9.094 0 01-3.741-.479 3 3 0 014.682-2.72m-.94 3.198l-.002.031c0 .225.012.447.038.666A11.944 11.944 0 0012 21c2.17 0 4.207-.576 5.963-1.584A6.062 6.062 0 0018 18.719m-12 0a5.999 5.999 0 015.414-5.74m0 0a3 3 0 110-6 3 3 0 010 6z" /></svg>`,
+            layoutConstraints: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3 3m12 6V4.5M15 9h4.5M15 9l6-6M9 15v4.5M9 15H4.5M9 15l-6 6m12-6v4.5M15 15h4.5M15 15l6 6" /></svg>`,
+            sourceComments: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>`,
+            sourceAttributes: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581a1.65 1.65 0 002.333 0l4.318-4.318a1.65 1.65 0 000-2.333L10.312 4.319a2.25 2.25 0 00-1.591-.659z" /><path stroke-linecap="round" stroke-linejoin="round" d="M6 7.5h.008v.008H6V7.5z" /></svg>`,
+            layerSummary: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m11.142 0L21.75 12l-4.179-2.25M12 5.75L6.429 9.75 12 13.75l5.571-4L12 5.75zm0 8l-5.571 4L12 21.75l5.571-4-5.571-4z" /></svg>`,
+            layer1: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" /></svg>`,
+            layer2: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" /></svg>`,
+            htmlStructure: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg>`,
+            compInfo: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>`,
+            horizontalAnchor: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>`,
+            verticalAnchor: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" /></svg>`,
+            layoutContext: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h17.25c.621 0 1.125.504 1.125 1.125v12.75c0 .621-.504 1.125-1.125 1.125H3.375a1.125 1.125 0 01-1.125-1.125V7.125z" /></svg>`,
+            suggestedCss: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" /></svg>`,
+            sourceFiles: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" /></svg>`,
+            aiInstructions: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
+        };
+        const fields = fieldsMap[activeType.id] || [];
+        let tableRowsHtml = "";
+        fields.forEach((field) => {
+            // Look up current filter value from config (default to true if not set)
+            const filtersObj = this.config?.metadataFilter?.filters?.[activeType.id];
+            const isChecked = filtersObj ? (filtersObj[field.key] !== false) : true;
+            const svgIcon = iconsMap[field.key] || "";
+            tableRowsHtml += `
+        <tr class="${isChecked ? "" : "hs-row-disabled"}" style="cursor: pointer;">
+          <td class="label-col">
+            <span class="icon-wrapper">${svgIcon}</span>
+            <span>${field.label}</span>
+          </td>
+          <td class="check-col">
+            <input type="checkbox" data-type="${activeType.id}" data-field="${field.key}" ${isChecked ? "checked" : ""}>
+          </td>
+        </tr>
+      `;
+        });
+        this.filterPanel.innerHTML = `
+      <div class="header" id="hoversource-drag-header">
+        <button class="nav-btn" id="hoversource-prev-btn">&lt;</button>
+        <div class="title">${activeType.name}</div>
+        <button class="nav-btn" id="hoversource-next-btn">&gt;</button>
+      </div>
+      <div class="table-container">
+        <table>
+          ${tableRowsHtml}
+        </table>
+      </div>
+    `;
+        // Hook events
+        const prevBtn = this.filterPanel.querySelector("#hoversource-prev-btn");
+        const nextBtn = this.filterPanel.querySelector("#hoversource-next-btn");
+        if (prevBtn) {
+            prevBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex - 1 + metadataTypes.length) % metadataTypes.length;
+                this.renderFilterPanel();
+            });
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex + 1 + metadataTypes.length) % metadataTypes.length;
+                this.renderFilterPanel();
+            });
+        }
+        const rows = this.filterPanel.querySelectorAll("tr");
+        rows.forEach((row) => {
+            const cb = row.querySelector("input[type='checkbox']");
+            if (!cb)
+                return;
+            row.addEventListener("click", (e) => {
+                if (e.target === cb)
+                    return;
+                cb.checked = !cb.checked;
+                cb.dispatchEvent(new Event("change"));
+            });
+        });
+        const checkboxes = this.filterPanel.querySelectorAll("input[type='checkbox']");
+        checkboxes.forEach((cb) => {
+            cb.addEventListener("change", (e) => {
+                const type = cb.getAttribute("data-type");
+                const field = cb.getAttribute("data-field");
+                const checked = cb.checked;
+                const row = cb.closest("tr");
+                if (row) {
+                    if (checked) {
+                        row.classList.remove("hs-row-disabled");
+                    }
+                    else {
+                        row.classList.add("hs-row-disabled");
+                    }
+                }
+                const delta = {
+                    metadataFilter: {
+                        filters: {
+                            [type]: {
+                                [field]: checked
+                            }
+                        }
+                    }
+                };
+                this.saveConfig(delta);
+            });
+        });
+        this.makePanelDraggable();
+    }
+    makePanelDraggable() {
+        if (!this.filterPanel)
+            return;
+        const header = this.filterPanel.querySelector("#hoversource-drag-header");
+        if (!header)
+            return;
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        header.onmousedown = (e) => {
+            if (e.target && (e.target.tagName.toLowerCase() === 'button' || e.target.closest('button')))
+                return;
+            e.preventDefault();
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            document.onmouseup = () => {
+                document.onmouseup = null;
+                document.onmousemove = null;
+                // Save position on drag end
+                if (this.filterPanel) {
+                    const delta = {
+                        metadataFilter: {
+                            panelPosition: {
+                                x: this.filterPanel.offsetLeft,
+                                y: this.filterPanel.offsetTop
+                            }
+                        }
+                    };
+                    this.saveConfig(delta);
+                }
+            };
+            document.onmousemove = (ev) => {
+                ev.preventDefault();
+                pos1 = pos3 - ev.clientX;
+                pos2 = pos4 - ev.clientY;
+                pos3 = ev.clientX;
+                pos4 = ev.clientY;
+                if (this.filterPanel) {
+                    this.filterPanel.style.top = (this.filterPanel.offsetTop - pos2) + "px";
+                    this.filterPanel.style.left = (this.filterPanel.offsetLeft - pos1) + "px";
+                    this.filterPanel.style.right = "auto";
+                }
+            };
+        };
+    }
     switchMode() {
         this.activeMode.deactivate();
         this.activeMode = this.activeMode === this.inspectorMode ? this.designMode : this.inspectorMode;
@@ -651,6 +976,27 @@ class OverlayEngine {
         }
     }
     getConfig() { return this.config; }
+    async saveConfig(newConfig) {
+        try {
+            const res = await fetch(`${getCompanionBaseUrl()}/config`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    config: newConfig,
+                    target: "local"
+                })
+            });
+            const data = await res.json();
+            if (data.success && data.config) {
+                this.config = data.config;
+            }
+        }
+        catch (e) {
+            console.error("[HoverSource] Failed to save config", e);
+        }
+    }
     isUIVisible() { return this.uiVisible; }
     setFreezeMode(frozen) {
         this.isFrozen = frozen;

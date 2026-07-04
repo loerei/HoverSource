@@ -890,10 +890,13 @@ export class DesignAdapter implements InteractionMode {
     let lines: string[] = ["### HoverSource Design Placement Metadata"];
 
     if (isChecked("compInfo")) {
-      lines.push(`* **Component**: \`${p.component}\``);
-      lines.push(`* **Element**: \`${p.selector}\``);
-      lines.push(`* **File Path**: \`${p.filePath}\`${p.line ? ` (Line: ${p.line}, Column: ${p.column})` : ""}`);
-      lines.push(`* **Framework**: ${p.framework}`);
+      const lineColStr = p.line ? ` (Line: ${p.line}, Column: ${p.column})` : "";
+      lines.push(
+        `* **Component**: \`${p.component}\``,
+        `* **Element**: \`${p.selector}\``,
+        `* **File Path**: \`${p.filePath}\`${lineColStr}`,
+        `* **Framework**: ${p.framework}`
+      );
     }
 
     if (isChecked("horizontalAnchor")) {

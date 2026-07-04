@@ -257,33 +257,43 @@ function trySymlinkPath(projectRoot: string, cleanFile: string): string | undefi
   return undefined;
 }
 
+function checkPackageSubdir(subdirPath: string, cleanFile: string, subdir: string): string | undefined {
+  if (!fs.statSync(subdirPath).isDirectory()) {
+    return undefined;
+  }
+  // Case A: CleanFile exists directly inside package (e.g., components/button/Button.tsx inside packages/ui)
+  const pkgResolved = path.resolve(subdirPath, cleanFile);
+  if (fs.existsSync(pkgResolved)) {
+    return pkgResolved;
+  }
+  // Case B: CleanFile starts with package folder name (e.g., "ui/components/button/Button.tsx")
+  if (cleanFile.startsWith(subdir + "/")) {
+    const stripped = cleanFile.substring(subdir.length + 1);
+    const pkgStrippedResolved = path.resolve(subdirPath, stripped);
+    if (fs.existsSync(pkgStrippedResolved)) {
+      return pkgStrippedResolved;
+    }
+  }
+  return undefined;
+}
+
 function tryMonorepoPath(projectRoot: string, cleanFile: string): string | undefined {
   const monorepoDirs = ["packages", "apps"];
   for (const dir of monorepoDirs) {
     const dirPath = path.resolve(projectRoot, dir);
-    if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
-      try {
-        const subdirs = fs.readdirSync(dirPath);
-        for (const subdir of subdirs) {
-          const subdirPath = path.resolve(dirPath, subdir);
-          if (fs.statSync(subdirPath).isDirectory()) {
-            // Case A: CleanFile exists directly inside package (e.g., components/button/Button.tsx inside packages/ui)
-            const pkgResolved = path.resolve(subdirPath, cleanFile);
-            if (fs.existsSync(pkgResolved)) {
-              return pkgResolved;
-            }
-            // Case B: CleanFile starts with package folder name (e.g., "ui/components/button/Button.tsx")
-            if (cleanFile.startsWith(subdir + "/")) {
-              const stripped = cleanFile.substring(subdir.length + 1);
-              const pkgStrippedResolved = path.resolve(subdirPath, stripped);
-              if (fs.existsSync(pkgStrippedResolved)) {
-                return pkgStrippedResolved;
-              }
-            }
-          }
-        }
-      } catch {}
+    if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
+      continue;
     }
+    try {
+      const subdirs = fs.readdirSync(dirPath);
+      for (const subdir of subdirs) {
+        const subdirPath = path.resolve(dirPath, subdir);
+        const resolved = checkPackageSubdir(subdirPath, cleanFile, subdir);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    } catch {}
   }
   return undefined;
 }

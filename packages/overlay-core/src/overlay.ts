@@ -689,8 +689,8 @@ class OverlayEngine implements OverlayController {
     const checkboxes = this.filterPanel.querySelectorAll("input[type='checkbox']");
     checkboxes.forEach((cb: any) => {
       cb.addEventListener("change", (e: any) => {
-        const type = cb.getAttribute("data-type");
-        const field = cb.getAttribute("data-field");
+        const type = cb.dataset.type;
+        const field = cb.dataset.field;
         const checked = cb.checked;
 
         const row = cb.closest("tr");

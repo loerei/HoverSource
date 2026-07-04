@@ -1427,53 +1427,60 @@
       const config = this.controller.getConfig();
       const filters = config?.metadataFilter?.filters?.component;
       const isChecked = (key) => filters ? filters[key] !== false : true;
-      let lines = [];
-      if (isChecked("componentName")) {
-        lines.push(`* **Component**: \`${data.component}\``);
-      }
-      if (isChecked("elementSelector")) {
-        lines.push(`* **Element**: ${selectorLabel}`);
-      }
-      if (isChecked("filePath")) {
-        lines.push(`* **File Path**: \`${data.file || "Unknown"}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}`);
-      }
-      if (isChecked("framework")) {
-        lines.push(`* **Framework**: ${data.framework}`);
-      }
-      if (isChecked("dimensions")) {
-        lines.push(`* **Dimensions**: ${data.dimensions}`);
-      }
-      if (isChecked("keyStyles")) {
-        lines.push(`* **Key Styles**:
+      const lines = [];
+      const addLine = (key, content) => {
+        if (isChecked(key)) {
+          lines.push(typeof content === "function" ? content() : content);
+        }
+      };
+      addLine("componentName", `* **Component**: \`${data.component}\``);
+      addLine("elementSelector", `* **Element**: ${selectorLabel}`);
+      addLine("filePath", () => {
+        const lineColStr = data.line ? ` (Line: ${data.line}, Column: ${data.column})` : "";
+        return `* **File Path**: \`${data.file || "Unknown"}\`${lineColStr}`;
+      });
+      addLine("framework", `* **Framework**: ${data.framework}`);
+      addLine("dimensions", `* **Dimensions**: ${data.dimensions}`);
+      addLine("keyStyles", `* **Key Styles**:
   - Color: \`${data.styles.color}\`
   - Background: \`${data.styles.backgroundColor}\`
   - Box Shadow: \`${data.styles.boxShadow}\`
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
   - Display: \`${data.styles.display}\` ${directionStr}`);
-      }
-      if (isChecked("parentStyles") && info.visualContext && info.visualContext.parentEffects.length > 0) {
-        const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
-        lines.push(`* **Parent Styles**:
-${parentList}`);
-      }
-      if (isChecked("layoutConstraints") && info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
-        const layoutList = this.formatLayoutConstraints(info.visualContext.layoutConstraints);
-        lines.push(`* **Layout Constraints**:
-${layoutList}`);
+      if (info.visualContext) {
+        addLine("parentStyles", () => {
+          if (info.visualContext.parentEffects.length === 0)
+            return "";
+          const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
+          return `* **Parent Styles**:
+${parentList}`;
+        });
+        addLine("layoutConstraints", () => {
+          if (Object.keys(info.visualContext.layoutConstraints).length === 0)
+            return "";
+          const layoutList = this.formatLayoutConstraints(info.visualContext.layoutConstraints);
+          return `* **Layout Constraints**:
+${layoutList}`;
+        });
       }
       if (info.staticMetadata) {
-        if (isChecked("sourceComments") && info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+        addLine("sourceComments", () => {
+          if (!info.staticMetadata.comments || info.staticMetadata.comments.length === 0)
+            return "";
           const commentList = this.formatSourceComments(info.staticMetadata.comments);
-          lines.push(`* **Source Comments**:
-${commentList}`);
-        }
-        if (isChecked("sourceAttributes") && info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+          return `* **Source Comments**:
+${commentList}`;
+        });
+        addLine("sourceAttributes", () => {
+          if (!info.staticMetadata.rawAttributes || Object.keys(info.staticMetadata.rawAttributes).length === 0)
+            return "";
           const attrList = this.formatSourceAttributes(info.staticMetadata.rawAttributes);
-          lines.push(`* **Source Attributes**:
-${attrList}`);
-        }
+          return `* **Source Attributes**:
+${attrList}`;
+        });
       }
-      return lines.join("\n");
+      const filteredLines = lines.filter(Boolean);
+      return filteredLines.join("\n");
     }
     copyMetadata() {
       if (!this.currentSourceInfo || !this.currentElement)
@@ -2296,10 +2303,13 @@ ${this.getMinifiedHTML(targetElToCopy)}
       const isChecked = (key) => filters ? filters[key] !== false : true;
       let lines = ["### HoverSource Design Placement Metadata"];
       if (isChecked("compInfo")) {
-        lines.push(`* **Component**: \`${p.component}\``);
-        lines.push(`* **Element**: \`${p.selector}\``);
-        lines.push(`* **File Path**: \`${p.filePath}\`${p.line ? ` (Line: ${p.line}, Column: ${p.column})` : ""}`);
-        lines.push(`* **Framework**: ${p.framework}`);
+        const lineColStr = p.line ? ` (Line: ${p.line}, Column: ${p.column})` : "";
+        lines.push(
+          `* **Component**: \`${p.component}\``,
+          `* **Element**: \`${p.selector}\``,
+          `* **File Path**: \`${p.filePath}\`${lineColStr}`,
+          `* **Framework**: ${p.framework}`
+        );
       }
       if (isChecked("horizontalAnchor")) {
         lines.push(`* **Horizontal Anchor**:
@@ -3220,8 +3230,8 @@ The following is NOT resolved automatically and requires your judgment:
       const checkboxes = this.filterPanel.querySelectorAll("input[type='checkbox']");
       checkboxes.forEach((cb) => {
         cb.addEventListener("change", (e) => {
-          const type = cb.getAttribute("data-type");
-          const field = cb.getAttribute("data-field");
+          const type = cb.dataset.type;
+          const field = cb.dataset.field;
           const checked = cb.checked;
           const row = cb.closest("tr");
           if (row) {

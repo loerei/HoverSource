@@ -1193,7 +1193,7 @@
 
     function showSaveIndicator(x, y) {
       const indicator = document.getElementById('save-indicator');
-      indicator.textContent = `Position saved to project config: (${parseInt(x)}, ${parseInt(y)})`;
+      indicator.textContent = `Position saved to project config: (${Number.parseInt(x, 10)}, ${Number.parseInt(y, 10)})`;
       indicator.classList.add('show');
       setTimeout(() => {
         indicator.classList.remove('show');
@@ -1230,7 +1230,7 @@
     }
 
     // Toggle Panel Visibility with Alt+Ctrl+D
-    window.addEventListener('keydown', (e) => {
+    globalThis.addEventListener('keydown', (e) => {
       if (e.altKey && e.ctrlKey && e.code === 'KeyD') {
         e.preventDefault();
         isPanelVisible = !isPanelVisible;

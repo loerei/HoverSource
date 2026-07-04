@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HoverSource Metadata Config Panel Prototype</title>
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --text-main: #f8fafc;
+      --font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: var(--font-family);
+      margin: 0;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow-x: hidden;
+    }
+
+    .demo-container {
+      max-width: 800px;
+      width: 100%;
+      margin-top: 40px;
+      margin-bottom: 120px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      text-align: center;
+      margin-bottom: 40px;
+      font-size: 14px;
+    }
+
+    /* Simulated Clipboard Preview Area */
+    .preview-box {
+      margin-top: 380px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 16px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .preview-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 8px;
+    }
+
+    .preview-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+
+    .copy-btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .copy-btn:hover {
+      background: #2563eb;
+    }
+
+    pre {
+      margin: 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      background: #0b0f19;
+      padding: 12px;
+      border-radius: 4px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+
+    /* Common layout for all panels in prototype */
+    .panel-base {
+      position: fixed;
+      top: 100px;
+      right: 40px;
+      width: 320px;
+      box-sizing: border-box;
+      z-index: 10000;
+      transition: width 0.2s ease;
+      user-select: none;
+    }
+
+    /* Expand/shrink width specifically for variants */
+    .panel-base.wide-panel {
+      width: 480px;
+    }
+    .panel-base.narrow-panel {
+      width: 260px;
+    }
+
+    /* Make headers look draggable */
+    .header {
+      cursor: move; /* Drag cursor */
+    }
+
+    /* ==========================================
+       VARIANT A: Sleek Glassmorphism (Dark)
+       ========================================== */
+    .panel-variant-a {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+      color: #f1f5f9;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    .panel-variant-a .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(15, 23, 42, 0.6);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .panel-variant-a .nav-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .panel-variant-a .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #f8fafc;
+    }
+
+    .panel-variant-a .title {
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      flex: 1;
+      color: #3b82f6;
+      letter-spacing: 0.02em;
+    }
+
+    .panel-variant-a .table-container {
+      padding: 12px 16px;
+    }
+
+    .panel-variant-a table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .panel-variant-a tr {
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .panel-variant-a tr:last-child {
+      border-bottom: none;
+    }
+
+    .panel-variant-a td {
+      padding: 8px 0;
+      font-size: 12px;
+    }
+
+    .panel-variant-a td.label-col {
+      color: #cbd5e1;
+    }
+
+    .panel-variant-a td.check-col {
+      text-align: right;
+      width: 40px;
+    }
+
+    .panel-variant-a input[type="checkbox"] {
+      appearance: none;
+      background-color: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 7px;
+      border-radius: 4px;
+      display: inline-block;
+      position: relative;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .panel-variant-a input[type="checkbox"]:checked {
+      background-color: #3b82f6;
+      border-color: #3b82f6;
+    }
+
+    .panel-variant-a input[type="checkbox"]:checked:after {
+      content: '\2714';
+      font-size: 10px;
+      position: absolute;
+      top: 0px;
+      left: 2px;
+      color: white;
+    }
+
+    /* ==========================================
+       VARIANT B: Minimalist Clean (Light / Slate)
+       ========================================== */
+    .panel-variant-b {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      color: #0f172a;
+      overflow: hidden;
+    }
+
+    .panel-variant-b .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .panel-variant-b .nav-btn {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .panel-variant-b .nav-btn:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+
+    .panel-variant-b .title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #334155;
+    }
+
+    .panel-variant-b .table-container {
+      padding: 8px 14px;
+    }
+
+    .panel-variant-b table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .panel-variant-b tr {
+      border-bottom: 1px solid #f1f5f9;
+    }
+
+    .panel-variant-b tr:last-child {
+      border-bottom: none;
+    }
+
+    .panel-variant-b td {
+      padding: 10px 0;
+      font-size: 12px;
+    }
+
+    .panel-variant-b td.label-col {
+      font-weight: 500;
+      color: #475569;
+    }
+
+    .panel-variant-b td.check-col {
+      text-align: right;
+      width: 30px;
+    }
+
+    .panel-variant-b input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #0f172a;
+      width: 14px;
+      height: 14px;
+    }
+
+    /* ==========================================
+       VARIANT C: Retro Terminal (Green Monospace)
+       ========================================== */
+    .panel-variant-c {
+      background: #000000;
+      border: 2px solid #00ff00;
+      box-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
+      color: #00ff00;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      padding: 12px;
+    }
+
+    .panel-variant-c .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px dashed #00ff00;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+
+    .panel-variant-c .nav-btn {
+      background: transparent;
+      border: 1px solid #00ff00;
+      color: #00ff00;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 1px 6px;
+    }
+
+    .panel-variant-c .nav-btn:hover {
+      background: #00ff00;
+      color: #000000;
+    }
+
+    .panel-variant-c .title {
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .panel-variant-c table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .panel-variant-c tr {
+      border-bottom: 1px dotted #005500;
+    }
+
+    .panel-variant-c tr:last-child {
+      border-bottom: none;
+    }
+
+    .panel-variant-c td {
+      padding: 6px 0;
+      font-size: 11px;
+    }
+
+    .panel-variant-c td.label-col {
+      text-transform: uppercase;
+    }
+
+    .panel-variant-c td.check-col {
+      text-align: right;
+      width: 40px;
+    }
+
+    .panel-variant-c input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #00ff00;
+      outline: 1px solid #00ff00;
+    }
+
+    /* ==========================================
+       VARIANT D: HoverSource Dark Theme Tooltip Style
+       ========================================== */
+    .panel-variant-d {
+      background: rgba(18, 18, 18, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f3f4f6;
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .panel-variant-d .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 4px;
+    }
+
+    .panel-variant-d .nav-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f3f4f6;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .panel-variant-d .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .panel-variant-d .title {
+      font-weight: bold;
+      font-size: 13px;
+      color: #3b82f6;
+    }
+
+    .panel-variant-d table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+    }
+
+    .panel-variant-d td {
+      padding: 6px 0;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .panel-variant-d td.label-col {
+      color: #9ca3af;
+      font-weight: 500;
+    }
+
+    .panel-variant-d td.check-col {
+      text-align: right;
+      width: 30px;
+    }
+
+    .panel-variant-d input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #3b82f6;
+      width: 13px;
+      height: 13px;
+    }
+
+    /* ==========================================
+       VARIANT E: HoverSource Light Theme Tooltip Style
+       ========================================== */
+    .panel-variant-e {
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      color: #1f2937;
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.25);
+    }
+
+    .panel-variant-e .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+      padding-bottom: 4px;
+    }
+
+    .panel-variant-e .nav-btn {
+      background: rgba(0, 0, 0, 0.05);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      color: #1f2937;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .panel-variant-e .nav-btn:hover {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    .panel-variant-e .title {
+      font-weight: bold;
+      font-size: 13px;
+      color: #2563eb;
+    }
+
+    .panel-variant-e table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+    }
+
+    .panel-variant-e td {
+      padding: 6px 0;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .panel-variant-e td.label-col {
+      color: #6b7280;
+      font-weight: 500;
+    }
+
+    .panel-variant-e td.check-col {
+      text-align: right;
+      width: 30px;
+    }
+
+    .panel-variant-e input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #2563eb;
+      width: 13px;
+      height: 13px;
+    }
+
+    /* ==========================================
+       VARIANT F: HoverSource Dark 4-Column Layout
+       ========================================== */
+    .panel-variant-f {
+      background: rgba(18, 18, 18, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f3f4f6;
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .panel-variant-f .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 4px;
+    }
+
+    .panel-variant-f .nav-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #f3f4f6;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .panel-variant-f .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .panel-variant-f .title {
+      font-weight: bold;
+      font-size: 13px;
+      color: #3b82f6;
+    }
+
+    .panel-variant-f table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+    }
+
+    .panel-variant-f td {
+      padding: 6px 4px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .panel-variant-f td.label-col {
+      color: #9ca3af;
+      font-weight: 500;
+    }
+
+    .panel-variant-f td.check-col {
+      text-align: right;
+      width: 24px;
+      padding-right: 12px;
+    }
+
+    .panel-variant-f td.check-col:last-child {
+      padding-right: 0;
+    }
+
+    .panel-variant-f input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #3b82f6;
+      width: 13px;
+      height: 13px;
+    }
+
+    /* ==========================================
+       VARIANT G: HoverSource Dark with SVG Line Art & Text Effects
+       ========================================== */
+    .panel-variant-g {
+      background: rgba(15, 15, 15, 0.96);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(59, 130, 246, 0.3); /* Cyan/Blue glowing border */
+      color: #f3f4f6;
+      padding: 14px;
+      border-radius: 10px;
+      box-shadow: 0 0 15px rgba(59, 130, 246, 0.25), 0 10px 25px -5px rgba(0, 0, 0, 0.6);
+    }
+
+    .panel-variant-g .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+      padding-bottom: 6px;
+    }
+
+    .panel-variant-g .nav-btn {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #93c5fd;
+      cursor: pointer;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .panel-variant-g .nav-btn:hover {
+      background: rgba(59, 130, 246, 0.25);
+      box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+      color: #ffffff;
+    }
+
+    .panel-variant-g .title {
+      font-weight: 700;
+      font-size: 13px;
+      color: #3b82f6;
+      text-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+      letter-spacing: 0.03em;
+    }
+
+    .panel-variant-g table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .panel-variant-g tr {
+      transition: background-color 0.15s ease;
+      border-radius: 4px;
+    }
+
+    .panel-variant-g tr:hover {
+      background-color: rgba(255, 255, 255, 0.03);
+    }
+
+    .panel-variant-g td {
+      padding: 6px 0;
+      font-size: 11px;
+      vertical-align: middle;
+    }
+
+    .panel-variant-g td.label-col {
+      color: #9ca3af;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: color 0.15s ease;
+    }
+
+    .panel-variant-g tr:hover td.label-col {
+      color: #ffffff;
+    }
+
+    .panel-variant-g td.check-col {
+      text-align: right;
+      width: 30px;
+    }
+
+    .panel-variant-g .icon-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #3b82f6;
+      width: 14px;
+      height: 14px;
+      opacity: 0.8;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .panel-variant-g tr:hover .icon-wrapper {
+      transform: scale(1.1);
+      opacity: 1;
+      color: #60a5fa;
+    }
+
+    .panel-variant-g input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #3b82f6;
+      width: 13px;
+      height: 13px;
+      box-shadow: 0 0 4px rgba(59, 130, 246, 0.2);
+    }
+
+    /* ==========================================
+       VARIANT H: HoverSource Dark with SVG Line Art (Narrow Width)
+       ========================================== */
+    .panel-variant-h {
+      background: rgba(15, 15, 15, 0.96);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #f3f4f6;
+      padding: 10px 12px;
+      border-radius: 8px;
+      box-shadow: 0 0 12px rgba(59, 130, 246, 0.2), 0 8px 20px -5px rgba(0, 0, 0, 0.6);
+    }
+
+    .panel-variant-h .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+      padding-bottom: 4px;
+    }
+
+    .panel-variant-h .nav-btn {
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      color: #93c5fd;
+      cursor: pointer;
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+
+    .panel-variant-h .nav-btn:hover {
+      background: rgba(59, 130, 246, 0.2);
+      color: #ffffff;
+    }
+
+    .panel-variant-h .title {
+      font-weight: 700;
+      font-size: 11.5px;
+      color: #3b82f6;
+      text-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
+      letter-spacing: 0.02em;
+    }
+
+    .panel-variant-h table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .panel-variant-h tr {
+      transition: background-color 0.15s ease;
+    }
+
+    .panel-variant-h tr:hover {
+      background-color: rgba(255, 255, 255, 0.02);
+    }
+
+    .panel-variant-h td {
+      padding: 4px 0;
+      font-size: 10.5px;
+      vertical-align: middle;
+    }
+
+    .panel-variant-h td.label-col {
+      color: #9ca3af;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .panel-variant-h tr:hover td.label-col {
+      color: #ffffff;
+    }
+
+    .panel-variant-h td.check-col {
+      text-align: right;
+      width: 24px;
+    }
+
+    .panel-variant-h .icon-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #3b82f6;
+      width: 12px;
+      height: 12px;
+      opacity: 0.75;
+    }
+
+    .panel-variant-h tr:hover .icon-wrapper {
+      color: #60a5fa;
+    }
+
+    .panel-variant-h input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #3b82f6;
+      width: 12px;
+      height: 12px;
+    }
+
+
+    /* ==========================================
+       FLOATING SWITCHER BAR
+       ========================================== */
+    .switcher-bar {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e293b;
+      border: 1px solid #475569;
+      border-radius: 9999px;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+      z-index: 999999;
+    }
+
+    .switcher-btn {
+      background: #334155;
+      color: #f8fafc;
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      transition: background 0.2s;
+    }
+
+    .switcher-btn:hover {
+      background: #475569;
+    }
+
+    .switcher-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #e2e8f0;
+      min-width: 260px;
+      text-align: center;
+    }
+
+    /* Hotkey Hint */
+    .hotkey-hint {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .hotkey-hint kbd {
+      background: #0f172a;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: #f8fafc;
+      font-family: inherit;
+    }
+
+    /* Floating indicator for drag state / save state */
+    .save-indicator {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(16, 185, 129, 0.9);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      transform: translateY(-50px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 100000;
+    }
+
+    .save-indicator.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hotkey-hint">
+    Press <kbd>Alt</kbd> + <kbd>Ctrl</kbd> + <kbd>D</kbd> to Toggle Panel<br>
+    <span style="font-size: 10px; color: #64748b;">Drag the header to reposition.</span>
+  </div>
+
+  <div id="save-indicator" class="save-indicator">
+    Position saved to project config!
+  </div>
+
+  <div class="demo-container">
+    <h1>HoverSource Metadata Filter Panel</h1>
+    <div class="subtitle">Interactive UI Prototype. Switch variants using the floating bar at the bottom.</div>
+
+    <!-- Active Panel Container -->
+    <div id="active-panel-container" class="panel-base"></div>
+
+    <!-- Live Preview Box -->
+    <div class="preview-box">
+      <div class="preview-header">
+        <span class="preview-title">Simulated Clipboard Copy Output</span>
+        <button class="copy-btn" onclick="copyToRealClipboard()">Copy to Clipboard</button>
+      </div>
+      <pre id="clipboard-preview"></pre>
+    </div>
+  </div>
+
+  <!-- Floating Switcher Bar -->
+  <div class="switcher-bar">
+    <button class="switcher-btn" onclick="cycleVariant(-1)">&lt;</button>
+    <div class="switcher-label" id="current-variant-label">Variant A — Glassmorphism</div>
+    <button class="switcher-btn" onclick="cycleVariant(1)">&gt;</button>
+  </div>
+
+  <script>
+    // SVG Icons Map for Variant G & H
+    const icons = {
+      componentName: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" /></svg>`,
+      elementSelector: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 8.25h15m-16.5 6h15m-1.875-10.5l-3.375 15m-1.5-15l-3.375 15" /></svg>`,
+      filePath: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>`,
+      framework: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 21l8.97-8.97m-8.97 8.97L15 15M9 21l-3.75-3.75M5.25 17.25L13.5 9M18.75 5.25l-.323.323m0 0a1.875 1.875 0 11-2.652-2.652L16.1 3.25m2.652 2.652L19.5 5.25m-3.077-1.427L15.6 4.5m0 0l-1.5-1.5M16.1 3.25l-1.427 1.427m3.077 1.427l1.5 1.5" /></svg>`,
+      dimensions: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v16.5m0-16.5h16.5m-16.5 0L19.5 19.5M19.5 3.75v16.5m0-16.5H3.75m15.75 15.75H3.75" /></svg>`,
+      keyStyles: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-2.225.016 9.778 9.778 0 00-2.524 1.307c-.152.1-.347.052-.44-.1a9.033 9.033 0 01-1.19-4.358 9 9 0 0117.189-3.674a5.006 5.006 0 00-.834-.055 3.99 3.99 0 00-2.827 1.172 5.006 5.006 0 00-1.172 2.827 3.99 3.99 0 001.172 2.827c.29.29.616.536.969.736a9.07 9.07 0 01-5.267 1.258c-.347-.008-.7-.04-1.045-.097z" /></svg>`,
+      parentStyles: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.999 5.999 0 00-5.414-5.74M6 18.72a9.094 9.094 0 01-3.741-.479 3 3 0 014.682-2.72m-.94 3.198l-.002.031c0 .225.012.447.038.666A11.944 11.944 0 0012 21c2.17 0 4.207-.576 5.963-1.584A6.062 6.062 0 0018 18.719m-12 0a5.999 5.999 0 015.414-5.74m0 0a3 3 0 110-6 3 3 0 010 6z" /></svg>`,
+      layoutConstraints: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3 3m12 6V4.5M15 9h4.5M15 9l6-6M9 15v4.5M9 15H4.5M9 15l-6 6m12-6v4.5M15 15h4.5M15 15l6 6" /></svg>`,
+      sourceComments: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" /></svg>`,
+      sourceAttributes: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581a1.65 1.65 0 002.333 0l4.318-4.318a1.65 1.65 0 000-2.333L10.312 4.319a2.25 2.25 0 00-1.591-.659z" /><path stroke-linecap="round" stroke-linejoin="round" d="M6 7.5h.008v.008H6V7.5z" /></svg>`,
+      
+      // Layer stack
+      layerSummary: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m11.142 0L21.75 12l-4.179-2.25M12 5.75L6.429 9.75 12 13.75l5.571-4L12 5.75zm0 8l-5.571 4L12 21.75l5.571-4-5.571-4z" /></svg>`,
+      layer1: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" /></svg>`,
+      layer2: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18c-2.305 0-4.408.867-6 2.292m0-14.25v14.25" /></svg>`,
+      htmlStructure: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" /></svg>`,
+
+      // Design mode
+      compInfo: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 111.063.852l-.708 2.836a.75.75 0 001.063.852l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>`,
+      horizontalAnchor: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>`,
+      verticalAnchor: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5m4.5 4.5V7.5" /></svg>`,
+      layoutContext: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h17.25c.621 0 1.125.504 1.125 1.125v12.75c0 .621-.504 1.125-1.125 1.125H3.375a1.125 1.125 0 01-1.125-1.125V7.125z" /></svg>`,
+      suggestedCss: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" /></svg>`,
+      sourceFiles: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" /></svg>`,
+      aiInstructions: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
+    };
+
+    const variants = [
+      { id: 'A', name: 'Variant A — Glassmorphism', class: 'panel-variant-a', widthMode: 'normal' },
+      { id: 'B', name: 'Variant B — Minimalist Clean', class: 'panel-variant-b', widthMode: 'normal' },
+      { id: 'C', name: 'Variant C — Retro Terminal', class: 'panel-variant-c', widthMode: 'normal' },
+      { id: 'D', name: 'Variant D — HoverSource Dark Tooltip', class: 'panel-variant-d', widthMode: 'normal' },
+      { id: 'E', name: 'Variant E — HoverSource Light Tooltip', class: 'panel-variant-e', widthMode: 'normal' },
+      { id: 'F', name: 'Variant F — HoverSource Dark 4-Col', class: 'panel-variant-f', widthMode: 'wide' },
+      { id: 'G', name: 'Variant G — Glowing Line Art & Text FX', class: 'panel-variant-g', widthMode: 'normal' },
+      { id: 'H', name: 'Variant H — Glowing Line Art (Narrow)', class: 'panel-variant-h', widthMode: 'narrow' }
+    ];
+    let currentVariantIndex = 0;
+    let isPanelVisible = true;
+
+    const metadataTypes = [
+      { id: 'component', name: 'Component Metadata' },
+      { id: 'layer', name: 'Layer Stack Metadata' },
+      { id: 'design', name: 'Design Placement' }
+    ];
+    let currentMetadataTypeIndex = 0;
+
+    // Default configuration fields and checkbox states
+    const configData = {
+      component: [
+        { key: 'componentName', label: 'Component Name', checked: true, text: '* **Component**: `UserProfileCard`\n' },
+        { key: 'elementSelector', label: 'Element Selector', checked: true, text: '* **Element**: button.btn-primary\n' },
+        { key: 'filePath', label: 'File Path & Line', checked: true, text: '* **File Path**: `src/components/UserProfileCard.tsx` (Line: 45, Column: 8)\n' },
+        { key: 'framework', label: 'Framework', checked: true, text: '* **Framework**: React\n' },
+        { key: 'dimensions', label: 'Dimensions', checked: true, text: '* **Dimensions**: 120x40\n' },
+        { key: 'keyStyles', label: 'Key Styles', checked: true, text: '* **Key Styles**:\n  - Color: `#ffffff`\n  - Background: `#3b82f6`\n  - Box Shadow: `none`\n  - Margin: `0px` | Padding: `8px 16px`\n  - Display: `flex` (direction: row)\n' },
+        { key: 'parentStyles', label: 'Parent Styles', checked: true, text: '* **Parent Styles**:\n  - flex container (align-items: center)\n' },
+        { key: 'layoutConstraints', label: 'Layout Constraints', checked: true, text: '* **Layout Constraints**:\n  - max-width: 200px\n' },
+        { key: 'sourceComments', label: 'Source Comments', checked: true, text: '* **Source Comments**:\n  - // Primary call to action button\n' },
+        { key: 'sourceAttributes', label: 'Source Attributes', checked: true, text: '* **Source Attributes**:\n  - type="button"\n  - onClick={handleClick}\n' }
+      ],
+      layer: [
+        { key: 'layerSummary', label: 'Layers Summary', checked: true, text: '### HoverSource Component Metadata\nFound 2 layer(s), ordered from leaf (Layer 1) to root:\n\n' },
+        { key: 'layer1', label: 'Layer 1: button', checked: true, text: '#### Layer 1/2: `button` (button)\n* **Component**: `UserProfileCard`\n* **Element**: button.btn-primary\n* **File Path**: `src/components/UserProfileCard.tsx` (Line: 45)\n\n' },
+        { key: 'layer2', label: 'Layer 2: UserProfileCard', checked: true, text: '#### Layer 2/2: `UserProfileCard` (div)\n* **Component**: `UserProfileCard`\n* **Element**: div.card-wrapper\n* **File Path**: `src/components/UserProfileCard.tsx` (Line: 12)\n\n' },
+        { key: 'htmlStructure', label: 'HTML Structure Block', checked: true, text: '### Target Element HTML Structure (Layer 1)\n```html\n<button class="btn-primary" type="button">\n  <span>Click Me</span>\n</button>\n```\n' }
+      ],
+      design: [
+        { key: 'compInfo', label: 'Component & Element Info', checked: true, text: '* **Component**: `UserProfileCard`\n* **Element**: button.btn-primary\n* **File Path**: `src/components/UserProfileCard.tsx`\n* **Framework**: React\n' },
+        { key: 'horizontalAnchor', label: 'Horizontal Anchor', checked: true, text: '* **Horizontal Anchor**:\n  - Selector: `div.card-wrapper`\n  - Boundary: left\n  - Crosshair distance from boundary: `+24px` (custom)\n' },
+        { key: 'verticalAnchor', label: 'Vertical Anchor', checked: true, text: '* **Vertical Anchor**:\n  - Selector: `div.card-wrapper`\n  - Boundary: top\n  - Crosshair distance from boundary: `+12px` (custom)\n' },
+        { key: 'layoutContext', label: 'Layout Context', checked: true, text: '#### Layout Context (auto-resolved at runtime)\n* **Positioned Ancestor**: div.card-wrapper\n* **Anchor Element**: div.card-wrapper (display: block)\n* **Direct Parent of Anchor**: div.container\n' },
+        { key: 'suggestedCss', label: 'Suggested CSS Block', checked: true, text: '* **USE THIS CSS**:\n```css\nposition: absolute;\ntop: 12px;\nleft: 24px;\n```\n' },
+        { key: 'sourceFiles', label: 'Source Files to Examine', checked: true, text: '* **Source Files to Examine**:\n  - `src/components/UserProfileCard.tsx`\n' },
+        { key: 'aiInstructions', label: 'AI Agent Instructions', checked: true, text: '#### For the AI Agent\nThe CSS above assumes the new element will be a direct child of the Positioned Ancestor.\nYou must determine the actual DOM insertion point by examining the source files above.\n' }
+      ]
+    };
+
+    // Render active variant panel
+    function renderPanel() {
+      const container = document.getElementById('active-panel-container');
+      if (!isPanelVisible) {
+        container.innerHTML = '';
+        container.className = 'panel-base';
+        return;
+      }
+
+      const variant = variants[currentVariantIndex];
+      const metadataType = metadataTypes[currentMetadataTypeIndex];
+      const fields = configData[metadataType.id];
+
+      // Update container class for width adjustment
+      if (variant.widthMode === 'wide') {
+        container.className = 'panel-base wide-panel';
+      } else if (variant.widthMode === 'narrow') {
+        container.className = 'panel-base narrow-panel';
+      } else {
+        container.className = 'panel-base';
+      }
+
+      // Build HTML
+      let html = `
+        <div class="${variant.class}">
+          <div class="header" id="drag-header">
+            <button class="nav-btn" onclick="event.stopPropagation(); cycleMetadataType(-1);">&lt;</button>
+            <div class="title">${metadataType.name}</div>
+            <button class="nav-btn" onclick="event.stopPropagation(); cycleMetadataType(1);">&gt;</button>
+          </div>
+          <div class="table-container">
+            <table>
+      `;
+
+      if (variant.id === 'F') {
+        // Render 4-column layout
+        for (let i = 0; i < fields.length; i += 2) {
+          const f1 = fields[i];
+          const f2 = fields[i + 1];
+          
+          html += `<tr>`;
+          // Field 1
+          html += `
+            <td class="label-col">${f1.label}</td>
+            <td class="check-col">
+              <input type="checkbox" id="chk-${metadataType.id}-${f1.key}" 
+                ${f1.checked ? 'checked' : ''} 
+                onchange="toggleField('${metadataType.id}', '${f1.key}', this.checked)">
+            </td>
+          `;
+          // Field 2 (if exists)
+          if (f2) {
+            html += `
+              <td class="label-col" style="padding-left: 12px; border-left: 1px solid rgba(255,255,255,0.08);">${f2.label}</td>
+              <td class="check-col">
+                <input type="checkbox" id="chk-${metadataType.id}-${f2.key}" 
+                  ${f2.checked ? 'checked' : ''} 
+                  onchange="toggleField('${metadataType.id}', '${f2.key}', this.checked)">
+              </td>
+            `;
+          } else {
+            html += `<td></td><td></td>`;
+          }
+          html += `</tr>`;
+        }
+      } else if (variant.id === 'G' || variant.id === 'H') {
+        // Render G & H with SVG icons
+        fields.forEach((field, idx) => {
+          const svgIcon = icons[field.key] || '';
+          html += `
+            <tr>
+              <td class="label-col">
+                <span class="icon-wrapper">${svgIcon}</span>
+                <span>${field.label}</span>
+              </td>
+              <td class="check-col">
+                <input type="checkbox" id="chk-${metadataType.id}-${field.key}" 
+                  ${field.checked ? 'checked' : ''} 
+                  onchange="toggleField('${metadataType.id}', '${field.key}', this.checked)">
+              </td>
+            </tr>
+          `;
+        });
+      } else {
+        // Standard 2-column layout
+        fields.forEach((field, idx) => {
+          html += `
+            <tr>
+              <td class="label-col">${field.label}</td>
+              <td class="check-col">
+                <input type="checkbox" id="chk-${metadataType.id}-${field.key}" 
+                  ${field.checked ? 'checked' : ''} 
+                  onchange="toggleField('${metadataType.id}', '${field.key}', this.checked)">
+              </td>
+            </tr>
+          `;
+        });
+      }
+
+      html += `
+            </table>
+          </div>
+        </div>
+      `;
+
+      container.innerHTML = html;
+      makeElementDraggable(container, document.getElementById('drag-header'));
+      updatePreview();
+    }
+
+    // Drag and Drop implementation
+    function makeElementDraggable(elmnt, header) {
+      let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+      if (header) {
+        // if present, the header is where you move the DIV from:
+        header.onmousedown = dragMouseDown;
+      } else {
+        // otherwise, move the DIV from anywhere inside the DIV:
+        elmnt.onmousedown = dragMouseDown;
+      }
+
+      function dragMouseDown(e) {
+        e = e || window.event;
+        // Check if the target is a button, which should not trigger dragging
+        if (e.target.tagName.toLowerCase() === 'button' || e.target.closest('button')) return;
+        
+        e.preventDefault();
+        // get the mouse cursor position at startup:
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        document.onmouseup = closeDragElement;
+        // call a function whenever the cursor moves:
+        document.onmousemove = elementDrag;
+      }
+
+      function elementDrag(e) {
+        e = e || window.event;
+        e.preventDefault();
+        // calculate the new cursor position:
+        pos1 = pos3 - e.clientX;
+        pos2 = pos4 - e.clientY;
+        pos3 = e.clientX;
+        pos4 = e.clientY;
+        // set the element's new position:
+        elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+        // Convert to right-based position to maintain anchoring on screen resize
+        const newLeft = elmnt.offsetLeft - pos1;
+        elmnt.style.left = newLeft + "px";
+        elmnt.style.right = "auto"; // Override right positioning
+      }
+
+      function closeDragElement() {
+        // stop moving when mouse button is released:
+        document.onmouseup = null;
+        document.onmousemove = null;
+        
+        // Simulate sending and saving coordinates to the companion-server (project level persistence)
+        showSaveIndicator(elmnt.style.left, elmnt.style.top);
+      }
+    }
+
+    function showSaveIndicator(x, y) {
+      const indicator = document.getElementById('save-indicator');
+      indicator.textContent = `Position saved to project config: (${Number.parseInt(x, 10)}, ${Number.parseInt(y, 10)})`;
+      indicator.classList.add('show');
+      setTimeout(() => {
+        indicator.classList.remove('show');
+      }, 2500);
+    }
+
+    function toggleField(typeId, key, isChecked) {
+      const fields = configData[typeId];
+      const field = fields.find(f => f.key === key);
+      if (field) {
+        field.checked = isChecked;
+      }
+      updatePreview();
+    }
+
+    // Cycles between metadata types
+    function cycleMetadataType(direction) {
+      currentMetadataTypeIndex = (currentMetadataTypeIndex + direction + metadataTypes.length) % metadataTypes.length;
+      renderPanel();
+    }
+
+    // Cycles the style variations (A to H)
+    function cycleVariant(direction) {
+      currentVariantIndex = (currentVariantIndex + direction + variants.length) % variants.length;
+      document.getElementById('current-variant-label').textContent = variants[currentVariantIndex].name;
+      
+      // Reset position to default when switching variants for clean demo
+      const container = document.getElementById('active-panel-container');
+      container.style.top = "100px";
+      container.style.right = "40px";
+      container.style.left = "auto";
+      
+      renderPanel();
+    }
+
+    // Toggle Panel Visibility with Alt+Ctrl+D
+    globalThis.addEventListener('keydown', (e) => {
+      if (e.altKey && e.ctrlKey && e.code === 'KeyD') {
+        e.preventDefault();
+        isPanelVisible = !isPanelVisible;
+        renderPanel();
+      }
+    });
+
+    // Update Live Preview Box based on selected checkboxes
+    function updatePreview() {
+      const metadataType = metadataTypes[currentMetadataTypeIndex];
+      const fields = configData[metadataType.id];
+      
+      let previewText = '';
+      if (metadataType.id === 'component') {
+        previewText += '### HoverSource Component Metadata\n';
+      } else if (metadataType.id === 'design') {
+        previewText += '### HoverSource Design Placement Metadata\n';
+      }
+
+      fields.forEach(field => {
+        if (field.checked) {
+          previewText += field.text;
+        }
+      });
+
+      document.getElementById('clipboard-preview').textContent = previewText.trim();
+    }
+
+    function copyToRealClipboard() {
+      const text = document.getElementById('clipboard-preview').textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Copied to clipboard!');
+      });
+    }
+
+    // Initial render
+    renderPanel();
+  </script>
+</body>
+</html>

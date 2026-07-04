@@ -661,36 +661,59 @@ export class InspectorAdapter {
         const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
         const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
         const directionStr = data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : "";
-        let text = `* **Component**: \`${data.component}\`
-* **Element**: ${selectorLabel}
-* **File Path**: \`${data.file || "Unknown"}\`${data.line ? ` (Line: ${data.line}, Column: ${data.column})` : ""}
-* **Framework**: ${data.framework}
-* **Dimensions**: ${data.dimensions}
-* **Key Styles**:
+        const config = this.controller.getConfig();
+        const filters = config?.metadataFilter?.filters?.component;
+        const isChecked = (key) => filters ? (filters[key] !== false) : true;
+        const lines = [];
+        const addLine = (key, content) => {
+            if (isChecked(key)) {
+                lines.push(typeof content === "function" ? content() : content);
+            }
+        };
+        addLine("componentName", `* **Component**: \`${data.component}\``);
+        addLine("elementSelector", `* **Element**: ${selectorLabel}`);
+        addLine("filePath", () => {
+            const lineColStr = data.line ? ` (Line: ${data.line}, Column: ${data.column})` : "";
+            return `* **File Path**: \`${data.file || "Unknown"}\`${lineColStr}`;
+        });
+        addLine("framework", `* **Framework**: ${data.framework}`);
+        addLine("dimensions", `* **Dimensions**: ${data.dimensions}`);
+        addLine("keyStyles", `* **Key Styles**:
   - Color: \`${data.styles.color}\`
   - Background: \`${data.styles.backgroundColor}\`
   - Box Shadow: \`${data.styles.boxShadow}\`
   - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
-  - Display: \`${data.styles.display}\` ${directionStr}`;
-        if (info.visualContext && info.visualContext.parentEffects.length > 0) {
-            const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
-            text += `\n* **Parent Styles**:\n${parentList}`;
-        }
-        if (info.visualContext && Object.keys(info.visualContext.layoutConstraints).length > 0) {
-            const layoutList = this.formatLayoutConstraints(info.visualContext.layoutConstraints);
-            text += `\n* **Layout Constraints**:\n${layoutList}`;
+  - Display: \`${data.styles.display}\` ${directionStr}`);
+        if (info.visualContext) {
+            addLine("parentStyles", () => {
+                if (info.visualContext.parentEffects.length === 0)
+                    return "";
+                const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
+                return `* **Parent Styles**:\n${parentList}`;
+            });
+            addLine("layoutConstraints", () => {
+                if (Object.keys(info.visualContext.layoutConstraints).length === 0)
+                    return "";
+                const layoutList = this.formatLayoutConstraints(info.visualContext.layoutConstraints);
+                return `* **Layout Constraints**:\n${layoutList}`;
+            });
         }
         if (info.staticMetadata) {
-            if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
+            addLine("sourceComments", () => {
+                if (!info.staticMetadata.comments || info.staticMetadata.comments.length === 0)
+                    return "";
                 const commentList = this.formatSourceComments(info.staticMetadata.comments);
-                text += `\n* **Source Comments**:\n${commentList}`;
-            }
-            if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+                return `* **Source Comments**:\n${commentList}`;
+            });
+            addLine("sourceAttributes", () => {
+                if (!info.staticMetadata.rawAttributes || Object.keys(info.staticMetadata.rawAttributes).length === 0)
+                    return "";
                 const attrList = this.formatSourceAttributes(info.staticMetadata.rawAttributes);
-                text += `\n* **Source Attributes**:\n${attrList}`;
-            }
+                return `* **Source Attributes**:\n${attrList}`;
+            });
         }
-        return text;
+        const filteredLines = lines.filter(Boolean);
+        return filteredLines.join("\n");
     }
     copyMetadata() {
         if (!this.currentSourceInfo || !this.currentElement)
@@ -763,9 +786,20 @@ export class InspectorAdapter {
     copyAllLayers() {
         if (this.layerStack.length === 0)
             return;
-        let text = `### HoverSource Component Metadata\n`;
-        text += `Found ${this.layerStack.length} layer(s), ordered from leaf (Layer 1) to root:\n\n`;
+        const config = this.controller.getConfig();
+        const filters = config?.metadataFilter?.filters?.layer;
+        const isChecked = (key) => filters ? (filters[key] !== false) : true;
+        let text = "";
+        if (isChecked("layerSummary")) {
+            text += `### HoverSource Component Metadata\n`;
+            text += `Found ${this.layerStack.length} layer(s), ordered from leaf (Layer 1) to root:\n\n`;
+        }
         this.layerStack.forEach((el, index) => {
+            const isLeaf = index === 0;
+            if (isLeaf && !isChecked("layer1"))
+                return;
+            if (!isLeaf && !isChecked("layer2"))
+                return;
             let info;
             if (el === this.currentElement && this.currentSourceInfo) {
                 info = this.currentSourceInfo;
@@ -789,12 +823,14 @@ export class InspectorAdapter {
             text += `#### Layer ${layerNum}/${totalLayers}: \`${info.componentName || el.tagName.toLowerCase()}\` (${el.tagName.toLowerCase()})\n`;
             text += this.formatElementMetadata(el, info) + "\n\n";
         });
-        const activeEl = this.layerStack[this.activeLayerIndex] || this.layerStack[0];
-        if (activeEl) {
-            const targetElToCopy = this.getTargetHTMLToCopy(activeEl);
-            const label = targetElToCopy === activeEl ? `Layer ${this.activeLayerIndex + 1}` : `Layer ${this.activeLayerIndex + 1} with siblings`;
-            text += `### Target Element HTML Structure (${label})\n`;
-            text += `\`\`\`html\n${this.getMinifiedHTML(targetElToCopy)}\n\`\`\`\n`;
+        if (isChecked("htmlStructure")) {
+            const activeEl = this.layerStack[this.activeLayerIndex] || this.layerStack[0];
+            if (activeEl) {
+                const targetElToCopy = this.getTargetHTMLToCopy(activeEl);
+                const label = targetElToCopy === activeEl ? `Layer ${this.activeLayerIndex + 1}` : `Layer ${this.activeLayerIndex + 1} with siblings`;
+                text += `### Target Element HTML Structure (${label})\n`;
+                text += `\`\`\`html\n${this.getMinifiedHTML(targetElToCopy)}\n\`\`\`\n`;
+            }
         }
         this.controller.copyToClipboard(text.trim());
     }

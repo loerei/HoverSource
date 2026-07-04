@@ -130,12 +130,14 @@ Ensure `mcp_config.json` defines both servers under `mcpServers`:
 | Violation | Diagnosis / Pattern | Resolution |
 | :--- | :--- | :--- |
 | **Cognitive Complexity (S3776)** | Nested loops, `try-catch` blocks, complex `if-else` within one function. | Extract inner loops or heavy operations into helper functions. |
-| **Optional Chaining (S6582)** | Legacy truthy checks like `(error && error.stack)` or `if (obj && obj.prop)`. | Convert to `error?.stack` or `obj?.prop`. |
+| **Optional Chaining (S6582)** | Legacy truthy checks like `(error && error.stack)` or `if (!lastMsg || lastMsg.role !== 'assistant')`. | Convert to `error?.stack` or optional chaining: `if (lastMsg?.role !== 'assistant')`. |
 | **Replace vs ReplaceAll (S7781)** | String replacements using regex `/g` flags: `str.replace(/_/g, '-')`. | Convert to string literals: `str.replaceAll('_', '-')`. |
 | **Set membership (S7776)** | Sequential array lookup: `candidates.includes(val)`. | Convert to `new Set(candidates)` and use `candidates.has(val)`. |
-| **globalThis (S7764)** | Using legacy environment globals: `window.api`. | Replace with `globalThis.api`. |
+| **globalThis (S7764)** | Using legacy environment globals: `window.api`. | Replace with `globalThis.api` or `globalThis.window.api`. |
 | **RegExp.exec() (S6594)** | `str.match(regex)`. | Replace with `regex.exec(str)`. |
 | **Redundant unions (S6571)** | Typings like `any | null` or `any | undefined`. | Simplify to `any`. |
+| **Array .at() (S7755)** | Retrieving last array element: `arr[arr.length - 1]`. | Convert to `arr.at(-1)`. |
+| **Direct Undefined (S7741)** | Checking undefined using `typeof x === 'undefined'`. | Compare directly with `undefined`: `x === undefined`. |
 | **Path Injection (S8707)** | CLI arguments leading to path traversal / filesystem escape. | Resolve canonical path using `os.path.realpath()` and ensure it starts with base directory + path separator (`startswith(base_dir + os.sep)`). |
 
 ---

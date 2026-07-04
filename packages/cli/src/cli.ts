@@ -197,7 +197,7 @@ function resolveSubcommand(
 }
 
 function resolveActualCmd(projectRoot: string, execCommand: string): string {
-  const npmRunMatch = execCommand.match(/^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/);
+  const npmRunMatch = /^(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?([^\s]+)/.exec(execCommand);
   if (npmRunMatch) {
     const scriptName = npmRunMatch[1];
     const pkgPath = path.join(projectRoot, "package.json");
@@ -214,10 +214,10 @@ function resolveActualCmd(projectRoot: string, execCommand: string): string {
 }
 
 function findConfigPath(actualCmd: string): string | undefined {
-  const configMatch = actualCmd.match(/(?:--config|-c)\s+([^\s"'\\]+)/);
+  const configMatch = /(?:--config|-c)\s+([^\s"'\\]+)/.exec(actualCmd);
   if (configMatch) return configMatch[1];
   
-  const fileMatch = actualCmd.match(/([^\s"'\\]+\.config\.[jt]s)/);
+  const fileMatch = /([\w\-./\\]+\.config\.[jt]s)/.exec(actualCmd);
   return fileMatch ? fileMatch[1] : undefined;
 }
 
@@ -226,7 +226,7 @@ function readPortFromConfig(projectRoot: string, configPath: string): number | u
   if (fs.existsSync(fullPath)) {
     try {
       const content = fs.readFileSync(fullPath, "utf-8");
-      const portMatch = content.match(/port:\s*(\d+)/);
+      const portMatch = /port:\s*(\d+)/.exec(content);
       if (portMatch) {
         return Number.parseInt(portMatch[1], 10);
       }
@@ -251,7 +251,7 @@ function findPortFromRootConfigs(projectRoot: string): number | undefined {
       const fullPath = path.join(projectRoot, file);
       if (fs.existsSync(fullPath)) {
         const content = fs.readFileSync(fullPath, "utf-8");
-        const portMatch = content.match(/port:\s*(\d+)/);
+        const portMatch = /port:\s*(\d+)/.exec(content);
         if (portMatch) {
           return Number.parseInt(portMatch[1], 10);
         }
@@ -542,7 +542,7 @@ export async function waitForServer(
   const start = Date.now();
   let dots = 0;
   while (Date.now() - start < timeoutMs) {
-    if (hasExitedCheck && hasExitedCheck()) {
+    if (hasExitedCheck?.()) {
       return false;
     }
     const up = await new Promise<boolean>((resolve) => {
@@ -744,6 +744,29 @@ async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
   });
 }
 
+async function handleRestartSubcommand(requestedPort: number, projectRoot: string, debugPort: number): Promise<void> {
+  console.log(`[HoverSource] Restarting companion server on port ${requestedPort}...`);
+  // Send shutdown request to the running server
+  const shutdownUrl = `http://127.0.0.1:${requestedPort}/shutdown`;
+  const req = http.get(shutdownUrl, (res) => {
+    res.resume();
+    console.log(`[HoverSource] Sent shutdown request to running instance on port ${requestedPort}.`);
+  });
+  req.on("error", () => {
+    console.log(`[HoverSource] No running instance found on port ${requestedPort}.`);
+  });
+  req.setTimeout(1000, () => {
+    req.destroy();
+  });
+  
+  // Wait a brief moment for the old process to exit, then start a new one
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  
+  const serverPort = await resolveCompanionPort(requestedPort);
+  await startCompanionServer({ port: serverPort, projectRoot, debugPort });
+  console.log(`[HoverSource] Companion server restarted on port ${serverPort}.`);
+}
+
 async function main() {
   restoreLeftoverPatches();
 
@@ -773,26 +796,7 @@ async function main() {
   // суб-команда Start
   // subcommand Restart
   if (subcommand === "restart") {
-    console.log(`[HoverSource] Restarting companion server on port ${requestedPort}...`);
-    // Send shutdown request to the running server
-    const shutdownUrl = `http://127.0.0.1:${requestedPort}/shutdown`;
-    const req = http.get(shutdownUrl, (res) => {
-      res.resume();
-      console.log(`[HoverSource] Sent shutdown request to running instance on port ${requestedPort}.`);
-    });
-    req.on("error", () => {
-      console.log(`[HoverSource] No running instance found on port ${requestedPort}.`);
-    });
-    req.setTimeout(1000, () => {
-      req.destroy();
-    });
-    
-    // Wait a brief moment for the old process to exit, then start a new one
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    
-    const serverPort = await resolveCompanionPort(requestedPort);
-    await startCompanionServer({ port: serverPort, projectRoot, debugPort });
-    console.log(`[HoverSource] Companion server restarted on port ${serverPort}.`);
+    await handleRestartSubcommand(requestedPort, projectRoot, debugPort);
     return;
   }
 

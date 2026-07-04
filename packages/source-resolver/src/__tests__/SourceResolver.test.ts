@@ -512,7 +512,7 @@ describe("SourceResolver", () => {
     } as any;
 
     const ancestors = resolver.resolveAncestors(childEl, 5);
-    expect(ancestors.length).toBe(2);
+    expect(ancestors).toHaveLength(2);
 
     // Closest ancestor (parentEl)
     expect(ancestors[0].selector).toBe("section.flex-container");
@@ -560,12 +560,12 @@ describe("SourceResolver", () => {
     try {
       // First resolution
       const first = resolver.resolveAncestors(parentEl, 5);
-      expect(first.length).toBe(1);
+      expect(first).toHaveLength(1);
       expect(spy).toHaveBeenCalledTimes(1); // rootEl is evaluated
 
       // Second resolution of the same element
       const second = resolver.resolveAncestors(parentEl, 5);
-      expect(second.length).toBe(1);
+      expect(second).toHaveLength(1);
       expect(spy).toHaveBeenCalledTimes(1); // Cached, no new getComputedStyle call
     } finally {
       globalThis.getComputedStyle = originalGetComputedStyle;
@@ -650,10 +650,10 @@ describe("SourceResolver", () => {
     // Call resolveAncestors on the deepest child (currentEl)
     // The default maxDepth should be 32, so it should return 32 ancestors (excluding documentElement)
     const ancestorsDefault = resolver.resolveAncestors(currentEl);
-    expect(ancestorsDefault.length).toBe(32);
+    expect(ancestorsDefault).toHaveLength(32);
 
     // If we pass maxDepth = 35, it should be capped at our safe ceiling of 32
     const ancestorsCapped = resolver.resolveAncestors(currentEl, 35);
-    expect(ancestorsCapped.length).toBe(32);
+    expect(ancestorsCapped).toHaveLength(32);
   });
 });

@@ -52,7 +52,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start with opacity 0 to prevent flash/pile-up before layout calculation
     el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto transition-all duration-300 hover:scale-105 opacity-0 ${sizeClass}`;
-    themeClasses[data.theme].split(' ').forEach(cls => el.classList.add(cls));
+    for (const cls of themeClasses[data.theme].split(' ')) {
+      el.classList.add(cls);
+    }
     el.innerText = data.text;
     canvas.appendChild(el);
 
@@ -241,17 +243,33 @@ document.addEventListener('DOMContentLoaded', () => {
         // Threshold distance for repulsion (combined radius + padding)
         const minDist = (tagA.width + tagB.width) / 2 + 25;
         if (dist < minDist) {
-          const force = (minDist - dist) * 0.015; // Gentle pushing force
-          const nx = dx / dist;
-          const ny = dy / dist;
+          const overlap = minDist - dist;
+          
+          // 1. Physical separation: Push coordinates apart immediately so they never overlap
+          const sepX = nx * overlap * 0.5;
+          const sepY = ny * overlap * 0.5;
 
           if (!tagA.isDragging) {
-            tagA.vx -= nx * force;
-            tagA.vy -= ny * force;
+            tagA.x -= sepX;
+            tagA.y -= sepY;
           }
           if (!tagB.isDragging) {
-            tagB.vx += nx * force;
-            tagB.vy += ny * force;
+            tagB.x += sepX;
+            tagB.y += sepY;
+          }
+
+          // 2. Velocity impulse: Bounce them apart dynamically (increased force coefficient to 0.12)
+          const force = overlap * 0.12;
+          const nxNorm = nx;
+          const nyNorm = ny;
+
+          if (!tagA.isDragging) {
+            tagA.vx -= nxNorm * force;
+            tagA.vy -= nyNorm * force;
+          }
+          if (!tagB.isDragging) {
+            tagB.vx += nxNorm * force;
+            tagB.vy += nyNorm * force;
           }
         }
       }

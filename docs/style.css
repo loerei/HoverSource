@@ -56,7 +56,10 @@ body {
   box-shadow: 0 0 20px rgba(59, 130, 246, 0.35);
 }
 
-/* Scrollbar styling for code terminal */
+/* Scrollbar styling for code terminal & containment of scroll events to prevent page snapping */
+.terminal-scroll {
+  overscroll-behavior: contain;
+}
 .terminal-scroll::-webkit-scrollbar {
   width: 6px;
   height: 6px;

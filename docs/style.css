@@ -1,17 +1,18 @@
-/* Reset & Scroll Snapping Core */
-html, body {
+/* Reset & Scroll Snapping Core on HTML root for hardware-accelerated compositor-thread smoothness */
+html {
   margin: 0;
   padding: 0;
-  height: 100%;
-  overflow: hidden;
-}
-
-.snap-container {
-  height: 100vh;
-  overflow-y: auto;
   scroll-snap-type: y mandatory;
   scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0b0b0d;
+  min-height: 100%;
 }
 
 .snap-section {

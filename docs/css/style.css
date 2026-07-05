@@ -38,7 +38,7 @@ body {
     min-height: 100%;
   }
   .snap-section {
-    scroll-snap-align: center;
+    scroll-snap-align: start;
     scroll-snap-stop: normal;
   }
 }

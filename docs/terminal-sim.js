@@ -517,3 +517,36 @@ hudItems.forEach(item => {
     }
   });
 });
+
+// Intercept desktop mouse wheel scroll and route to smooth section snap transitions
+let isHudScrolling = false;
+const hudSectionIds = ['#hero-section', '#ui-sandbox-section', '#cli-sandbox-section', '#bento-anchor', '#benchmark-anchor'];
+
+window.addEventListener('wheel', (e) => {
+  // Only apply custom scrolling on desktop screens where the HUD is active
+  if (window.innerWidth < 1024) return;
+
+  e.preventDefault();
+  if (isHudScrolling) return;
+
+  const direction = e.deltaY > 0 ? 1 : -1;
+  const activeItem = document.querySelector('.nav-title-item.active-nav-title');
+  
+  let currentIndex = 0;
+  if (activeItem) {
+    const currentId = activeItem.getAttribute('data-target');
+    currentIndex = hudSectionIds.indexOf(currentId);
+  }
+
+  const nextIndex = currentIndex + direction;
+  if (nextIndex >= 0 && nextIndex < hudSectionIds.length) {
+    const targetEl = document.querySelector(hudSectionIds[nextIndex]);
+    if (targetEl) {
+      isHudScrolling = true;
+      customSmoothScroll(targetEl, 900);
+      setTimeout(() => {
+        isHudScrolling = false;
+      }, 950);
+    }
+  }
+}, { passive: false });

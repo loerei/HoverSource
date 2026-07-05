@@ -45,8 +45,11 @@ body {
   justify-content: flex-end;
   color: #71717a; /* zinc-400 */
   opacity: 1; /* Keep button visible to render the dots */
-  pointer-events: none;
+  pointer-events: auto; /* Allow hover/click anywhere on the button bounding box */
   outline: none;
+  padding-top: 14px; /* Generous vertical padding to expand the click target area */
+  padding-bottom: 14px; /* Generous vertical padding to expand the click target area */
+  cursor: pointer;
 }
 
 /* Animate only the text span inside the HUD items */
@@ -85,8 +88,10 @@ body {
   content: '';
   position: absolute;
   right: -13px; /* Align precisely with the scroll line position */
+  top: 50%;
+  transform: translateY(-50%);
   width: 2px;
-  height: 38px; /* Stretch to connect with adjacent dots, forming a continuous line */
+  height: 100%; /* Stretch to fill the parent height, forming a continuous line without gaps */
   border-radius: 0px;
   background-color: rgba(63, 63, 70, 0.2);
   transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
@@ -97,7 +102,7 @@ body {
 /* Active segment in collapsed state */
 .nav-title-item.active-nav-title::after {
   width: 4px;
-  height: 38px;
+  height: 100%;
   background-color: #3b82f6; /* brand-blue */
   box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
   border-radius: 99px;
@@ -116,7 +121,9 @@ body {
   background-color: #3f3f46; /* zinc-700 */
   box-shadow: none;
   right: -19px; /* Revert to standard alignment */
-  pointer-events: auto;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 /* Hovering items in expanded state increases brightness */
@@ -133,6 +140,8 @@ body {
   background-color: #3b82f6; /* brand-blue */
   box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
   right: -19px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 /* Premium visual effects */

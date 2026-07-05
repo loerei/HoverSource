@@ -338,8 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Faster interpolation for instant hover response
         tag.glowIntensity += (1.0 - tag.glowIntensity) * 0.22;
       } else {
-        // Natural smooth fade-out decay (0.988 for much longer lingering glow)
-        tag.targetGlowIntensity *= 0.988;
+        // Natural smooth fade-out decay (0.994 for 6-second long lingering glow)
+        tag.targetGlowIntensity *= 0.994;
         tag.glowIntensity += (tag.targetGlowIntensity - tag.glowIntensity) * 0.12;
       }
 
@@ -400,21 +400,26 @@ document.addEventListener('DOMContentLoaded', () => {
       let textColor;
       let shadowColor;
       
-      // Maintain theme colors at all times, with stronger glow multiplier (0.95)
+      // Boost color intensity and opacity coefficient to 1.0 for double brightness
+      const glowAlpha = Math.min(1.0, 1.8 * tag.glowIntensity);
       if (tag.theme === "orange") {
         textColor = "rgb(245, 158, 11)"; // Amber-500
-        shadowColor = `rgba(245, 158, 11, ${0.95 * tag.glowIntensity})`;
+        shadowColor = `rgba(245, 158, 11, ${glowAlpha})`;
       } else if (tag.theme === "purple") {
         textColor = "rgb(168, 85, 247)"; // Purple-500
-        shadowColor = `rgba(168, 85, 247, ${0.95 * tag.glowIntensity})`;
+        shadowColor = `rgba(168, 85, 247, ${glowAlpha})`;
       } else {
         textColor = "rgb(59, 130, 246)"; // Blue-500
-        shadowColor = `rgba(59, 130, 246, ${0.95 * tag.glowIntensity})`;
+        shadowColor = `rgba(59, 130, 246, ${glowAlpha})`;
       }
 
       tag.element.style.color = textColor;
       tag.element.style.opacity = opacity;
-      tag.element.style.filter = tag.glowIntensity > 0.05 ? `drop-shadow(0 0 12px ${shadowColor})` : 'none';
+      
+      // Stack two drop-shadow filters for a double-intensity neon glow effect
+      tag.element.style.filter = tag.glowIntensity > 0.05 
+        ? `drop-shadow(0 0 8px ${shadowColor}) drop-shadow(0 0 20px ${shadowColor})` 
+        : 'none';
       tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0) scale(${scale})`;
     });
 

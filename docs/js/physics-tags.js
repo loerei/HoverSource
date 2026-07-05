@@ -179,6 +179,9 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.dragOffsetX = (clientX - rect.left) / 0.75;
       tag.dragOffsetY = (clientY - rect.top) / 0.75;
 
+      // Cache canvas bounding rect ONCE at the beginning of drag (prevents thrashing on mousemove/touchmove)
+      tag.dragCanvasRect = canvas.getBoundingClientRect();
+
       tag.lastMouseX = clientX;
       tag.lastMouseY = clientY;
       tag.lastMouseTime = Date.now();
@@ -203,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleDragMove(clientX, clientY) {
       const now = Date.now();
-      const rect = canvas.getBoundingClientRect();
+      const rect = tag.dragCanvasRect;
       
       const newX = clientX - rect.left - tag.dragOffsetX * 0.75;
       const newY = clientY - rect.top - tag.dragOffsetY * 0.75;

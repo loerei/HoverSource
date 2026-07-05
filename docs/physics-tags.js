@@ -44,11 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
     el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto opacity-0 ${data.size}`;
     el.innerText = data.text;
     
-    // Smooth transitions for color, opacity and glow filter. No transform transition to avoid physics jitter!
-    el.style.transition = 'color 0.6s ease, opacity 0.6s ease, filter 0.6s ease';
+    // No CSS transitions to avoid conflicts with frame-rate updates
+    el.style.transition = 'none';
     canvas.appendChild(el);
 
-    // Initialize with rough random position, spawn slower speed
+    // Initialize with rough random position
     const roughW = window.innerWidth || 1200;
     const roughH = window.innerHeight || 800;
     const roughX = Math.random() * (roughW - 150);
@@ -60,11 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
       theme: data.theme,
       x: roughX,
       y: roughY,
-      vx: (Math.random() - 0.5) * 0.5, // Slow initial speed (0.5)
+      vx: (Math.random() - 0.5) * 0.5,
       vy: (Math.random() - 0.5) * 0.5,
       width: 0,
       height: 0,
       glowIntensity: 0.0,
+      targetGlowIntensity: 0.0,
       isDragging: false,
       dragOffsetX: 0,
       dragOffsetY: 0,
@@ -140,9 +141,6 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.lastMouseTime = Date.now();
       tag.history = [{ x: clientX, y: clientY, t: tag.lastMouseTime }];
 
-      // Temporarily disable transitions during dragging for zero lag
-      tag.element.style.transition = 'none';
-
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
       window.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -181,9 +179,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function endDrag() {
       if (!tag.isDragging) return;
       tag.isDragging = false;
-      
-      // Restore smooth color/glow transitions
-      tag.element.style.transition = 'color 0.6s ease, opacity 0.6s ease, filter 0.6s ease';
 
       // Calculate throwing momentum
       if (tag.history.length >= 2) {
@@ -222,9 +217,6 @@ document.addEventListener('DOMContentLoaded', () => {
     hero.querySelector('.flex.items-center.justify-center.gap-4')
   ].filter(Boolean);
 
-  // Active glowing waves propagating across the screen
-  const activeWaves = [];
-
   // Physics animation loop
   function updatePhysics() {
     containerWidth = canvas.clientWidth || window.innerWidth;
@@ -244,42 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     });
 
-    // 1. Update active waves
-    for (let w = activeWaves.length - 1; w >= 0; w--) {
-      const wave = activeWaves[w];
-      wave.radius += wave.speed;
-      wave.strength *= 0.985; // Decay wave strength gently as it travels
-
-      // Check impact on each tag
-      tags.forEach(tag => {
-        // Keep the source tag fully illuminated as the wave propagates
-        if (tag === wave.sourceTag) {
-          tag.glowIntensity = Math.max(tag.glowIntensity, wave.strength);
-          return;
-        }
-
-        const tx = tag.x + tag.width / 2;
-        const ty = tag.y + tag.height / 2;
-        const distance = Math.hypot(tx - wave.x, ty - wave.y) || 1;
-
-        // Wave has hit this tag (detection band width of 200px)
-        if (wave.radius >= distance && wave.radius - 200 < distance) {
-          // Flatten proximity to sustain intensity over distance, then drop off
-          const proximity = Math.min(1.0, (1.0 - distance / wave.maxRadius) * 2.0);
-          
-          // Boost intensity factor to 1.8 to ensure highly visible glows
-          const intensity = proximity * wave.strength * 1.8;
-          tag.glowIntensity = Math.min(1.0, Math.max(tag.glowIntensity, intensity));
-        }
-      });
-
-      // Remove wave when fully propagated or weak
-      if (wave.radius > wave.maxRadius || wave.strength < 0.05) {
-        activeWaves.splice(w, 1);
-      }
-    }
-
-    // 2. Resolve collisions with static obstacles (H1, Paragraph, CTA Buttons)
+    // 1. Resolve collisions with static obstacles (H1, Paragraph, CTA Buttons)
     tags.forEach(tag => {
       if (tag.isDragging) return;
 
@@ -316,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // 3. Calculate mutual repulsion forces to prevent overlapping
+    // 2. Calculate mutual repulsion forces to prevent overlapping
     for (let i = 0; i < tags.length; i++) {
       for (let j = i + 1; j < tags.length; j++) {
         const tagA = tags[i];
@@ -371,10 +328,13 @@ document.addEventListener('DOMContentLoaded', () => {
       // If hovered or dragged, force maximum glow intensity
       const isHovered = tag.element.matches(':hover') || tag.isDragging;
       if (isHovered) {
-        tag.glowIntensity = 1.0;
+        tag.targetGlowIntensity = 1.0;
+        // Faster interpolation for instant hover response
+        tag.glowIntensity += (1.0 - tag.glowIntensity) * 0.22;
       } else {
-        // Natural smooth fade-out decay (0.972 for longer lingering glow)
-        tag.glowIntensity *= 0.972;
+        // Natural smooth fade-out decay (target decays exponentially, current follows target)
+        tag.targetGlowIntensity *= 0.952;
+        tag.glowIntensity += (tag.targetGlowIntensity - tag.glowIntensity) * 0.12;
       }
 
       if (!tag.isDragging) {
@@ -406,7 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
           tag.vy = (tag.vy / currentSpeed) * maxSpeed;
         }
 
-        // Bounce with damping off container borders (respect header height as top border, restitution 0.4)
+        // Bounce with damping off container borders
         const restitution = 0.4; // Soft wall bounce (0.4)
         if (tag.x < 0) {
           tag.x = 0;
@@ -426,7 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Render updated positions & inline color/opacity/glow filters
-      const scale = 1.0 + 0.08 * tag.glowIntensity; // Boost scale factor to 1.08 for stronger pop-out
+      const scale = 1.0 + 0.08 * tag.glowIntensity; // Scale factor 1.08 for pop-out
       const baseOpacity = 0.15; // Deeper faded state (0.15) for stronger contrast
       const maxOpacity = 1.0;
       const opacity = baseOpacity + (maxOpacity - baseOpacity) * tag.glowIntensity;
@@ -434,16 +394,16 @@ document.addEventListener('DOMContentLoaded', () => {
       let textColor;
       let shadowColor;
       
-      // Maintain theme colors at all times, only changing opacity/glow
+      // Maintain theme colors at all times, with stronger glow multiplier (0.95)
       if (tag.theme === "orange") {
         textColor = "rgb(245, 158, 11)"; // Amber-500
-        shadowColor = `rgba(245, 158, 11, ${0.6 * tag.glowIntensity})`;
+        shadowColor = `rgba(245, 158, 11, ${0.95 * tag.glowIntensity})`;
       } else if (tag.theme === "purple") {
         textColor = "rgb(168, 85, 247)"; // Purple-500
-        shadowColor = `rgba(168, 85, 247, ${0.6 * tag.glowIntensity})`;
+        shadowColor = `rgba(168, 85, 247, ${0.95 * tag.glowIntensity})`;
       } else {
         textColor = "rgb(59, 130, 246)"; // Blue-500
-        shadowColor = `rgba(59, 130, 246, ${0.6 * tag.glowIntensity})`;
+        shadowColor = `rgba(59, 130, 246, ${0.95 * tag.glowIntensity})`;
       }
 
       tag.element.style.color = textColor;
@@ -462,7 +422,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Exclude currently dragged or hovered tags as sources
     const eligibleTags = tags.filter(tag => !tag.isDragging && !tag.element.matches(':hover') && tag !== lastGlowTag);
     if (eligibleTags.length === 0) {
-      console.warn("HoverSource Physics: No eligible tags found for wave!");
       setTimeout(triggerWave, 1000);
       return;
     }
@@ -470,20 +429,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const randomTag = eligibleTags[Math.floor(Math.random() * eligibleTags.length)];
     lastGlowTag = randomTag;
 
-    // Instantly illuminate the selected source tag to 100% to make the origin highly visible
-    randomTag.glowIntensity = 1.0;
+    // Calculate distance from this source to all other tags
+    const sx = randomTag.x + randomTag.width / 2;
+    const sy = randomTag.y + randomTag.height / 2;
 
-    // Push new wave propagating outward (slowing speed to 4.8px/frame for majestic loang effect)
-    activeWaves.push({
-      sourceTag: randomTag, // Store source reference to keep it illuminated
-      x: randomTag.x + randomTag.width / 2,
-      y: randomTag.y + randomTag.height / 2,
-      radius: 0,
-      maxRadius: 800, // Wave max range
-      strength: 1.0,
-      speed: 4.8 // pixels per frame
-    });
-    console.log("HoverSource Physics: Wave triggered from", randomTag.text, "Active waves:", activeWaves.length);
+    const sortedNeighbors = tags
+      .filter(t => t !== randomTag)
+      .map(t => {
+        const tx = t.x + t.width / 2;
+        const ty = t.y + t.height / 2;
+        return { tag: t, dist: Math.hypot(tx - sx, ty - sy) };
+      })
+      .sort((a, b) => a.dist - b.dist);
+
+    // 1. Instantly light up the source tag to 100% (same as hover)
+    randomTag.targetGlowIntensity = 1.0;
+    console.log("HoverSource Physics: Wave triggered from", randomTag.text);
+
+    // 2. Propagate to neighbors by order of distance (discrete steps)
+    const maxHops = Math.min(sortedNeighbors.length, 5); // Glow up to 5 closest neighbors
+    for (let i = 0; i < maxHops; i++) {
+      const neighbor = sortedNeighbors[i].tag;
+      const hopIndex = i + 1; // 1 to 5
+      
+      // Calculate peak glow for this neighbor based on index:
+      // index 1: 0.82, index 2: 0.64, index 3: 0.46, index 4: 0.28, index 5: 0.10
+      const peakGlow = Math.max(0, 1.0 - hopIndex * 0.18);
+      const delay = hopIndex * 130; // 130ms delay per hop
+
+      setTimeout(() => {
+        // Only trigger if not currently manipulated by user
+        if (!neighbor.element.matches(':hover') && !neighbor.isDragging) {
+          neighbor.targetGlowIntensity = Math.max(neighbor.targetGlowIntensity, peakGlow);
+        }
+      }, delay);
+    }
 
     // Schedule next wave pulse in 2.5 seconds
     setTimeout(triggerWave, 2500);

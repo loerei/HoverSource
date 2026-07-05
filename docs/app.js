@@ -61,6 +61,8 @@ const barTokenFill = document.getElementById('bar-token-fill');
 const barTokenPercent = document.getElementById('bar-token-percent');
 const barTimeFill = document.getElementById('bar-time-fill');
 const barTimeVal = document.getElementById('bar-time-val');
+const barPeakFill = document.getElementById('bar-peak-fill');
+const barPeakVal = document.getElementById('bar-peak-val');
 
 // DOM Elements - Bento
 const keyC = document.getElementById('key-c');
@@ -295,6 +297,7 @@ const benchmarkData = {
       time: '142.0s',
       tokenPercent: '100%',
       tokenWidth: '100%',
+      peakWidth: '100%',
       timeWidth: '100%',
       colorClass: 'text-brand-amber'
     },
@@ -306,6 +309,7 @@ const benchmarkData = {
       time: '44.2s',
       tokenPercent: '5.8%',
       tokenWidth: '5.8%',
+      peakWidth: '26.1%', // 7,372 / 28,257 = 26.1%
       timeWidth: '31.1%', // 44.2 / 142.0 = 31.1%
       colorClass: 'text-brand-purple'
     },
@@ -317,6 +321,7 @@ const benchmarkData = {
       time: '16.4s',
       tokenPercent: '5.4%',
       tokenWidth: '5.4%',
+      peakWidth: '22.9%', // 6,486 / 28,257 = 22.9%
       timeWidth: '11.5%', // 16.4 / 142.0 = 11.5%
       colorClass: 'text-brand-blue'
     }
@@ -330,6 +335,7 @@ const benchmarkData = {
       time: '34.4s',
       tokenPercent: '100%',
       tokenWidth: '100%',
+      peakWidth: '100%',
       timeWidth: '88.6%', // 34.4 / 38.8 = 88.6%
       colorClass: 'text-brand-amber'
     },
@@ -341,6 +347,7 @@ const benchmarkData = {
       time: '38.8s',
       tokenPercent: '37.5%',
       tokenWidth: '37.5%',
+      peakWidth: '60.7%', // 8,589 / 14,140 = 60.7%
       timeWidth: '100%', // Max time for yumeshelf
       colorClass: 'text-brand-purple'
     },
@@ -352,6 +359,7 @@ const benchmarkData = {
       time: '24.8s',
       tokenPercent: '51.7%',
       tokenWidth: '51.7%',
+      peakWidth: '70.6%', // 9,984 / 14,140 = 70.6%
       timeWidth: '63.9%', // 24.8 / 38.8 = 63.9%
       colorClass: 'text-brand-blue'
     }
@@ -376,6 +384,13 @@ function updateBenchmarkUI() {
   barTokenPercent.className = data.colorClass;
   barTokenFill.style.width = data.tokenWidth;
   barTokenFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
+
+  if (barPeakVal && barPeakFill) {
+    barPeakVal.innerText = data.peak;
+    barPeakVal.className = `transition-all duration-500 ${val === 0 ? 'text-brand-amber' : val === 1 ? 'text-brand-purple' : 'text-brand-blue'}`;
+    barPeakFill.style.width = data.peakWidth;
+    barPeakFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
+  }
 
   barTimeVal.innerText = data.time;
   barTimeVal.className = `transition-all duration-500 ${val === 0 ? 'text-brand-amber' : val === 1 ? 'text-brand-purple' : 'text-brand-blue'}`;

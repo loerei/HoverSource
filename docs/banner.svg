@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" role="img" aria-labelledby="title desc">
+  <title id="title">HoverSource wordmark banner on dark background</title>
+  <desc id="desc">Horizontal HoverSource wordmark banner using the futuristic cursor and crosshair icon on a dark rounded background.</desc>
+
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="lockupBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#14151a" />
+      <stop offset="100%" stop-color="#090a0d" />
+    </linearGradient>
+
+    <!-- App icon background -->
+    <linearGradient id="iconBgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f2029" />
+      <stop offset="100%" stop-color="#0b0c10" />
+    </linearGradient>
+
+    <!-- Blue/purple gradient for target and text -->
+    <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6" /> <!-- brand-blue -->
+      <stop offset="100%" stop-color="#a855f7" /> <!-- brand-purple -->
+    </linearGradient>
+
+    <!-- Amber highlight -->
+    <linearGradient id="amberGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+
+    <!-- Underline sweep gradient -->
+    <linearGradient id="sweepLineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3f3f46" stop-opacity="0.95" />
+      <stop offset="50%" stop-color="#3b82f6" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0.88" />
+    </linearGradient>
+
+    <!-- Glow filters -->
+    <filter id="iconGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+
+    <filter id="softTextShadow" x="-5%" y="-15%" width="110%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Main rounded banner container -->
+  <rect x="8" y="8" width="1264" height="304" rx="64" fill="url(#lockupBg)" stroke="#1e293b" stroke-width="1.5" />
+
+  <!-- Ambient glowing decorative stars -->
+  <path d="M 940 38 Q 940 72 974 72 Q 940 72 940 106 Q 940 72 906 72 Q 940 72 940 38 Z" fill="url(#brandGradient)" opacity="0.12" filter="url(#iconGlow)"/>
+  <path d="M 1120 186 Q 1120 206 1140 206 Q 1120 206 1120 226 Q 1120 206 1100 206 Q 1120 206 1120 186 Z" fill="url(#amberGradient)" opacity="0.10" filter="url(#iconGlow)"/>
+
+  <!-- Left: Scaled App Icon container -->
+  <g transform="translate(56 40) scale(0.46875)">
+    <!-- App icon base card -->
+    <rect width="512" height="512" rx="100" fill="url(#iconBgGradient)" stroke="#27272a" stroke-width="6"/>
+
+    <!-- Target HUD/Crosshair behind cursor -->
+    <circle cx="256" cy="256" r="150" fill="none" stroke="url(#brandGradient)" stroke-width="10" stroke-linecap="round" stroke-dasharray="35 25" opacity="0.32" filter="url(#iconGlow)" />
+    <circle cx="256" cy="256" r="80" fill="none" stroke="url(#brandGradient)" stroke-width="6" stroke-linecap="round" stroke-dasharray="15 15" opacity="0.2" />
+    
+    <!-- Crosshair ticks -->
+    <line x1="256" y1="40" x2="256" y2="472" stroke="url(#brandGradient)" stroke-width="8" opacity="0.18" stroke-dasharray="25 20" />
+    <line x1="40" y1="256" x2="472" y2="256" stroke="url(#brandGradient)" stroke-width="8" opacity="0.18" stroke-dasharray="25 20" />
+
+    <!-- 3D Creased White Cursor (Points to upper-left target center) -->
+    <!-- Left side of cursor (Pure White) -->
+    <path d="M 170 120 L 290 320 L 210 390 Z" fill="#ffffff" filter="url(#iconGlow)"/>
+    <!-- Right side of cursor (Slightly shaded light grey for 3D creased effect) -->
+    <path d="M 170 120 L 390 340 L 290 320 Z" fill="#cbd5e1" filter="url(#iconGlow)"/>
+
+    <!-- Decorative sparks -->
+    <circle cx="120" cy="180" r="4" fill="#ffffff" opacity="0.5"/>
+    <circle cx="410" cy="300" r="3" fill="#ffffff" opacity="0.3"/>
+  </g>
+
+  <!-- Right: Wordmark Text and Slogan -->
+  <g filter="url(#softTextShadow)">
+    <text x="340" y="162"
+          font-family="Geist, Inter, Segoe UI, sans-serif"
+          font-size="96"
+          font-weight="800"
+          letter-spacing="-3">
+      <tspan fill="#ffffff">Hover</tspan><tspan fill="url(#brandGradient)">Source</tspan>
+    </text>
+
+    <!-- Sweeping accent line under title -->
+    <path d="M 346 194 L 880 194" stroke="url(#sweepLineGradient)" stroke-width="8" stroke-linecap="round"/>
+
+    <!-- Dynamic Slogan -->
+    <text x="346" y="238"
+          font-family="Geist, Inter, Segoe UI, sans-serif"
+          font-size="21"
+          font-weight="700"
+          letter-spacing="4.8"
+          fill="#a1a1aa">TRANSLATE WHAT YOU SEE TO WHAT YOUR AGENT NEEDS</text>
+  </g>
+</svg>

@@ -1,6 +1,6 @@
 <div align="center">
   <picture>
-    <img alt="HoverSource Banner" src="docs/banner.svg?v=2" width="650">
+    <img alt="HoverSource Banner" src="docs/assets/banner.svg?v=3" width="650">
   </picture>
   
   <p><b>Translate what you see in your browser directly into context for your AI coding agents.</b></p>

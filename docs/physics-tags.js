@@ -219,10 +219,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive: true });
   });
 
+  // Query static UI obstacles (H1 Title, Paragraph description, CTA Buttons container)
+  const obstacles = [
+    hero.querySelector('h1'),
+    hero.querySelector('p'),
+    hero.querySelector('.flex.items-center.justify-center.gap-4')
+  ].filter(Boolean);
+
   // Physics animation loop
   function updatePhysics() {
     containerWidth = canvas.clientWidth || window.innerWidth;
     containerHeight = canvas.clientHeight || window.innerHeight;
+
+    const canvasRect = canvas.getBoundingClientRect();
+    const obsCoords = obstacles.map(obs => {
+      const rect = obs.getBoundingClientRect();
+      return {
+        left: rect.left - canvasRect.left,
+        right: rect.right - canvasRect.left,
+        top: rect.top - canvasRect.top,
+        bottom: rect.bottom - canvasRect.top,
+        width: rect.right - rect.left,
+        height: rect.bottom - rect.top
+      };
+    });
+
+    // 0. Resolve collisions with static obstacles (H1, Paragraph, CTA Buttons)
+    tags.forEach(tag => {
+      if (tag.isDragging) return;
+
+      for (const obs of obsCoords) {
+        // Bounding box centers
+        const tagCenterX = tag.x + tag.width / 2;
+        const tagCenterY = tag.y + tag.height / 2;
+        const obsCenterX = (obs.left + obs.right) / 2;
+        const obsCenterY = (obs.top + obs.bottom) / 2;
+
+        // Added padding so tags stay slightly away from the text for readability
+        const padding = 20;
+        const halfWidths = (tag.width + obs.width) / 2 + padding;
+        const halfHeights = (tag.height + obs.height) / 2 + padding;
+
+        const dx = tagCenterX - obsCenterX;
+        const dy = tagCenterY - obsCenterY;
+
+        const overlapX = halfWidths - Math.abs(dx);
+        const overlapY = halfHeights - Math.abs(dy);
+
+        if (overlapX > 0 && overlapY > 0) {
+          // Push out in the direction of the shallowest overlap
+          if (overlapX < overlapY) {
+            const pushX = dx > 0 ? overlapX : -overlapX;
+            tag.x += pushX;
+            tag.vx = dx > 0 ? Math.abs(tag.vx) * 0.8 : -Math.abs(tag.vx) * 0.8;
+          } else {
+            const pushY = dy > 0 ? overlapY : -overlapY;
+            tag.y += pushY;
+            tag.vy = dy > 0 ? Math.abs(tag.vy) * 0.8 : -Math.abs(tag.vy) * 0.8;
+          }
+        }
+      }
+    });
 
     // 1. Calculate mutual repulsion forces to prevent overlapping
     for (let i = 0; i < tags.length; i++) {
@@ -244,6 +301,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const minDist = (tagA.width + tagB.width) / 2 + 25;
         if (dist < minDist) {
           const overlap = minDist - dist;
+          const nx = dx / dist;
+          const ny = dy / dist;
           
           // 1. Physical separation: Push coordinates apart immediately so they never overlap
           const sepX = nx * overlap * 0.5;
@@ -260,16 +319,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
           // 2. Velocity impulse: Bounce them apart dynamically (increased force coefficient to 0.12)
           const force = overlap * 0.12;
-          const nxNorm = nx;
-          const nyNorm = ny;
 
           if (!tagA.isDragging) {
-            tagA.vx -= nxNorm * force;
-            tagA.vy -= nyNorm * force;
+            tagA.vx -= nx * force;
+            tagA.vy -= ny * force;
           }
           if (!tagB.isDragging) {
-            tagB.vx += nxNorm * force;
-            tagB.vy += nyNorm * force;
+            tagB.vx += nx * force;
+            tagB.vy += ny * force;
           }
         }
       }

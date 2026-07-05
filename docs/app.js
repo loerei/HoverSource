@@ -316,7 +316,7 @@ const sliderData = [
 
 if (benchmarkSlider) {
   benchmarkSlider.addEventListener('input', (e) => {
-    const val = parseInt(e.target.value);
+    const val = parseInt(e.target.value, 10);
     const data = sliderData[val];
 
     sliderGroupLabel.innerText = data.label;
@@ -356,8 +356,9 @@ function customSmoothScroll(targetEl, duration = 1000) {
   const distance = targetPos - startPos;
   let startTime = null;
 
-  // Temporarily disable CSS scroll snapping to avoid animation jitter
+  // Temporarily disable CSS scroll snapping and native smooth scrolling to avoid animation conflicts
   document.documentElement.style.scrollSnapType = 'none';
+  document.documentElement.style.scrollBehavior = 'auto';
 
   function animation(currentTime) {
     if (startTime === null) startTime = currentTime;
@@ -371,6 +372,7 @@ function customSmoothScroll(targetEl, duration = 1000) {
     } else {
       // Re-enable CSS scroll snapping once easing transition completes
       document.documentElement.style.scrollSnapType = 'y mandatory';
+      document.documentElement.style.scrollBehavior = '';
     }
   }
   requestAnimationFrame(animation);

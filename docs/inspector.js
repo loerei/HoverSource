@@ -165,8 +165,33 @@ function updateInspectorPositions() {
   }
 
   if (specCardContainer) {
-    specCardContainer.style.top = `${targetRect.top}px`;
-    specCardContainer.style.left = `${targetRect.right + 12}px`;
+    if (window.innerWidth >= 1024) {
+      // Desktop: Position to the right of the target element
+      specCardContainer.style.width = '390px';
+      specCardContainer.style.top = `${targetRect.top}px`;
+      specCardContainer.style.left = `${targetRect.right + 12}px`;
+    } else {
+      // Mobile/Tablet: Center horizontally relative to mock canvas, align vertically below/above target
+      const width = Math.min(390, canvasRect.width - 24);
+      specCardContainer.style.width = `${width}px`;
+
+      // Center horizontally
+      const left = canvasRect.left + (canvasRect.width - width) / 2;
+      specCardContainer.style.left = `${left}px`;
+
+      // Default to positioning below the target element
+      const cardHeight = specCardContainer.offsetHeight || 220;
+      let top = targetRect.bottom + 12;
+
+      // Flip to above if it overflows the bottom edge of the mock browser viewport
+      if (top + cardHeight > canvasRect.bottom) {
+        top = targetRect.top - cardHeight - 12;
+      }
+
+      // Constrain/Clamp the vertical position strictly inside the mock canvas boundaries
+      top = Math.max(canvasRect.top + 12, Math.min(canvasRect.bottom - cardHeight - 12, top));
+      specCardContainer.style.top = `${top}px`;
+    }
     specCardContainer.classList.remove('hidden');
   }
 }

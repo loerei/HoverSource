@@ -243,3 +243,18 @@ body {
   visibility: hidden;
   transform: translateY(10px) rotate(5deg);
 }
+
+/* Compact Spec Card layout on Mobile/Tablet viewports */
+@media (max-width: 1023px) {
+  #hoversource-spec-card {
+    padding: 10px !important;
+    font-size: 9px !important;
+    line-height: 1.25 !important;
+    max-width: 320px !important; /* Prevent spec card from becoming overly wide */
+  }
+
+  /* Hide secondary sections (Parent Styles, Stack, Shortcut Hint) to keep it compact */
+  #hoversource-spec-card .spec-mobile-hide {
+    display: none !important;
+  }
+}

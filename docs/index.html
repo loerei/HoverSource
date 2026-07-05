@@ -616,7 +616,7 @@
   </div>
 
   <!-- Mock Tooltip Card (HoverSource Floating Spec Card) -->
-  <div id="hoversource-spec-card" class="fixed bg-zinc-950/95 backdrop-blur-md border border-zinc-800 text-zinc-300 p-4 rounded-lg shadow-2xl text-[10.5px] font-mono w-[390px] pointer-events-none hidden z-50 space-y-1.5 shadow-brand-blue/5">
+  <div id="hoversource-spec-card" class="fixed bg-zinc-950/95 backdrop-blur-md border border-zinc-800 text-zinc-300 p-4 rounded-lg shadow-2xl text-[10.5px] font-mono pointer-events-none hidden z-50 space-y-1.5 shadow-brand-blue/5">
     <div class="flex justify-between items-center border-b border-zinc-900 pb-2 mb-2">
       <div>
         <div class="text-brand-blue font-bold text-xs font-mono" id="spec-component-name">Component: -</div>
@@ -640,17 +640,17 @@
       <div><span class="text-zinc-500 font-medium">Background:</span> <span class="text-emerald-400" id="spec-background-value">-</span></div>
       <div><span class="text-zinc-500 font-medium">Layout:</span> <span class="text-emerald-400" id="spec-layout-value">-</span></div>
     </div>
-    <div class="mt-2 font-mono">
+    <div class="mt-2 font-mono spec-mobile-hide">
       <div class="text-zinc-500 text-[8px] font-bold uppercase tracking-wider mb-1">Parent Styles:</div>
       <div class="border border-zinc-900 rounded overflow-hidden text-[8px] font-mono leading-normal bg-zinc-950/40 text-zinc-400 divide-y divide-zinc-900" id="spec-parent-styles-container">
       </div>
     </div>
-    <div class="mt-2 font-mono">
+    <div class="mt-2 font-mono spec-mobile-hide">
       <div class="text-zinc-500 text-[8px] font-bold uppercase tracking-wider mb-1">Stack:</div>
       <div class="border border-zinc-900 rounded overflow-hidden text-[8px] font-mono leading-normal bg-zinc-950/50 text-zinc-400 divide-y divide-zinc-900" id="spec-stack-container">
       </div>
     </div>
-    <div class="copy-hint-text text-[8px] text-zinc-500 text-center pt-2 mt-2 border-t border-zinc-900 leading-normal font-mono" id="spec-copy-hint">
+    <div class="copy-hint-text text-[8px] text-zinc-500 text-center pt-2 mt-2 border-t border-zinc-900 leading-normal font-mono spec-mobile-hide" id="spec-copy-hint">
       Press C to copy | Alt+Shift+C to copy all | Alt+P to Freeze | Alt+M for Minimal | Alt+S for Config | Alt+X to Switch Mode
     </div>
   </div>

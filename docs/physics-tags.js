@@ -396,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Ambient Twinkling Glow effect (at most 1 tag glowing programmatically at a time)
   let activeGlowTag = null;
+  let lastGlowTag = null;
 
   function runAmbientGlow() {
     // 1. Deactivate current glowing tag if any
@@ -410,11 +411,12 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const cls of inactiveCls) {
         activeGlowTag.element.classList.add(cls);
       }
+      lastGlowTag = activeGlowTag;
       activeGlowTag = null;
     }
 
-    // 2. Randomly select a new tag, excluding currently dragged or hovered tags
-    const eligibleTags = tags.filter(tag => !tag.isDragging && !tag.element.matches(':hover'));
+    // 2. Randomly select a new tag, excluding currently dragged, hovered, or the last glowing tags
+    const eligibleTags = tags.filter(tag => !tag.isDragging && !tag.element.matches(':hover') && tag !== lastGlowTag);
     if (eligibleTags.length === 0) {
       setTimeout(runAmbientGlow, 1000);
       return;

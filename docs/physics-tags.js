@@ -238,15 +238,21 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let w = activeWaves.length - 1; w >= 0; w--) {
       const wave = activeWaves[w];
       wave.radius += wave.speed;
-      wave.strength *= 0.99; // Decay wave strength slower as it travels
+      wave.strength *= 0.985; // Decay wave strength gently as it travels
 
       // Check impact on each tag
       tags.forEach(tag => {
+        // Keep the source tag fully illuminated as the wave propagates
+        if (tag === wave.sourceTag) {
+          tag.glowIntensity = Math.max(tag.glowIntensity, wave.strength);
+          return;
+        }
+
         const tx = tag.x + tag.width / 2;
         const ty = tag.y + tag.height / 2;
         const distance = Math.hypot(tx - wave.x, ty - wave.y) || 1;
 
-        // Wave has hit this tag (increase detection band width to 200px)
+        // Wave has hit this tag (detection band width of 200px)
         if (wave.radius >= distance && wave.radius - 200 < distance) {
           const proximity = Math.max(0, 1.0 - distance / wave.maxRadius);
           const intensity = proximity * wave.strength;
@@ -406,8 +412,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Render updated positions & inline color/opacity/glow filters
-      const scale = 1.0 + 0.05 * tag.glowIntensity;
-      const baseOpacity = 0.22;
+      const scale = 1.0 + 0.08 * tag.glowIntensity; // Boost scale factor to 1.08 for stronger pop-out
+      const baseOpacity = 0.15; // Deeper faded state (0.15) for stronger contrast
       const maxOpacity = 1.0;
       const opacity = baseOpacity + (maxOpacity - baseOpacity) * tag.glowIntensity;
 
@@ -449,8 +455,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const randomTag = eligibleTags[Math.floor(Math.random() * eligibleTags.length)];
     lastGlowTag = randomTag;
 
-    // Push new wave propagating outward (slowing speed to 5px/frame for majestic loang effect)
+    // Instantly illuminate the selected source tag to 100% to make the origin highly visible
+    randomTag.glowIntensity = 1.0;
+
+    // Push new wave propagating outward (slowing speed to 4.8px/frame for majestic loang effect)
     activeWaves.push({
+      sourceTag: randomTag, // Store source reference to keep it illuminated
       x: randomTag.x + randomTag.width / 2,
       y: randomTag.y + randomTag.height / 2,
       radius: 0,
@@ -459,8 +469,8 @@ document.addEventListener('DOMContentLoaded', () => {
       speed: 4.8 // pixels per frame
     });
 
-    // Schedule next wave pulse in 1.8 seconds (seamless loops)
-    setTimeout(triggerWave, 1800);
+    // Schedule next wave pulse in 2.5 seconds
+    setTimeout(triggerWave, 2500);
   }
 
   // Start wave pulses after 2 seconds

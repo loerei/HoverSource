@@ -338,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Faster interpolation for instant hover response
         tag.glowIntensity += (1.0 - tag.glowIntensity) * 0.22;
       } else {
-        // Natural smooth fade-out decay (0.994 for 6-second long lingering glow)
+        // Natural smooth fade-out decay (0.994 for much longer lingering glow)
         tag.targetGlowIntensity *= 0.994;
         tag.glowIntensity += (tag.targetGlowIntensity - tag.glowIntensity) * 0.12;
       }
@@ -457,15 +457,15 @@ document.addEventListener('DOMContentLoaded', () => {
     randomTag.targetGlowIntensity = 1.0;
     console.log("HoverSource Physics: Wave triggered from", randomTag.text);
 
-    // 2. Propagate to neighbors by order of distance (discrete steps)
-    const maxHops = Math.min(sortedNeighbors.length, 5); // Glow up to 5 closest neighbors
-    for (let i = 0; i < maxHops; i++) {
+    // 2. Propagate to ALL existing neighbors in order of distance
+    const totalNeighbors = sortedNeighbors.length;
+    for (let i = 0; i < totalNeighbors; i++) {
       const neighbor = sortedNeighbors[i].tag;
-      const hopIndex = i + 1; // 1 to 5
+      const hopIndex = i + 1; // 1 to totalNeighbors
       
-      // Calculate peak glow for this neighbor based on index
-      const peakGlow = Math.max(0, 1.0 - hopIndex * 0.18);
-      const delay = hopIndex * 130; // 130ms delay per hop
+      // Interpolate peak glow smoothly from 1.0 down to 0.5 (instead of 100% to 10%)
+      const peakGlow = 1.0 - (hopIndex / totalNeighbors) * 0.5;
+      const delay = hopIndex * 70; // 70ms per hop for a swift majestic sweep across the canvas
 
       setTimeout(() => {
         // Only trigger if not currently manipulated by user

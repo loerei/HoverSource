@@ -41,7 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.createElement('div');
     
     // Start with opacity 0 to prevent flash/pile-up before layout calculation
-    // Crucial: No generic transition-all! Only transition opacity, color and filters inline.
     el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto opacity-0 ${data.size}`;
     el.innerText = data.text;
     
@@ -49,7 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     el.style.transition = 'color 0.6s ease, opacity 0.6s ease, filter 0.6s ease';
     canvas.appendChild(el);
 
-    // Initialize with rough random position to prevent starting at 0,0
+    // Initialize with rough random position, spawn slower speed
     const roughW = window.innerWidth || 1200;
     const roughH = window.innerHeight || 800;
     const roughX = Math.random() * (roughW - 150);
@@ -61,8 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
       theme: data.theme,
       x: roughX,
       y: roughY,
-      vx: (Math.random() - 0.5) * 1.2,
-      vy: (Math.random() - 0.5) * 1.2,
+      vx: (Math.random() - 0.5) * 0.5, // Slow initial speed (0.5)
+      vy: (Math.random() - 0.5) * 0.5,
       width: 0,
       height: 0,
       glowIntensity: 0.0,
@@ -192,9 +191,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const last = tag.history[tag.history.length - 1];
         const dt = (last.t - first.t) || 16; // Avoid division by zero
         
-        // Calculate velocity (clamped to max speed of 18)
-        tag.vx = Math.max(-18, Math.min(18, ((last.x - first.x) / dt) * 16));
-        tag.vy = Math.max(-18, Math.min(18, ((last.y - first.y) / dt) * 16));
+        // Calculate velocity (clamped to max speed of 5.0 for throwing)
+        tag.vx = Math.max(-5.0, Math.min(5.0, ((last.x - first.x) / dt) * 16));
+        tag.vy = Math.max(-5.0, Math.min(5.0, ((last.y - first.y) / dt) * 16));
       }
 
       window.removeEventListener('mousemove', onMouseMove);
@@ -249,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let w = activeWaves.length - 1; w >= 0; w--) {
       const wave = activeWaves[w];
       wave.radius += wave.speed;
-      wave.strength *= 0.995; // Decay wave strength extremely slowly for full range impact
+      wave.strength *= 0.985; // Decay wave strength gently as it travels
 
       // Check impact on each tag
       tags.forEach(tag => {
@@ -263,8 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const ty = tag.y + tag.height / 2;
         const distance = Math.hypot(tx - wave.x, ty - wave.y) || 1;
 
-        // Wave has hit this tag (wide detection band of 220px)
-        if (wave.radius >= distance && wave.radius - 220 < distance) {
+        // Wave has hit this tag (detection band width of 200px)
+        if (wave.radius >= distance && wave.radius - 200 < distance) {
           // Flatten proximity to sustain intensity over distance, then drop off
           const proximity = Math.min(1.0, (1.0 - distance / wave.maxRadius) * 2.0);
           
@@ -303,15 +302,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const overlapY = halfHeights - Math.abs(dy);
 
         if (overlapX > 0 && overlapY > 0) {
-          // Push out in the direction of the shallowest overlap
+          // Push out in the direction of the shallowest overlap (softer bounce factor 0.4)
           if (overlapX < overlapY) {
             const pushX = dx > 0 ? overlapX : -overlapX;
             tag.x += pushX;
-            tag.vx = dx > 0 ? Math.abs(tag.vx) * 0.8 : -Math.abs(tag.vx) * 0.8;
+            tag.vx = dx > 0 ? Math.abs(tag.vx) * 0.4 : -Math.abs(tag.vx) * 0.4;
           } else {
             const pushY = dy > 0 ? overlapY : -overlapY;
             tag.y += pushY;
-            tag.vy = dy > 0 ? Math.abs(tag.vy) * 0.8 : -Math.abs(tag.vy) * 0.8;
+            tag.vy = dy > 0 ? Math.abs(tag.vy) * 0.4 : -Math.abs(tag.vy) * 0.4;
           }
         }
       }
@@ -353,8 +352,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tagB.y += sepY;
           }
 
-          // 2. Velocity impulse: Bounce them apart dynamically (increased force coefficient to 0.12)
-          const force = overlap * 0.12;
+          // 2. Velocity impulse: Bounce them apart dynamically (extremely soft push force 0.015)
+          const force = overlap * 0.015;
 
           if (!tagA.isDragging) {
             tagA.vx -= nx * force;
@@ -392,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tag.vy += (Math.random() - 0.5) * 0.04;
 
         // Ensure minimum drift speed so they never stop completely
-        const minSpeed = 0.35;
+        const minSpeed = 0.2; // Slow elegant drift (0.2)
         const currentSpeed = Math.hypot(tag.vx, tag.vy);
         if (currentSpeed < minSpeed) {
           const angle = currentSpeed > 0.01 ? Math.atan2(tag.vy, tag.vx) : Math.random() * Math.PI * 2;
@@ -401,14 +400,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Speed limits
-        const maxSpeed = 12.0;
+        const maxSpeed = 2.0; // Slow max speed cap (2.0)
         if (currentSpeed > maxSpeed) {
           tag.vx = (tag.vx / currentSpeed) * maxSpeed;
           tag.vy = (tag.vy / currentSpeed) * maxSpeed;
         }
 
-        // Bounce with damping off container borders (respect header height as top border)
-        const restitution = 0.85; // Bounciness factor
+        // Bounce with damping off container borders (respect header height as top border, restitution 0.4)
+        const restitution = 0.4; // Soft wall bounce (0.4)
         if (tag.x < 0) {
           tag.x = 0;
           tag.vx = Math.abs(tag.vx) * restitution;

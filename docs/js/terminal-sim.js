@@ -673,29 +673,16 @@ window.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 // Re-align scroll position to the active section on window resize (page zoom / viewport changes)
-let hudResizeTimeout;
 window.addEventListener('resize', () => {
   if (window.innerWidth < 1024) return; // Scroll snap is only active on desktop viewports
 
-  clearTimeout(hudResizeTimeout);
-  hudResizeTimeout = setTimeout(() => {
-    const activeItem = document.querySelector('.nav-title-item.active-nav-title');
-    if (activeItem) {
-      const targetId = activeItem.getAttribute('data-target');
-      const targetEl = document.querySelector(targetId);
-      if (targetEl) {
-        // Temporarily disable scroll-snap to prevent browser-native scrolling jitters
-        const originalSnap = document.documentElement.style.scrollSnapType;
-        document.documentElement.style.scrollSnapType = 'none';
-
-        window.scrollTo({
-          top: targetEl.offsetTop,
-          behavior: 'auto' // Snap instantly to the new scaled section top coordinates
-        });
-
-        // Re-enable scroll-snap
-        document.documentElement.style.scrollSnapType = originalSnap;
-      }
+  const activeItem = document.querySelector('.nav-title-item.active-nav-title');
+  if (activeItem) {
+    const targetId = activeItem.getAttribute('data-target');
+    const targetEl = document.querySelector(targetId);
+    if (targetEl) {
+      // Lock scroll position to target section offsetTop in real-time during zoom/resize
+      window.scrollTo(0, targetEl.offsetTop);
     }
-  }, 120);
+  }
 });

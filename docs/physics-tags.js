@@ -46,6 +46,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // No CSS transitions to avoid conflicts with frame-rate updates
     el.style.transition = 'none';
+    // Align transform origin to top-left to perfectly match physical coordinate boundaries
+    el.style.transformOrigin = 'top left';
     canvas.appendChild(el);
 
     // Initialize with rough random position
@@ -134,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.vy = 0;
       
       const rect = tag.element.getBoundingClientRect();
-      // Adjust offset for scaled elements
+      // Adjust offset for scaled elements with top-left origin
       tag.dragOffsetX = (clientX - rect.left) * 2;
       tag.dragOffsetY = (clientY - rect.top) * 2;
 
@@ -463,9 +465,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const neighbor = sortedNeighbors[i].tag;
       const hopIndex = i + 1; // 1 to totalNeighbors
       
-      // Interpolate peak glow smoothly from 1.0 down to 0.5 (instead of 100% to 10%)
+      // Interpolate peak glow smoothly from 1.0 down to 0.5
       const peakGlow = 1.0 - (hopIndex / totalNeighbors) * 0.5;
-      const delay = hopIndex * 70; // 70ms per hop for a swift majestic sweep across the canvas
+      const delay = hopIndex * 70; // 70ms per hop
 
       setTimeout(() => {
         // Only trigger if not currently manipulated by user

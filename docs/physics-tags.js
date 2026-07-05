@@ -10,22 +10,22 @@ document.addEventListener('DOMContentLoaded', () => {
   hero.appendChild(canvas);
 
   const tagsData = [
-    { text: "-94.5% Tokens", theme: "orange" },
-    { text: "-73.9% Steps", theme: "purple" },
-    { text: "O(1) Exploring Fee", theme: "blue" },
-    { text: "Zero-invasive", theme: "blue" },
-    { text: "React", theme: "purple" },
-    { text: "Next.js", theme: "blue" },
-    { text: "Vue", theme: "orange" },
-    { text: "Svelte", theme: "orange" },
-    { text: "Vite", theme: "blue" },
-    { text: "Webpack", theme: "purple" },
-    { text: "CDP Debugger", theme: "blue" },
-    { text: "Compiler Map", theme: "purple" },
-    { text: "AST Parser", theme: "orange" },
-    { text: "Source Map", theme: "blue" },
-    { text: "App Proxy", theme: "purple" },
-    { text: "Overlay Core", theme: "orange" }
+    { text: "-94.5% Tokens", theme: "orange", size: "text-2xl" },
+    { text: "-73.9% Steps", theme: "purple", size: "text-2xl" },
+    { text: "O(1) Exploring Fee", theme: "blue", size: "text-xl" },
+    { text: "Zero-invasive", theme: "blue", size: "text-2xl" },
+    { text: "React", theme: "purple", size: "text-xl" },
+    { text: "Next.js", theme: "blue", size: "text-xl" },
+    { text: "Vue", theme: "orange", size: "text-lg" },
+    { text: "Svelte", theme: "orange", size: "text-base" },
+    { text: "Vite", theme: "blue", size: "text-lg" },
+    { text: "Webpack", theme: "purple", size: "text-base" },
+    { text: "CDP Debugger", theme: "blue", size: "text-sm" },
+    { text: "Compiler Map", theme: "purple", size: "text-xs" },
+    { text: "AST Parser", theme: "orange", size: "text-xs" },
+    { text: "Source Map", theme: "blue", size: "text-sm" },
+    { text: "App Proxy", theme: "purple", size: "text-[10px]" },
+    { text: "Overlay Core", theme: "orange", size: "text-sm" }
   ];
 
   const tags = [];
@@ -35,23 +35,12 @@ document.addEventListener('DOMContentLoaded', () => {
     blue: "text-blue-500/25 hover:text-blue-400 hover:drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"
   };
 
-  const sizes = [
-    "text-[10px]",
-    "text-xs",
-    "text-sm",
-    "text-base",
-    "text-lg",
-    "text-xl",
-    "text-2xl"
-  ];
-
   // Setup tag elements
-  tagsData.forEach((data, index) => {
+  tagsData.forEach((data) => {
     const el = document.createElement('div');
-    const sizeClass = sizes[index % sizes.length];
     
     // Start with opacity 0 to prevent flash/pile-up before layout calculation
-    el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto transition-all duration-300 hover:scale-105 opacity-0 ${sizeClass}`;
+    el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto transition-all duration-300 hover:scale-105 opacity-0 ${data.size}`;
     for (const cls of themeClasses[data.theme].split(' ')) {
       el.classList.add(cls);
     }

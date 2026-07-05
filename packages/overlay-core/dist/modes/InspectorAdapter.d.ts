@@ -9,12 +9,14 @@ export declare class InspectorAdapter implements InteractionMode {
     private currentSourceInfo;
     private debounceTimer;
     private maxTraversalDepth;
+    private lastPointerEvent;
     private layerStack;
     private activeLayerIndex;
     private layerPickerEnabled;
     private layerScrollModifiers;
     activate(controller: OverlayController): void;
     deactivate(): void;
+    onScroll(event: Event): void;
     onPointerOver(event: PointerEvent, target: HTMLElement): void;
     onPointerMove(event: PointerEvent): void;
     onShortcut(command: SemanticShortcut): void;

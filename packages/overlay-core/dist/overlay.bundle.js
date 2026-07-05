@@ -819,6 +819,7 @@
     currentSourceInfo = null;
     debounceTimer = null;
     maxTraversalDepth = 32;
+    lastPointerEvent = null;
     // --- Layer Picker state ---
     layerStack = [];
     activeLayerIndex = 0;
@@ -852,7 +853,16 @@
         this.controller.setFreezeMode(false);
       }
     }
+    onScroll(event) {
+      if (this.currentElement) {
+        this.controller.drawHighlight(this.currentElement, this.isFrozen);
+        if (this.lastPointerEvent) {
+          this.renderTooltip(this.lastPointerEvent);
+        }
+      }
+    }
     onPointerOver(event, target) {
+      this.lastPointerEvent = event;
       const rawStack = document.elementsFromPoint(event.clientX, event.clientY);
       const container = this.controller.container;
       this.layerStack = rawStack.filter((el) => {
@@ -866,6 +876,7 @@
       this.resolveAndShowLayer(this.activeLayerIndex, event);
     }
     onPointerMove(event) {
+      this.lastPointerEvent = event;
       if (!this.currentElement)
         return;
       const activeEl = this.layerStack[this.activeLayerIndex];
@@ -2633,6 +2644,7 @@ The following is NOT resolved automatically and requires your judgment:
       this.activeMode.activate(this);
       globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
       globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
+      globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
       globalThis.addEventListener("message", (e) => {
         if (e.origin === globalThis.location.origin && e.source === globalThis && e.data?.type === "HOVERSOURCE_CONFIG_CHANGED") {
           this.handleConfigUpdate(e.data.config);
@@ -3352,6 +3364,11 @@ The following is NOT resolved automatically and requires your judgment:
       if (this.isFrozen) {
         e.stopImmediatePropagation();
         e.preventDefault();
+      }
+    };
+    handleScroll = (e) => {
+      if (this.activeMode.onScroll) {
+        this.activeMode.onScroll(e);
       }
     };
     blockEvent = (e) => {

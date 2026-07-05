@@ -39,6 +39,7 @@ class OverlayEngine {
         this.activeMode.activate(this);
         globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
         globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
+        globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
         globalThis.addEventListener("message", (e) => {
             if (e.origin === globalThis.location.origin &&
                 e.source === globalThis &&
@@ -785,6 +786,11 @@ class OverlayEngine {
         if (this.isFrozen) {
             e.stopImmediatePropagation();
             e.preventDefault();
+        }
+    };
+    handleScroll = (e) => {
+        if (this.activeMode.onScroll) {
+            this.activeMode.onScroll(e);
         }
     };
     blockEvent = (e) => {

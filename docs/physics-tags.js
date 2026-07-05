@@ -35,6 +35,18 @@ document.addEventListener('DOMContentLoaded', () => {
     blue: "text-blue-500/25 hover:text-blue-400 hover:drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"
   };
 
+  const activeClasses = {
+    orange: ["text-amber-400", "scale-105", "drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]"],
+    purple: ["text-purple-400", "scale-105", "drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]"],
+    blue: ["text-blue-400", "scale-105", "drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"]
+  };
+
+  const inactiveClasses = {
+    orange: ["text-amber-500/25"],
+    purple: ["text-purple-500/25"],
+    blue: ["text-blue-500/25"]
+  };
+
   const header = hero.querySelector('header');
   let headerHeight = header ? header.offsetHeight : 80;
 
@@ -381,6 +393,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
     requestAnimationFrame(updatePhysics);
   }
+
+  // Ambient Twinkling Glow effect (at most 1 tag glowing programmatically at a time)
+  let activeGlowTag = null;
+
+  function runAmbientGlow() {
+    // 1. Deactivate current glowing tag if any
+    if (activeGlowTag) {
+      const data = tagsData.find(d => d.text === activeGlowTag.text);
+      const activeCls = activeClasses[data.theme];
+      const inactiveCls = inactiveClasses[data.theme];
+
+      activeCls.forEach(cls => activeGlowTag.element.classList.remove(cls));
+      inactiveCls.forEach(cls => activeGlowTag.element.classList.add(cls));
+      activeGlowTag = null;
+    }
+
+    // 2. Randomly select a new tag, excluding currently dragged tag
+    const eligibleTags = tags.filter(tag => !tag.isDragging);
+    if (eligibleTags.length === 0) {
+      setTimeout(runAmbientGlow, 1000);
+      return;
+    }
+
+    const randomTag = eligibleTags[Math.floor(Math.random() * eligibleTags.length)];
+    const data = tagsData.find(d => d.text === randomTag.text);
+    
+    // 3. Activate new tag
+    const activeCls = activeClasses[data.theme];
+    const inactiveCls = inactiveClasses[data.theme];
+    
+    inactiveCls.forEach(cls => randomTag.element.classList.remove(cls));
+    activeCls.forEach(cls => randomTag.element.classList.add(cls));
+    activeGlowTag = randomTag;
+
+    // 4. Schedule deactivation and next glow pulse
+    // Duration: 1800ms glowing, next pulse starts after 2800ms (1000ms pause)
+    const glowDuration = 1800;
+    const interval = 2800;
+
+    setTimeout(() => {
+      if (activeGlowTag === randomTag) {
+        activeCls.forEach(cls => randomTag.element.classList.remove(cls));
+        inactiveCls.forEach(cls => randomTag.element.classList.add(cls));
+        activeGlowTag = null;
+      }
+    }, glowDuration);
+
+    setTimeout(runAmbientGlow, interval);
+  }
+
+  // Start ambient glow after 2 seconds
+  setTimeout(runAmbientGlow, 2000);
 
   // Start physics loop
   requestAnimationFrame(updatePhysics);

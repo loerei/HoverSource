@@ -50,17 +50,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.createElement('div');
     const sizeClass = sizes[index % sizes.length];
     
-    el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto transition-all duration-300 hover:scale-105 ${sizeClass}`;
+    // Start with opacity 0 to prevent flash/pile-up before layout calculation
+    el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto transition-all duration-300 hover:scale-105 opacity-0 ${sizeClass}`;
     themeClasses[data.theme].split(' ').forEach(cls => el.classList.add(cls));
     el.innerText = data.text;
     canvas.appendChild(el);
 
-    // Initialize dimensions
+    // Initialize with rough random position to prevent starting at 0,0
+    const roughW = window.innerWidth || 1200;
+    const roughH = window.innerHeight || 800;
+    const roughX = Math.random() * (roughW - 150);
+    const roughY = Math.random() * (roughH - 100);
+
     tags.push({
       element: el,
       text: data.text,
-      x: 0,
-      y: 0,
+      x: roughX,
+      y: roughY,
       vx: (Math.random() - 0.5) * 1.2,
       vy: (Math.random() - 0.5) * 1.2,
       width: 0,
@@ -73,6 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
       lastMouseTime: 0,
       history: []
     });
+
+    el.style.transform = `translate3d(${roughX}px, ${roughY}px, 0)`;
   });
 
   let containerWidth = canvas.clientWidth;
@@ -80,8 +88,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Position tags randomly, avoiding the exact center initially
   function positionTags() {
-    containerWidth = canvas.clientWidth;
-    containerHeight = canvas.clientHeight;
+    containerWidth = canvas.clientWidth || window.innerWidth;
+    containerHeight = canvas.clientHeight || window.innerHeight;
 
     tags.forEach((tag) => {
       tag.width = tag.element.offsetWidth || 100;
@@ -110,6 +118,9 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.y = Math.max(0, Math.min(containerHeight - tag.height, posY));
       
       tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0)`;
+      
+      // Reveal element smoothly after positioning
+      tag.element.classList.remove('opacity-0');
     });
   }
 

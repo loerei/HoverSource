@@ -29,7 +29,7 @@ const tabStates = {
   }
 };
 
-// DOM Elements
+// DOM Elements - Sandbox
 const searchTriggerBtn = document.getElementById('search-trigger-btn');
 const mockOverlay = document.getElementById('hoversource-mock-overlay');
 const specCard = document.getElementById('hoversource-spec-card');
@@ -44,6 +44,20 @@ const tabNoContext = document.getElementById('tab-no-context');
 const statSteps = document.getElementById('stat-steps');
 const statTokens = document.getElementById('stat-tokens');
 const statTime = document.getElementById('stat-time');
+
+// DOM Elements - Benchmark Slider
+const benchmarkSlider = document.getElementById('benchmark-slider');
+const sliderGroupLabel = document.getElementById('slider-group-label');
+const benchSteps = document.getElementById('bench-steps');
+const benchTokens = document.getElementById('bench-tokens');
+const benchCost = document.getElementById('bench-cost');
+const barTokenFill = document.getElementById('bar-token-fill');
+const barTokenPercent = document.getElementById('bar-token-percent');
+const barTimeFill = document.getElementById('bar-time-fill');
+const barTimeVal = document.getElementById('bar-time-val');
+
+// DOM Elements - Bento
+const keyC = document.getElementById('key-c');
 
 // Initialize inputs
 function initInputs() {
@@ -220,7 +234,7 @@ async function handleApplyPatch() {
     searchTriggerBtn.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
   }, 1500);
 
-  tabStates[activeTab].tooltip = '✨ <span class="text-green-400 font-semibold">Success!</span> Try hovering the mock sidebar search button now to see the applied changes!';
+  tabStates[activeTab].tooltip = '<span class="text-green-400 font-semibold">Success!</span> Try hovering the mock sidebar search button now to see the applied changes!';
   instructionTooltip.innerHTML = tabStates[activeTab].tooltip;
 }
 
@@ -262,3 +276,71 @@ sendBtn.addEventListener('click', () => {
     runNoContextSimulation(simId);
   }
 });
+
+// Benchmark Slider Data & Logic
+const sliderData = [
+  {
+    label: 'Group A: No Context',
+    steps: '65',
+    tokens: '651,681',
+    cost: '$1.95',
+    tokenPercent: '100%',
+    tokenWidth: '100%',
+    timeVal: '142.0s',
+    timeWidth: '100%',
+    colorClass: 'text-brand-amber'
+  },
+  {
+    label: 'Group B: File Path Only',
+    steps: '5',
+    tokens: '24,980',
+    cost: '$0.07',
+    tokenPercent: '3.8%',
+    tokenWidth: '3.8%',
+    timeVal: '10.2s',
+    timeWidth: '7.2%',
+    colorClass: 'text-brand-purple'
+  },
+  {
+    label: 'Group C: With HoverSource (Recommended)',
+    steps: '5',
+    tokens: '6,486',
+    cost: '$0.02',
+    tokenPercent: '0.9%',
+    tokenWidth: '0.99%',
+    timeVal: '8.2s',
+    timeWidth: '5.7%',
+    colorClass: 'text-brand-blue'
+  }
+];
+
+if (benchmarkSlider) {
+  benchmarkSlider.addEventListener('input', (e) => {
+    const val = parseInt(e.target.value);
+    const data = sliderData[val];
+
+    sliderGroupLabel.innerText = data.label;
+    sliderGroupLabel.className = `text-xs font-bold font-mono text-center pt-2 ${data.colorClass}`;
+
+    benchSteps.innerText = data.steps;
+    benchTokens.innerText = data.tokens;
+    benchCost.innerText = data.cost;
+
+    barTokenPercent.innerText = data.tokenPercent;
+    barTokenPercent.className = data.colorClass;
+    barTokenFill.style.width = data.tokenWidth;
+    barTokenFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
+
+    barTimeVal.innerText = data.timeVal;
+    barTimeVal.className = `transition-all duration-500 ${val === 0 ? 'text-brand-amber' : val === 1 ? 'text-brand-purple' : 'text-brand-blue'}`;
+    barTimeFill.style.width = data.timeWidth;
+    barTimeFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
+  });
+}
+
+// Bento Keyboard key active simulation
+if (keyC) {
+  setInterval(() => {
+    keyC.classList.toggle('key-active-glow');
+  }, 1500);
+}

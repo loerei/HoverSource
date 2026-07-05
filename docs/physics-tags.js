@@ -1,13 +1,17 @@
 // Floating physics tags for Hero Section
 document.addEventListener('DOMContentLoaded', () => {
   const hero = document.getElementById('hero-section');
-  if (!hero) return;
+  if (!hero) {
+    console.error("HoverSource Physics: #hero-section not found!");
+    return;
+  }
 
   // Create canvas container
   const canvas = document.createElement('div');
   canvas.id = 'floating-physics-canvas';
   canvas.className = 'absolute inset-0 pointer-events-none overflow-hidden z-0';
   hero.appendChild(canvas);
+  console.log("HoverSource Physics: Canvas created and appended.");
 
   const tagsData = [
     { text: "-94.5% Tokens", theme: "orange", size: "text-2xl" },
@@ -29,6 +33,24 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   const tags = [];
+  const themeClasses = {
+    orange: "text-amber-500/25 hover:text-amber-400 hover:drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]",
+    purple: "text-purple-500/25 hover:text-purple-400 hover:drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]",
+    blue: "text-blue-500/25 hover:text-blue-400 hover:drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"
+  };
+
+  const activeClasses = {
+    orange: ["text-amber-400", "scale-105", "drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]"],
+    purple: ["text-purple-400", "scale-105", "drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]"],
+    blue: ["text-blue-400", "scale-105", "drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"]
+  };
+
+  const inactiveClasses = {
+    orange: ["text-amber-500/25"],
+    purple: ["text-purple-500/25"],
+    blue: ["text-blue-500/25"]
+  };
+
   const header = hero.querySelector('header');
   let headerHeight = header ? header.offsetHeight : 80;
 
@@ -110,6 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Reveal element smoothly after positioning
       tag.element.classList.remove('opacity-0');
     });
+    console.log("HoverSource Physics: Tags positioned and revealed.");
   }
 
   // Initial layout delay to ensure offsets are computed correctly
@@ -348,6 +371,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           if (!tagB.isDragging) {
             tagB.vx += nx * force;
+            tagB.vy += ny * force;
           }
         }
       }
@@ -448,6 +472,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Exclude currently dragged or hovered tags as sources
     const eligibleTags = tags.filter(tag => !tag.isDragging && !tag.element.matches(':hover') && tag !== lastGlowTag);
     if (eligibleTags.length === 0) {
+      console.warn("HoverSource Physics: No eligible tags found for wave!");
       setTimeout(triggerWave, 1000);
       return;
     }
@@ -468,6 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
       strength: 1.0,
       speed: 4.8 // pixels per frame
     });
+    console.log("HoverSource Physics: Wave triggered from", randomTag.text, "Active waves:", activeWaves.length);
 
     // Schedule next wave pulse in 2.5 seconds
     setTimeout(triggerWave, 2500);

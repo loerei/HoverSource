@@ -16,7 +16,7 @@ export declare class InspectorAdapter implements InteractionMode {
     private layerScrollModifiers;
     activate(controller: OverlayController): void;
     deactivate(): void;
-    onScroll(event: Event): void;
+    onScroll(): void;
     onPointerOver(event: PointerEvent, target: HTMLElement): void;
     onPointerMove(event: PointerEvent): void;
     onShortcut(command: SemanticShortcut): void;

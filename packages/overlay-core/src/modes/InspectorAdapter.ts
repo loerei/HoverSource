@@ -65,7 +65,7 @@ export class InspectorAdapter implements InteractionMode {
     }
   }
 
-  public onScroll(event: Event): void {
+  public onScroll(): void {
     if (this.currentElement) {
       this.controller.drawHighlight(this.currentElement, this.isFrozen);
       if (this.lastPointerEvent) {

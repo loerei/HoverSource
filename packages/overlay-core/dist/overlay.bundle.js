@@ -853,7 +853,7 @@
         this.controller.setFreezeMode(false);
       }
     }
-    onScroll(event) {
+    onScroll() {
       if (this.currentElement) {
         this.controller.drawHighlight(this.currentElement, this.isFrozen);
         if (this.lastPointerEvent) {

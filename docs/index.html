@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HoverSource Landing Page Hero Prototype</title>
+  <link rel="icon" type="image/png" href="logo.png">
+  <!-- Google Fonts: Geist & Geist Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Geist', 'sans-serif'],
+            mono: ['Geist Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              blue: '#3b82f6',
+              amber: '#f59e0b',
+              purple: '#a855f7',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-[#0b0b0d] text-zinc-100 min-h-screen font-sans selection:bg-brand-blue/30 selection:text-white glow-bg">
+
+  <!-- Section 1: Hero -->
+  <section id="hero-section" class="snap-section w-full relative overflow-hidden flex flex-col justify-between">
+    <!-- Header / Navigation (Inside first section so it scrolls away naturally) -->
+    <header class="w-full border-b border-zinc-900 bg-[#0b0b0d]/95" data-hs-component="Header" data-hs-file="docs/index.html" data-hs-line="40" data-hs-col="5" data-hs-styles="w-full border-b border-zinc-900 bg-[#0b0b0d]/95" data-hs-lang="HTML">
+      <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between relative">
+        <div class="flex items-center gap-3">
+          <img src="logo.png" alt="HoverSource Logo" class="h-8 w-8 rounded-lg object-cover border border-zinc-800 shadow-md">
+          <span class="font-semibold text-lg tracking-tight">HoverSource</span>
+        </div>
+        <nav class="absolute left-1/2 -translate-x-1/2 hidden md:flex items-center gap-6 text-sm text-zinc-400 font-medium">
+          <a href="#ui-sandbox-section" class="hover:text-zinc-200 transition-colors">UI Sandbox</a>
+          <a href="#cli-sandbox-section" class="hover:text-zinc-200 transition-colors">CLI Agent</a>
+          <a href="#bento-anchor" class="hover:text-zinc-200 transition-colors">Features</a>
+          <a href="#benchmark-anchor" class="hover:text-zinc-200 transition-colors">Benchmarks</a>
+        </nav>
+        <div>
+          <a href="https://github.com/loerei/HoverSource" target="_blank" rel="noopener noreferrer" class="text-xs px-3 py-1.5 rounded-full border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800 hover:text-white transition-all flex items-center gap-2">
+            <svg class="h-4 w-4 fill-current" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+            <span>GitHub</span>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero Main Content -->
+    <div class="relative z-10 max-w-7xl mx-auto px-6 flex flex-col justify-center items-center text-center flex-grow py-12 pointer-events-none">
+      <h1 class="text-4xl md:text-6xl font-bold leading-[1.05] tracking-tight text-white max-w-4xl mx-auto mb-6 pointer-events-auto" data-hs-component="HeroTitle" data-hs-file="docs/index.html" data-hs-line="65" data-hs-col="7" data-hs-styles="text-4xl font-bold leading-[1.05]" data-hs-lang="HTML">
+        Translate <span class="bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent">What You See</span> <br class="hidden md:inline">To <span class="bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent">What Your Agent Needs</span>.
+      </h1>
+      <p class="text-zinc-400 text-base md:text-lg leading-relaxed max-w-2xl mx-auto mb-10 pointer-events-auto">
+        Hover on any UI element in your browser, Alt + C, Ctrl + V, <br class="hidden md:inline">and see your AI <span class="bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent font-semibold">skip the digging session</span>.
+      </p>
+      <div class="flex items-center justify-center gap-4 pointer-events-auto">
+        <a href="#ui-sandbox-section" class="glow-btn bg-brand-blue hover:bg-blue-600 text-white text-sm font-medium px-6 py-3 rounded-lg shadow-lg shadow-brand-blue/20 transition-all active:scale-[0.98]" data-hs-component="CTAButton" data-hs-file="docs/index.html" data-hs-line="72" data-hs-col="9" data-hs-styles="glow-btn bg-brand-blue text-white" data-hs-lang="HTML">
+          Try Live Sandbox
+        </a>
+        <a href="https://github.com/loerei/HoverSource" target="_blank" rel="noopener noreferrer" class="text-zinc-400 hover:text-zinc-200 text-sm font-medium px-6 py-3 rounded-lg border border-zinc-800 bg-zinc-900/20 transition-all hover:bg-zinc-900/50 flex items-center gap-2">
+          <svg class="h-4 w-4 fill-current" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>View on GitHub</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Spacer to balance header height at the bottom -->
+    <div class="h-16 hidden md:block"></div>
+  </section>
+
+  <!-- Section 2: UI Sandbox -->
+  <section id="ui-sandbox-section" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/20 py-12 flex flex-col justify-between">
+    <div class="h-4 hidden md:block"></div>
+    <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center w-full">
+      <!-- Left Column: Description & Toggles -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="space-y-2">
+          <div class="text-brand-blue text-xs font-mono font-semibold tracking-wider uppercase">VISUAL INSPECTOR</div>
+          <h2 class="text-2xl md:text-3xl font-bold text-white tracking-tight">Interactive UI Sandbox</h2>
+          <p class="text-zinc-400 text-sm leading-relaxed">
+            Ditch the manual search. See the internal file structure and component metadata of any UI element instantly. Your AI agent will thank you.
+          </p>
+        </div>
+
+        <!-- Mode Toggles -->
+        <div class="space-y-3">
+          <div class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Hover, Copy, Done!</div>
+          <p id="ui-sandbox-instructions" class="text-[11px] text-zinc-400 leading-relaxed">
+            Inspector Mode is live. Just hover over any component in this mock feed, then hit <kbd class="px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded font-mono text-[9px]">C</kbd>. You'll get a perfectly formatted, AI-ready metadata block in your clipboard—no manual file-hunting required.
+          </p>
+        </div>
+      </div>
+
+      <!-- Right Column: Interactive Browser Dashboard Mock -->
+      <div class="lg:col-span-7 relative">
+        <div id="mock-browser-canvas" class="border border-zinc-800 bg-[#000000] rounded-2xl shadow-2xl relative overflow-hidden h-[550px] select-none flex flex-row">
+          <!-- Canvas Overlay for Target Mode -->
+          <div id="hs-canvas-overlay" class="absolute inset-0 pointer-events-none z-10">
+            <div id="hs-target-border" class="absolute border border-dashed border-brand-blue bg-brand-blue/10 rounded hidden transition-all duration-150"></div>
+          </div>
+
+          <!-- Left Sidebar (Instagram Style) -->
+          <div data-hs-component="Sidebar" class="w-[70px] border-r border-zinc-900 bg-[#000000] flex flex-col items-center py-6 justify-between h-full">
+            <div class="flex flex-col gap-6 items-center w-full">
+              <!-- Instagram Wordmark Logo Placeholder -->
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-100 cursor-pointer font-bold font-sans text-sm tracking-tighter" data-hs-component="InstagramLogo" title="Instagram Logo">
+                IG
+              </div>
+
+              <!-- Navigation links -->
+              <div class="flex flex-col gap-5 w-full items-center mt-4">
+                <!-- Home -->
+                <div id="search-trigger-btn" class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-100 bg-zinc-900/60 cursor-pointer" data-hs-component="HomeButton" title="Home">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                </div>
+                <!-- Search -->
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" data-hs-component="SearchButton" title="Search">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <!-- Messages -->
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" data-hs-component="MessagesButton" title="Messages">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
+                <!-- Explore -->
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" data-hs-component="ExploreButton" title="Explore">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <!-- Create -->
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" data-hs-component="CreateButton" title="Create">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <!-- Profile Badge -->
+            <div class="w-7 h-7 rounded-full overflow-hidden border border-zinc-800 cursor-pointer" data-hs-component="ProfileBadge" title="Profile">
+              <img src="screenshot_2026_06_27_162945_sq.jpg" class="w-full h-full object-cover">
+            </div>
+          </div>
+
+          <!-- Main Feed Container -->
+          <div data-hs-component="AppBackground" class="flex-grow bg-[#000000] flex flex-col h-full overflow-y-auto" style="scrollbar-width: none; -ms-overflow-style: none;">
+            <!-- Stories Tray -->
+            <div class="flex items-center gap-4 px-6 py-3 border-b border-zinc-900 overflow-x-auto w-full select-none h-20 shrink-0" style="scrollbar-width: none; -ms-overflow-style: none;" data-hs-component="StoriesTray">
+              <!-- Story Item 1 -->
+              <div class="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                <div class="w-12 h-12 rounded-full p-[1.5px] bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]" data-hs-component="StoryAvatar">
+                  <div class="w-full h-full rounded-full bg-black flex items-center justify-center">
+                    <img src="avatar_photographer_1783249115968.jpg" class="w-full h-full rounded-full object-cover border border-black">
+                  </div>
+                </div>
+              </div>
+              <!-- Story Item 2 -->
+              <div class="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                <div class="w-12 h-12 rounded-full p-[1.5px] bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]" data-hs-component="StoryAvatar">
+                  <div class="w-full h-full rounded-full bg-black flex items-center justify-center">
+                    <img src="story_avatar_coder_1783249127830.jpg" class="w-full h-full rounded-full object-cover border border-black">
+                  </div>
+                </div>
+              </div>
+              <!-- Story Item 3 -->
+              <div class="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                <div class="w-12 h-12 rounded-full p-[1.5px] bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]" data-hs-component="StoryAvatar">
+                  <div class="w-full h-full rounded-full bg-black flex items-center justify-center text-[10px] font-bold text-zinc-300 font-sans">
+                    S3
+                  </div>
+                </div>
+              </div>
+              <!-- Story Item 4 -->
+              <div class="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                <div class="w-12 h-12 rounded-full p-[1.5px] bg-zinc-800" data-hs-component="StoryAvatar">
+                  <div class="w-full h-full rounded-full bg-black flex items-center justify-center text-[10px] font-bold text-zinc-500 font-sans">
+                    S4
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Feed Post List -->
+            <div class="px-6 py-4 flex flex-col items-center w-full space-y-6">
+              <!-- Post Card 1 (loerei's cat) -->
+              <div class="w-full max-w-[340px] border border-zinc-900 bg-zinc-950/20 rounded-lg overflow-hidden flex flex-col shrink-0" data-hs-component="PostCard">
+                <!-- Post Header -->
+                <div class="flex items-center justify-between p-3 border-b border-zinc-900" data-hs-component="PostHeader">
+                  <div class="flex items-center gap-2">
+                    <img data-hs-component="PostHeaderPfp" src="screenshot_2026_06_27_162945_sq.jpg" class="w-6 h-6 rounded-full object-cover border border-zinc-800 cursor-pointer">
+                    <span data-hs-component="PostHeaderUsername" class="text-[10px] font-semibold text-zinc-300 cursor-pointer hover:underline">loerei</span>
+                  </div>
+                  <span data-hs-component="PostHeaderMoreOptions" class="text-zinc-600 text-xs cursor-pointer hover:text-zinc-400">•••</span>
+                </div>
+
+                <!-- Post Content Media (Cat photo: aspect ratio 993x1324) -->
+                <div class="w-full bg-zinc-950 flex items-center justify-center relative cursor-pointer overflow-hidden" style="aspect-ratio: 993 / 1324;" data-hs-component="PostContent">
+                  <img src="screenshot_2026_06_27_162945.png" class="w-full h-full object-cover">
+                </div>
+
+                <!-- Action row -->
+                <div class="flex justify-between items-center p-3" data-hs-component="PostActions">
+                  <div class="flex items-center gap-3 text-zinc-400">
+                    <svg data-hs-component="LikeButton" class="h-5 w-5 cursor-pointer hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    <svg data-hs-component="CommentButton" class="h-5 w-5 cursor-pointer hover:text-zinc-200 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <svg data-hs-component="BookmarkButton" class="h-5 w-5 text-zinc-400 cursor-pointer hover:text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Post Card 2 (photographer) -->
+              <div class="w-full max-w-[340px] border border-zinc-900 bg-zinc-950/20 rounded-lg overflow-hidden flex flex-col shrink-0" data-hs-component="PostCard">
+                <!-- Post Header -->
+                <div class="flex items-center justify-between p-3 border-b border-zinc-900" data-hs-component="PostHeader">
+                  <div class="flex items-center gap-2">
+                    <img data-hs-component="PostHeaderPfp" src="avatar_photographer_1783249115968.jpg" class="w-6 h-6 rounded-full object-cover border border-zinc-800 cursor-pointer">
+                    <span data-hs-component="PostHeaderUsername" class="text-[10px] font-semibold text-zinc-300 cursor-pointer hover:underline">photographer</span>
+                  </div>
+                  <span data-hs-component="PostHeaderMoreOptions" class="text-zinc-600 text-xs cursor-pointer hover:text-zinc-400">•••</span>
+                </div>
+
+                <!-- Post Content Media -->
+                <div class="w-full aspect-square bg-zinc-950 flex items-center justify-center relative cursor-pointer overflow-hidden" data-hs-component="PostContent">
+                  <img src="instagram_post_photo_1783249103439.jpg" class="w-full h-full object-cover">
+                </div>
+
+                <!-- Action row -->
+                <div class="flex justify-between items-center p-3" data-hs-component="PostActions">
+                  <div class="flex items-center gap-3 text-zinc-400">
+                    <svg data-hs-component="LikeButton" class="h-5 w-5 cursor-pointer hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    <svg data-hs-component="CommentButton" class="h-5 w-5 cursor-pointer hover:text-zinc-200 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <svg data-hs-component="BookmarkButton" class="h-5 w-5 text-zinc-400 cursor-pointer hover:text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                </div>
+              </div>
+
+              <!-- Post Card 3 (coder) -->
+              <div class="w-full max-w-[340px] border border-zinc-900 bg-zinc-950/20 rounded-lg overflow-hidden flex flex-col shrink-0" data-hs-component="PostCard">
+                <!-- Post Header -->
+                <div class="flex items-center justify-between p-3 border-b border-zinc-900" data-hs-component="PostHeader">
+                  <div class="flex items-center gap-2">
+                    <img data-hs-component="PostHeaderPfp" src="story_avatar_coder_1783249127830.jpg" class="w-6 h-6 rounded-full object-cover border border-zinc-800 cursor-pointer">
+                    <span data-hs-component="PostHeaderUsername" class="text-[10px] font-semibold text-zinc-300 cursor-pointer hover:underline">coder</span>
+                  </div>
+                  <span data-hs-component="PostHeaderMoreOptions" class="text-zinc-600 text-xs cursor-pointer hover:text-zinc-400">•••</span>
+                </div>
+
+                <!-- Post Content Media -->
+                <div class="w-full aspect-square bg-zinc-950 flex items-center justify-center relative cursor-pointer overflow-hidden" data-hs-component="PostContent">
+                  <img src="instagram_post_photo_2_1783249456259.jpg" class="w-full h-full object-cover">
+                </div>
+
+                <!-- Action row -->
+                <div class="flex justify-between items-center p-3" data-hs-component="PostActions">
+                  <div class="flex items-center gap-3 text-zinc-400">
+                    <svg data-hs-component="LikeButton" class="h-5 w-5 cursor-pointer hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    <svg data-hs-component="CommentButton" class="h-5 w-5 cursor-pointer hover:text-zinc-200 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <svg data-hs-component="BookmarkButton" class="h-5 w-5 text-zinc-400 cursor-pointer hover:text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Hover Hint Onboarding Badge -->
+        <div class="absolute -left-16 -top-10 hidden xl:flex flex-col items-center pointer-events-none hud-hover-hint z-30 animate-bounce" style="animation-duration: 3s;">
+          <span class="text-[10px] font-mono font-bold text-brand-blue uppercase tracking-widest bg-brand-blue/10 border border-brand-blue/20 px-2.5 py-1 rounded-full shadow-lg shadow-brand-blue/5">Hover Here!</span>
+          <svg class="w-6 h-6 text-brand-blue/80 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <line x1="6" y1="6" x2="18" y2="18" stroke-linecap="round" stroke-linejoin="round" />
+            <polyline points="10 18 18 18 18 10" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </div>
+      </div>
+    </div>
+    <div class="h-4 hidden md:block"></div>
+  </section>
+
+  <!-- Section 3: CLI Sandbox -->
+  <section id="cli-sandbox-section" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/10 py-12 flex flex-col justify-between">
+    <div class="h-4 hidden md:block"></div>
+    <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center w-full">
+      <!-- Left Column: CLI Instructions -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="space-y-2">
+          <div class="text-brand-purple text-xs font-mono font-semibold tracking-wider uppercase">AGENT RUNTIME</div>
+          <h2 class="text-2xl md:text-3xl font-bold text-white tracking-tight">Watch your agent stop wandering.</h2>
+          <p class="text-zinc-400 text-sm leading-relaxed">
+            Stop letting your AI agent waste time grepping through thousands of files. HoverSource feeds the agent the exact file path and line number, so it can start coding immediately. Press 'Send' to see the difference.
+          </p>
+        </div>
+
+        <div class="space-y-2 border-l-2 border-zinc-800 pl-4 text-xs text-zinc-500 leading-relaxed">
+          HoverSource feeds your AI agent the exact file path and line number, bypassing the tedious 'grep-and-search' phase. It <span class="text-brand-purple font-semibold">slashes agent steps</span> by <span class="text-brand-amber font-semibold">73.9%</span> and <span class="text-brand-purple font-semibold">reduces token consumption</span> by <span class="text-brand-amber font-semibold">94.5%</span>, <span class="text-zinc-300 font-semibold">turning minutes of exploration</span> <span class="text-brand-blue font-semibold">into seconds of execution</span>.
+        </div>
+      </div>
+
+      <!-- Right Column: Simulated AI Agent Chat Terminal -->
+      <div class="lg:col-span-7">
+        <div id="mock-terminal-container" class="border border-zinc-800 bg-zinc-950/90 rounded-2xl shadow-2xl flex flex-col h-[520px] overflow-hidden relative">
+          <!-- Terminal Header -->
+          <div class="bg-zinc-900/50 border-b border-zinc-800/80 px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="h-3 w-3 rounded-full bg-zinc-700 flex items-center justify-center">
+                <span class="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
+              </span>
+              <span class="font-mono text-xs text-zinc-400 font-medium">gemini-3.5-flash@hoversource-agent: ~</span>
+            </div>
+            <div class="flex gap-1.5">
+              <span class="h-2.5 w-2.5 rounded-full bg-zinc-800"></span>
+              <span class="h-2.5 w-2.5 rounded-full bg-zinc-800"></span>
+              <span class="h-2.5 w-2.5 rounded-full bg-zinc-800"></span>
+            </div>
+          </div>
+
+          <!-- Tab Selector -->
+          <div class="flex bg-zinc-900/40 border-b border-zinc-800/80 text-[10px] font-mono text-zinc-400 select-none">
+            <button id="tab-with-hs" class="flex-1 py-2 text-center border-b-2 border-brand-blue bg-[#0b0b0d]/50 text-zinc-100 font-semibold focus:outline-none">
+              With HoverSource
+            </button>
+            <button id="tab-file-only" class="flex-1 py-2 text-center border-b-2 border-transparent hover:text-zinc-300 focus:outline-none">
+              File Path Only
+            </button>
+            <button id="tab-no-context" class="flex-1 py-2 text-center border-b-2 border-transparent hover:text-zinc-300 focus:outline-none">
+              No Context
+            </button>
+          </div>
+
+          <!-- Live Stats Panel -->
+          <div class="bg-zinc-900/10 border-b border-zinc-800/50 px-4 py-1.5 flex justify-between items-center text-[10px] font-mono text-zinc-500">
+            <div>Steps: <span id="stat-steps" class="text-zinc-300 font-bold">0</span></div>
+            <div>Tokens: <span id="stat-tokens" class="text-zinc-300 font-bold">0</span></div>
+            <div>Time Elapsed: <span id="stat-time" class="text-zinc-300 font-bold">0s</span></div>
+          </div>
+
+          <!-- Chat / Console Output Screen -->
+          <div id="terminal-screen-with-hs" class="flex-grow p-4 font-mono text-[11px] overflow-y-auto space-y-2.5 terminal-scroll">
+            <div class="text-zinc-500 space-y-1">
+              <div>HoverSource CLI Agent v1.0.0</div>
+              <div>Agent ready to receive instructions.</div>
+            </div>
+          </div>
+          <div id="terminal-screen-file-only" class="flex-grow p-4 font-mono text-[11px] overflow-y-auto space-y-2.5 terminal-scroll hidden">
+            <div class="text-zinc-500 space-y-1">
+              <div>HoverSource CLI Agent v1.0.0</div>
+              <div>Agent ready to receive instructions.</div>
+            </div>
+          </div>
+          <div id="terminal-screen-no-context" class="flex-grow p-4 font-mono text-[11px] overflow-y-auto space-y-2.5 terminal-scroll hidden">
+            <div class="text-zinc-500 space-y-1">
+              <div>HoverSource CLI Agent v1.0.0</div>
+              <div>Agent ready to receive instructions.</div>
+            </div>
+          </div>
+
+          <!-- Input Area (Pseudo Textarea + Send) -->
+          <div class="bg-zinc-900/30 border-t border-zinc-800/80 p-3 space-y-2">
+            <div class="relative bg-zinc-950 rounded-lg border border-zinc-800 p-2.5">
+              <textarea id="pseudo-input" readonly class="w-full bg-transparent outline-none resize-none text-[11px] text-zinc-400 h-16 terminal-scroll leading-relaxed font-mono"></textarea>
+            </div>
+            
+            <div class="flex items-center justify-between">
+              <div id="instruction-tooltip" class="text-[10px] text-zinc-500">
+                Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.
+              </div>
+              <button id="send-btn" class="bg-brand-blue hover:bg-blue-600 text-white font-mono text-xs px-4 py-2 rounded-md transition-all active:scale-[0.97] flex items-center gap-1.5">
+                <span>Send to Agent</span>
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="h-4 hidden md:block"></div>
+  </section>
+
+    </div>
+  </section>
+
+  <!-- Section 3: Bento Grid -->
+  <section id="bento-anchor" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/10 py-12">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="text-center max-w-xl mx-auto mb-16 space-y-3">
+        <h2 class="text-2xl md:text-4xl font-bold text-white tracking-tight">Engineered for AI Autonomy</h2>
+        <p class="text-zinc-400 text-sm md:text-base leading-relaxed">
+          HoverSource abstracts the visual layer, translating pixels directly into surgical file-line-column mappings.
+        </p>
+      </div>
+
+      <!-- Asymmetric Bento Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Card 1: Framework Matrix -->
+        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]" data-hs-component="BentoIntegrationCard" data-hs-file="docs/index.html" data-hs-line="307" data-hs-col="9" data-hs-styles="border bg-zinc-950/80 rounded-2xl p-6" data-hs-lang="HTML">
+          <div>
+            <div class="text-brand-blue text-xs font-mono font-semibold tracking-wider uppercase mb-2">INTEGRATION</div>
+            <h3 class="text-lg font-bold text-white mb-2">Framework Support Matrix</h3>
+            <p class="text-zinc-400 text-xs leading-relaxed">Works out-of-the-box with Next.js, React, Vue, Svelte, Vite, and Webpack. Zero config required to inspect browser nodes.</p>
+          </div>
+          <div class="grid grid-cols-3 gap-2 mt-4 text-[9px] font-mono text-zinc-500">
+            <span class="bg-zinc-900 border border-zinc-800 px-2 py-1.5 rounded text-center text-zinc-300">React</span>
+            <span class="bg-zinc-900 border border-zinc-800 px-2 py-1.5 rounded text-center text-zinc-300">Next.js</span>
+            <span class="bg-zinc-900 border border-zinc-800 px-2 py-1.5 rounded text-center text-zinc-300">Vue</span>
+            <span class="bg-zinc-900 border border-zinc-800 px-2 py-1.5 rounded text-center text-zinc-300">Svelte</span>
+            <span class="bg-zinc-900 border border-zinc-800 px-2 py-1.5 rounded text-center text-zinc-300">Vite</span>
+            <span class="bg-zinc-900 border border-zinc-800 px-2 py-1.5 rounded text-center text-zinc-300">Webpack</span>
+          </div>
+        </div>
+
+        <!-- Card 2: Interactive Shortcut -->
+        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]" data-hs-component="BentoShortcutCard" data-hs-file="docs/index.html" data-hs-line="324" data-hs-col="9" data-hs-styles="border bg-zinc-950/80 rounded-2xl p-6" data-hs-lang="HTML">
+          <div>
+            <div class="text-brand-purple text-xs font-mono font-semibold tracking-wider uppercase mb-2">WORKFLOW</div>
+            <h3 class="text-lg font-bold text-white mb-2">Instant Copy Mechanism</h3>
+            <p class="text-zinc-400 text-xs leading-relaxed">Just hover on any element in your browser and press the shortcut to lock the exact source location to your clipboard.</p>
+          </div>
+          <div class="flex items-center gap-3 mt-4">
+            <kbd class="px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-semibold text-zinc-300 shadow-md font-mono">Alt</kbd>
+            <span class="text-zinc-600 text-sm font-semibold">+</span>
+            <kbd id="key-c" class="px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-semibold text-zinc-300 shadow-md font-mono transition-all duration-300">C</kbd>
+            <div class="flex flex-col gap-1 ml-2">
+              <span class="text-zinc-400 text-[10px] font-mono leading-none">Copies exact source location</span>
+              <span class="text-zinc-600 text-[8px] font-mono leading-none">You can also customize the hotkeys!</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Compiler pipeline -->
+        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]" data-hs-component="BentoPipelineCard" data-hs-file="docs/index.html" data-hs-line="339" data-hs-col="9" data-hs-styles="border bg-zinc-950/80 rounded-2xl p-6" data-hs-lang="HTML">
+          <div>
+            <div class="text-brand-amber text-xs font-mono font-semibold tracking-wider uppercase mb-2">PIPELINE</div>
+            <h3 class="text-lg font-bold text-white mb-2">Compiler-to-DOM Map</h3>
+            <p class="text-zinc-400 text-xs leading-relaxed">Bridges compiled browser code back to project source code. Mappings are precise to the file, line, and column.</p>
+          </div>
+          <div class="bg-zinc-950/80 p-2.5 rounded border border-zinc-900 text-[9px] font-mono text-zinc-500 space-y-1 mt-4">
+            <div>DOM Node ➔ [KbarTrigger]</div>
+            <div class="text-brand-blue">Parser ➔ apps/web/modules/shell/Kbar.tsx</div>
+            <div class="text-zinc-400">AST Target ➔ Line: 371, Col: 7</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 4: Benchmark & Footer -->
+  <section id="benchmark-anchor" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/20 py-12 flex flex-col justify-between">
+    <!-- Empty space to balance content vertically -->
+    <div class="h-4 hidden md:block"></div>
+
+    <!-- Main Benchmark Content -->
+    <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center w-full">
+      
+      <!-- Left Column: Slider Controller -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="space-y-2">
+          <div class="text-brand-blue text-xs font-mono font-semibold tracking-wider uppercase">PERFORMANCE</div>
+          <div class="flex items-center gap-3">
+            <h2 class="text-2xl md:text-4xl font-bold text-white tracking-tight">Benchmarks</h2>
+            <a href="https://github.com/loerei/HoverSource/tree/master/benchmark-logs" target="_blank" rel="noopener noreferrer" class="text-zinc-500 hover:text-zinc-300 transition-colors pt-1" title="View Raw Benchmark Logs on GitHub">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </a>
+          </div>
+          <p class="text-zinc-400 text-sm leading-relaxed">
+            Toggle the repository size and slide the controller to compare AI agent metrics across all 15 real-world benchmark sets.
+          </p>
+        </div>
+
+        <!-- Codebase Toggle Branch -->
+        <div class="flex bg-zinc-900/50 p-1 rounded-lg border border-zinc-800/80 font-mono text-[10px] w-full max-w-[340px] gap-1">
+          <button id="toggle-calcom" class="flex-1 py-2 px-3 rounded-md text-left bg-zinc-800 text-white font-semibold focus:outline-none transition-all flex flex-col">
+            <span class="text-xs font-semibold">Cal.com</span>
+            <span class="text-[8px] text-zinc-400 font-normal mt-0.5">5,054 files • 489k LOC</span>
+          </button>
+          <button id="toggle-yumeshelf" class="flex-1 py-2 px-3 rounded-md text-left text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all flex flex-col">
+            <span class="text-xs font-semibold">YumeShelf</span>
+            <span class="text-[8px] text-zinc-500 font-normal mt-0.5">178 files • 22k LOC</span>
+          </button>
+        </div>
+
+        <!-- Slider Component -->
+        <div class="space-y-4 pt-2">
+          <div class="flex justify-between text-[10px] font-mono text-zinc-500">
+            <button id="btn-group-a" class="hover:text-zinc-300 transition-colors focus:outline-none">Group A: No Context</button>
+            <button id="btn-group-b" class="hover:text-zinc-300 transition-colors focus:outline-none">Group B: File Only</button>
+            <button id="btn-group-c" class="hover:text-zinc-300 transition-colors focus:outline-none">Group C: HoverSource</button>
+          </div>
+          <div id="custom-slider" class="relative w-full py-4 cursor-pointer select-none">
+            <div id="custom-slider-track" class="relative w-full h-1 bg-zinc-800 rounded-full py-2 -my-2 overflow-visible">
+              <div id="custom-slider-progress" class="absolute left-0 top-1/2 -translate-y-1/2 h-1 bg-brand-blue rounded-full pointer-events-none" style="width: 100%;"></div>
+              <div id="custom-slider-handle" class="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-brand-blue rounded-full shadow-lg shadow-brand-blue/30 cursor-grab active:cursor-grabbing" style="left: 100%;"></div>
+            </div>
+            <!-- Hidden native input range to preserve all data bindings and event flows -->
+            <input type="range" id="benchmark-slider" min="0" max="2" value="2" step="1" class="hidden">
+          </div>
+          <div id="slider-group-label" class="text-xs font-bold text-brand-blue font-mono text-center pt-1">Group C: HoverSource</div>
+        </div>
+      </div>
+
+      <!-- Right Column: Visual Charts -->
+      <div class="lg:col-span-7 border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 md:p-8 shadow-2xl space-y-6">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+          <div class="border border-zinc-900 bg-zinc-900/10 p-3 rounded-lg">
+            <div class="text-[9px] font-mono text-zinc-500">STEPS</div>
+            <div id="bench-steps" class="text-lg md:text-xl font-bold text-white font-mono mt-1">17.1</div>
+          </div>
+          <div class="border border-zinc-900 bg-zinc-900/10 p-3 rounded-lg">
+            <div class="text-[9px] font-mono text-zinc-500">CUMULATIVE INPUT</div>
+            <div id="bench-tokens" class="text-lg md:text-xl font-bold text-white font-mono mt-1">35,733</div>
+          </div>
+          <div class="border border-zinc-900 bg-zinc-900/10 p-3 rounded-lg">
+            <div class="text-[9px] font-mono text-zinc-500">PEAK CONTEXT</div>
+            <div id="bench-peak" class="text-lg md:text-xl font-bold text-white font-mono mt-1">6,486</div>
+          </div>
+          <div class="border border-zinc-900 bg-zinc-900/10 p-3 rounded-lg">
+            <div class="text-[9px] font-mono text-zinc-500">AVG TIME</div>
+            <div id="bench-time" class="text-lg md:text-xl font-bold text-brand-blue font-mono mt-1">16.4s</div>
+          </div>
+        </div>
+
+        <!-- Chart Columns Visuals -->
+        <div class="space-y-4 pt-2">
+          <!-- Token Chart Bar -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-[10px] font-mono text-zinc-400">
+              <span>Token Consumption</span>
+              <span id="bar-token-percent" class="text-brand-blue">5.4%</span>
+            </div>
+            <div class="h-4 bg-zinc-900/50 rounded overflow-hidden">
+              <div id="bar-token-fill" class="h-full bg-brand-blue transition-all duration-500" style="width: 5.4%"></div>
+            </div>
+          </div>
+
+          <!-- Peak Context Bar -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-[10px] font-mono text-zinc-400">
+              <span>Peak Context</span>
+              <span id="bar-peak-val" class="text-brand-amber">6,486</span>
+            </div>
+            <div class="h-4 bg-zinc-900/50 rounded overflow-hidden">
+              <div id="bar-peak-fill" class="h-full bg-brand-blue transition-all duration-500" style="width: 22.9%"></div>
+            </div>
+          </div>
+
+          <!-- Time Chart Bar -->
+          <div class="space-y-1">
+            <div class="flex justify-between text-[10px] font-mono text-zinc-400">
+              <span>Execution Time</span>
+              <span id="bar-time-val" class="text-brand-purple">16.4s</span>
+            </div>
+            <div class="h-4 bg-zinc-900/50 rounded overflow-hidden">
+              <div id="bar-time-fill" class="h-full bg-brand-blue transition-all duration-500" style="width: 11.5%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer (Placed at the bottom of the last snapping section) -->
+    <footer class="w-full border-t border-zinc-900 bg-zinc-950/20 py-4 mt-12">
+      <div class="max-w-7xl mx-auto px-6 text-center text-xs text-zinc-600">
+        &copy; 2026 loerei. Open-source under MIT. Built for speed and visual clarity.
+      </div>
+    </footer>
+  </section>
+
+  <!-- Floating Vertical Text Navigation (Scrollbar Replacement) -->
+  <div class="fixed right-0 top-1/2 -translate-y-1/2 z-50 hidden lg:flex flex-col gap-0 font-mono text-[9px] tracking-widest uppercase select-none hud-nav-container hud-nav-expanded">
+    <button data-target="#hero-section" class="nav-title-item text-right text-left"><span>Overview</span></button>
+    <button data-target="#ui-sandbox-section" class="nav-title-item text-right text-left"><span>UI Sandbox</span></button>
+    <button data-target="#cli-sandbox-section" class="nav-title-item text-right text-left"><span>CLI Agent</span></button>
+    <button data-target="#bento-anchor" class="nav-title-item text-right text-left"><span>Features</span></button>
+    <button data-target="#benchmark-anchor" class="nav-title-item text-right text-left"><span>Benchmarks</span></button>
+  </div>
+
+  <!-- Mock Tooltip Card (HoverSource Floating Spec Card) -->
+  <div id="hoversource-spec-card" class="fixed bg-zinc-950/95 backdrop-blur-md border border-zinc-800 text-zinc-300 p-4 rounded-lg shadow-2xl text-[10.5px] font-mono w-[390px] pointer-events-none hidden z-50 space-y-1.5 shadow-brand-blue/5">
+    <div class="flex justify-between items-center border-b border-zinc-900 pb-2 mb-2">
+      <div>
+        <div class="text-brand-blue font-bold text-xs font-mono" id="spec-component-name">Component: -</div>
+        <div class="text-zinc-500 text-[8px] mt-0.5 font-mono" id="spec-element-name">Element: -</div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <span class="text-[8px] bg-brand-blue/20 text-brand-blue font-bold px-1 py-0.5 rounded font-mono" id="spec-framework">REACT</span>
+        <div class="flex flex-col items-center opacity-60">
+          <svg class="h-3 w-3 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+          <span class="text-[5px] text-zinc-600 mt-0.5 font-mono">Alt+Shift+Scroll</span>
+        </div>
+      </div>
+    </div>
+    <div class="space-y-1 text-[9px] text-zinc-300 font-mono">
+      <div><span class="text-zinc-500 font-medium">File:</span> <span class="text-brand-blue underline cursor-pointer" id="spec-file-label">-</span></div>
+      <div><span class="text-zinc-500 font-medium">Path:</span> <span class="text-emerald-500" id="spec-path-value">-</span></div>
+      <div><span class="text-zinc-500 font-medium">Size:</span> <span id="spec-size-value">-</span></div>
+      <div><span class="text-zinc-500 font-medium">Color:</span> <span class="text-emerald-400" id="spec-color-value">-</span></div>
+      <div><span class="text-zinc-500 font-medium">Background:</span> <span class="text-emerald-400" id="spec-background-value">-</span></div>
+      <div><span class="text-zinc-500 font-medium">Layout:</span> <span class="text-emerald-400" id="spec-layout-value">-</span></div>
+    </div>
+    <div class="mt-2 font-mono">
+      <div class="text-zinc-500 text-[8px] font-bold uppercase tracking-wider mb-1">Parent Styles:</div>
+      <div class="border border-zinc-900 rounded overflow-hidden text-[8px] font-mono leading-normal bg-zinc-950/40 text-zinc-400 divide-y divide-zinc-900" id="spec-parent-styles-container">
+      </div>
+    </div>
+    <div class="mt-2 font-mono">
+      <div class="text-zinc-500 text-[8px] font-bold uppercase tracking-wider mb-1">Stack:</div>
+      <div class="border border-zinc-900 rounded overflow-hidden text-[8px] font-mono leading-normal bg-zinc-950/50 text-zinc-400 divide-y divide-zinc-900" id="spec-stack-container">
+      </div>
+    </div>
+    <div class="copy-hint-text text-[8px] text-zinc-500 text-center pt-2 mt-2 border-t border-zinc-900 leading-normal font-mono" id="spec-copy-hint">
+      Press C to copy | Alt+Shift+C to copy all | Alt+P to Freeze | Alt+M for Minimal | Alt+S for Config | Alt+X to Switch Mode
+    </div>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="simulation.js"></script>
+  <script src="terminal-sim.js"></script>
+  <script src="inspector.js"></script>
+  <script src="physics-tags.js" defer></script>
+</body>
+</html>

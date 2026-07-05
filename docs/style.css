@@ -1,0 +1,234 @@
+/* Reset & Scroll Snapping Core on HTML root for hardware-accelerated compositor-thread smoothness */
+html {
+  margin: 0;
+  padding: 0;
+  scroll-snap-type: y mandatory;
+  overflow-y: auto;
+  height: 100%;
+  
+  /* Hide scrollbar completely to replace with vertical textual HUD menu */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+html::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0b0b0d;
+  min-height: 100%;
+}
+
+.snap-section {
+  scroll-snap-align: center;
+  scroll-snap-stop: normal;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  will-change: transform, scroll-position;
+}
+
+/* Custom Floating HUD Text Navigation (Scrollbar replacement) */
+.hud-nav-container {
+  padding-left: 16px;
+  padding-right: 32px;
+}
+
+.nav-title-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: #71717a; /* zinc-400 */
+  opacity: 1; /* Keep button visible to render the dots */
+  pointer-events: auto; /* Allow hover/click anywhere on the button bounding box */
+  outline: none;
+  padding-top: 14px; /* Generous vertical padding to expand the click target area */
+  padding-bottom: 14px; /* Generous vertical padding to expand the click target area */
+  cursor: pointer;
+}
+
+/* Animate only the text span inside the HUD items */
+.nav-title-item span {
+  opacity: 0;
+  transform: translateX(10px);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
+}
+
+/* Show text on hover or when expanded */
+.hud-nav-container:hover .nav-title-item span,
+.hud-nav-container.hud-nav-expanded .nav-title-item span {
+  opacity: 0.6;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.hud-nav-container:hover .nav-title-item:hover span,
+.hud-nav-container.hud-nav-expanded .nav-title-item:hover span {
+  opacity: 1;
+  color: #f4f4f5; /* zinc-100 */
+}
+
+.hud-nav-container:hover .nav-title-item.active-nav-title span,
+.hud-nav-container.hud-nav-expanded .nav-title-item.active-nav-title span {
+  opacity: 1;
+  color: #3b82f6; /* brand-blue */
+  font-weight: 600;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+}
+
+/* --- Morphing HUD Scrollbar & Dot Navigation --- */
+
+/* Default state: Collapsed (Continuous bar & active capsule segment) */
+.nav-title-item::after {
+  content: '';
+  position: absolute;
+  right: -13px; /* Align precisely with the scroll line position */
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 100%; /* Stretch to fill the parent height, forming a continuous line without gaps */
+  border-radius: 0px;
+  background-color: rgba(63, 63, 70, 0.2);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Active segment in collapsed state */
+.nav-title-item.active-nav-title::after {
+  width: 4px;
+  height: 100%;
+  background-color: #3b82f6; /* brand-blue */
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
+  border-radius: 99px;
+  z-index: 2;
+  right: -14px;
+}
+
+/* --- Expanded HUD State (Hovered or Expanded class) --- */
+
+/* Morph lines back into separate individual dots */
+.hud-nav-container:hover .nav-title-item::after,
+.hud-nav-container.hud-nav-expanded .nav-title-item::after {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #3f3f46; /* zinc-700 */
+  box-shadow: none;
+  right: -19px; /* Revert to standard alignment */
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+/* Hovering items in expanded state increases brightness */
+.hud-nav-container:hover .nav-title-item:hover::after {
+  background-color: #f4f4f5; /* zinc-100 */
+}
+
+/* Active dot/capsule in expanded state */
+.hud-nav-container:hover .nav-title-item.active-nav-title::after,
+.hud-nav-container.hud-nav-expanded .nav-title-item.active-nav-title::after {
+  width: 5px;
+  height: 12px;
+  border-radius: 2px;
+  background-color: #3b82f6; /* brand-blue */
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+  right: -19px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Premium visual effects */
+.glow-bg {
+  background: radial-gradient(circle 800px at 50% -100px, rgba(59, 130, 246, 0.08), transparent 80%);
+}
+.glow-btn:hover {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.35);
+}
+
+/* Scrollbar styling for code terminal & containment of scroll events to prevent page snapping */
+.terminal-scroll {
+  overscroll-behavior: contain;
+}
+.terminal-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.terminal-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+.terminal-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+.terminal-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Custom range slider styling */
+#custom-slider-track {
+  background: #18181b; /* zinc-900 */
+  border: 1px solid #27272a; /* zinc-800 */
+}
+#custom-slider-handle {
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease, box-shadow 0.3s ease;
+}
+#custom-slider-handle:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+}
+#custom-slider-handle:active {
+  transform: translate(-50%, -50%) scale(1.1);
+  cursor: grabbing;
+}
+
+/* Active Keyboard key glow effect */
+.key-active-glow {
+  background-color: rgba(168, 85, 247, 0.15) !important;
+  border-color: #a855f7 !important;
+  color: #c084fc !important;
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.3) !important;
+  transform: scale(1.05);
+}
+
+/* Interactive UI Sandbox Styles */
+#mock-browser-canvas [data-hs-component] {
+  position: relative;
+  transition: background-color 0.20s ease, border-color 0.20s ease;
+}
+
+/* In Cursor Tracking Mode, show a subtle border around hovered element */
+.hs-cursor-track-hover {
+  outline: 1px dashed rgba(59, 130, 246, 0.5);
+  background-color: rgba(59, 130, 246, 0.03);
+}
+
+/* Interactive Hover Border Highlight for scrollable mock containers */
+#mock-browser-canvas,
+#mock-terminal-container {
+  transition: border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#mock-browser-canvas:hover,
+#mock-terminal-container:hover {
+  border-color: rgba(59, 130, 246, 0.4) !important; /* Brand blue border glow */
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.06), 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* Hover onboarding hint fade out */
+.hud-hover-hint {
+  transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s ease;
+}
+
+#mock-browser-canvas:hover ~ .hud-hover-hint {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px) rotate(5deg);
+}

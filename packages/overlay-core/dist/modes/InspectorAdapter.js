@@ -13,6 +13,7 @@ export class InspectorAdapter {
     currentSourceInfo = null;
     debounceTimer = null;
     maxTraversalDepth = 32;
+    lastPointerEvent = null;
     // --- Layer Picker state ---
     layerStack = [];
     activeLayerIndex = 0;
@@ -46,7 +47,16 @@ export class InspectorAdapter {
             this.controller.setFreezeMode(false);
         }
     }
+    onScroll() {
+        if (this.currentElement) {
+            this.controller.drawHighlight(this.currentElement, this.isFrozen);
+            if (this.lastPointerEvent) {
+                this.renderTooltip(this.lastPointerEvent);
+            }
+        }
+    }
     onPointerOver(event, target) {
+        this.lastPointerEvent = event;
         const rawStack = document.elementsFromPoint(event.clientX, event.clientY);
         const container = this.controller.container;
         this.layerStack = rawStack.filter(el => {
@@ -60,6 +70,7 @@ export class InspectorAdapter {
         this.resolveAndShowLayer(this.activeLayerIndex, event);
     }
     onPointerMove(event) {
+        this.lastPointerEvent = event;
         if (!this.currentElement)
             return;
         const activeEl = this.layerStack[this.activeLayerIndex];

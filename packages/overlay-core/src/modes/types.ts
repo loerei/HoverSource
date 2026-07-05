@@ -55,4 +55,7 @@ export interface InteractionMode {
 
   /** Routed when UI visibility is toggled */
   onUIVisibilityChanged(visible: boolean): void;
+
+  /** Routed from global scroll */
+  onScroll?(event: Event): void;
 }

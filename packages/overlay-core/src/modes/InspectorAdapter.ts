@@ -27,6 +27,7 @@ export class InspectorAdapter implements InteractionMode {
   private currentSourceInfo: any = null;
   private debounceTimer: any = null;
   private maxTraversalDepth = 32;
+  private lastPointerEvent: PointerEvent | null = null;
 
   // --- Layer Picker state ---
   private layerStack: HTMLElement[] = [];
@@ -64,7 +65,17 @@ export class InspectorAdapter implements InteractionMode {
     }
   }
 
+  public onScroll(): void {
+    if (this.currentElement) {
+      this.controller.drawHighlight(this.currentElement, this.isFrozen);
+      if (this.lastPointerEvent) {
+        this.renderTooltip(this.lastPointerEvent);
+      }
+    }
+  }
+
   public onPointerOver(event: PointerEvent, target: HTMLElement): void {
+    this.lastPointerEvent = event;
     const rawStack = document.elementsFromPoint(event.clientX, event.clientY) as HTMLElement[];
     const container = (this.controller as any).container as HTMLElement | null;
     this.layerStack = rawStack.filter(el => {
@@ -78,6 +89,7 @@ export class InspectorAdapter implements InteractionMode {
   }
 
   public onPointerMove(event: PointerEvent): void {
+    this.lastPointerEvent = event;
     if (!this.currentElement) return;
 
     const activeEl = this.layerStack[this.activeLayerIndex];

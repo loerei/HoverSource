@@ -51,6 +51,7 @@ class OverlayEngine implements OverlayController {
     
     globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
     globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
+    globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
 
     globalThis.addEventListener("message", (e) => {
       if (
@@ -829,6 +830,12 @@ class OverlayEngine implements OverlayController {
     if (this.isFrozen) {
       e.stopImmediatePropagation();
       e.preventDefault();
+    }
+  };
+
+  private readonly handleScroll = (e: Event) => {
+    if (this.activeMode.onScroll) {
+      this.activeMode.onScroll(e);
     }
   };
 

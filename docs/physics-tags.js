@@ -292,15 +292,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const dist = Math.hypot(dx, dy) || 1;
 
         // Threshold distance for repulsion (combined scaled radius + padding)
-        const minDist = (tagA.width + tagB.width) / 2 + 15; // Shrunk spacing for half-size
+        const minDist = (tagA.width + tagB.width) / 2 + 12; // Shrunk spacing for half-size
         if (dist < minDist) {
           const overlap = minDist - dist;
           const nx = dx / dist;
           const ny = dy / dist;
           
-          // 1. Physical separation: Push coordinates apart immediately so they never overlap
-          const sepX = nx * overlap * 0.5;
-          const sepY = ny * overlap * 0.5;
+          // Linear Position Relaxation to avoid violent snapping / feedback jitter loops
+          const percent = 0.15; // Resolve only 15% of overlap per frame
+          const slop = 0.5; // Penetration allowance to prevent micro-jitter
+          const penetration = Math.max(0, overlap - slop);
+
+          const sepX = nx * penetration * percent * 0.5;
+          const sepY = ny * penetration * percent * 0.5;
 
           if (!tagA.isDragging) {
             tagA.x -= sepX;
@@ -311,8 +315,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tagB.y += sepY;
           }
 
-          // 2. Velocity impulse: Bounce them apart dynamically (extremely soft push force 0.015)
-          const force = overlap * 0.015;
+          // Extremely soft dynamic velocity bounce (0.005)
+          const force = penetration * 0.005;
 
           if (!tagA.isDragging) {
             tagA.vx -= nx * force;

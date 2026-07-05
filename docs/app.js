@@ -372,7 +372,7 @@ function customSmoothScroll(targetEl, duration = 1000) {
       requestAnimationFrame(animation);
     } else {
       // Re-enable CSS scroll snapping once easing transition completes
-      document.documentElement.style.scrollSnapType = 'y proximity';
+      document.documentElement.style.scrollSnapType = 'y mandatory';
       document.documentElement.style.scrollBehavior = '';
     }
   }

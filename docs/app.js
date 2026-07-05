@@ -728,20 +728,7 @@ if (mockBrowserCanvas) {
 
     specCard.classList.remove('hidden');
 
-    const canvasRect = mockBrowserCanvas.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
-
-    if (hsTargetBorder) {
-      hsTargetBorder.style.top = `${targetRect.top - canvasRect.top}px`;
-      hsTargetBorder.style.left = `${targetRect.left - canvasRect.left}px`;
-      hsTargetBorder.style.width = `${targetRect.width}px`;
-      hsTargetBorder.style.height = `${targetRect.height}px`;
-      hsTargetBorder.classList.remove('hidden');
-    }
-
-    // Position SpecCard next to the element
-    specCard.style.top = `${targetRect.top}px`;
-    specCard.style.left = `${targetRect.right + 12}px`;
+    updateInspectorPositions();
   });
 
   mockBrowserCanvas.addEventListener('mouseout', (e) => {
@@ -751,6 +738,40 @@ if (mockBrowserCanvas) {
     currentlyInspectedElement = null;
     resetInspectorVisuals();
   });
+
+  // Keep target border and spec card aligned with elements when scrolling
+  mockBrowserCanvas.addEventListener('scroll', () => {
+    if (currentlyInspectedElement) {
+      updateInspectorPositions();
+    }
+  }, true);
+}
+
+function updateInspectorPositions() {
+  if (!currentlyInspectedElement || !mockBrowserCanvas) return;
+  const target = currentlyInspectedElement;
+  const canvasRect = mockBrowserCanvas.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+
+  // If target has scrolled completely out of view of the mock canvas, hide the inspector visuals
+  if (targetRect.bottom < canvasRect.top || targetRect.top > canvasRect.bottom) {
+    resetInspectorVisuals();
+    return;
+  }
+
+  if (hsTargetBorder) {
+    hsTargetBorder.style.top = `${targetRect.top - canvasRect.top}px`;
+    hsTargetBorder.style.left = `${targetRect.left - canvasRect.left}px`;
+    hsTargetBorder.style.width = `${targetRect.width}px`;
+    hsTargetBorder.style.height = `${targetRect.height}px`;
+    hsTargetBorder.classList.remove('hidden');
+  }
+
+  if (specCard) {
+    specCard.style.top = `${targetRect.top}px`;
+    specCard.style.left = `${targetRect.right + 12}px`;
+    specCard.classList.remove('hidden');
+  }
 }
 
 // Simulated typing/delay

@@ -503,14 +503,9 @@ const hudObserver = new IntersectionObserver((entries) => {
         }
       }
 
-      hudItems.forEach((item, index) => {
+      hudItems.forEach(item => {
         if (item.getAttribute('data-target') === targetId) {
           item.classList.add('active-nav-title');
-          if (hudContainer) {
-            // Remove previous active-index classes
-            hudContainer.className = hudContainer.className.replace(/\bactive-index-\d\b/g, '');
-            hudContainer.classList.add(`active-index-${index}`);
-          }
         } else {
           item.classList.remove('active-nav-title');
         }

@@ -73,81 +73,61 @@ body {
   text-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
 }
 
-/* Sliding Scrollbar HUD (Visible only when collapsed) */
-.hud-track {
-  position: absolute;
-  right: 14px;
-  top: 4px;
-  bottom: 4px;
-  width: 2px;
-  background-color: rgba(63, 63, 70, 0.2);
-  border-radius: 99px;
-  opacity: 1;
-  transition: background-color 0.3s ease, opacity 0.3s ease;
-}
+/* --- Morphing HUD Scrollbar & Dot Navigation --- */
 
-.hud-active-bar {
-  position: absolute;
-  right: 13px;
-  width: 4px;
-  height: calc(20% - 2px);
-  background-color: #3b82f6;
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
-  border-radius: 99px;
-  opacity: 1;
-  transition: top 0.30s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
-  top: 1px;
-}
-
-/* Position mapping for the 5 pages */
-.hud-nav-container.active-index-0 .hud-active-bar { top: 1px; }
-.hud-nav-container.active-index-1 .hud-active-bar { top: calc(20% + 1px); }
-.hud-nav-container.active-index-2 .hud-active-bar { top: calc(40% + 1px); }
-.hud-nav-container.active-index-3 .hud-active-bar { top: calc(60% + 1px); }
-.hud-nav-container.active-index-4 .hud-active-bar { top: calc(80% + 1px); }
-
-/* Hide continuous scrollbar when HUD is hovered or expanded */
-.hud-nav-container:hover .hud-track,
-.hud-nav-container.hud-nav-expanded .hud-track,
-.hud-nav-container:hover .hud-active-bar,
-.hud-nav-container.hud-nav-expanded .hud-active-bar {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* Scroll indicator dots (hidden by default when collapsed, visible when expanded) */
+/* Default state: Collapsed (Continuous bar & active capsule segment) */
 .nav-title-item::after {
   content: '';
   position: absolute;
-  right: -19px;
+  right: -13px; /* Align precisely with the scroll line position */
+  width: 2px;
+  height: 38px; /* Stretch to connect with adjacent dots, forming a continuous line */
+  border-radius: 0px;
+  background-color: rgba(63, 63, 70, 0.2);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Active segment in collapsed state */
+.nav-title-item.active-nav-title::after {
+  width: 4px;
+  height: 38px;
+  background-color: #3b82f6; /* brand-blue */
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
+  border-radius: 99px;
+  z-index: 2;
+  right: -14px;
+}
+
+/* --- Expanded HUD State (Hovered or Expanded class) --- */
+
+/* Morph lines back into separate individual dots */
+.hud-nav-container:hover .nav-title-item::after,
+.hud-nav-container.hud-nav-expanded .nav-title-item::after {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background-color: #27272a; /* zinc-800 */
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.3s ease, background-color 0.3s ease, transform 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
-}
-
-/* Show indicator dots when HUD is hovered or expanded */
-.hud-nav-container:hover .nav-title-item::after,
-.hud-nav-container.hud-nav-expanded .nav-title-item::after {
-  opacity: 1;
+  background-color: #3f3f46; /* zinc-700 */
+  box-shadow: none;
+  right: -19px; /* Revert to standard alignment */
   pointer-events: auto;
 }
 
-.hud-nav-container:hover .nav-title-item::after {
-  background-color: #3f3f46; /* zinc-700 */
+/* Hovering items in expanded state increases brightness */
+.hud-nav-container:hover .nav-title-item:hover::after {
+  background-color: #f4f4f5; /* zinc-100 */
 }
 
-/* Active indicator dot when HUD is hovered or expanded */
+/* Active dot/capsule in expanded state */
 .hud-nav-container:hover .nav-title-item.active-nav-title::after,
 .hud-nav-container.hud-nav-expanded .nav-title-item.active-nav-title::after {
-  opacity: 1;
-  background-color: #3b82f6; /* brand-blue */
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+  width: 5px;
   height: 12px;
   border-radius: 2px;
+  background-color: #3b82f6; /* brand-blue */
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+  right: -19px;
 }
 
 /* Premium visual effects */

@@ -41,7 +41,39 @@
     <header class="w-full border-b border-zinc-900 bg-[#0b0b0d]/95" data-hs-component="Header" data-hs-file="docs/index.html" data-hs-line="40" data-hs-col="5" data-hs-styles="w-full border-b border-zinc-900 bg-[#0b0b0d]/95" data-hs-lang="HTML">
       <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <img src="logo.jpg" alt="HoverSource Logo" class="h-8 w-8 rounded-lg object-cover border border-zinc-800 shadow-md">
+          <svg class="h-8 w-8 rounded-lg shadow-md" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" rx="22" fill="white"/>
+            <!-- Grid Lines -->
+            <line x1="20" y1="10" x2="20" y2="90" stroke="black" stroke-width="1.5" />
+            <line x1="35" y1="10" x2="35" y2="90" stroke="black" stroke-width="1.5" />
+            <line x1="50" y1="10" x2="50" y2="90" stroke="black" stroke-width="1.5" />
+            <line x1="65" y1="10" x2="65" y2="90" stroke="black" stroke-width="1.5" />
+            <line x1="80" y1="10" x2="80" y2="90" stroke="black" stroke-width="1.5" />
+            
+            <line x1="10" y1="20" x2="90" y2="20" stroke="black" stroke-width="1.5" />
+            <line x1="10" y1="35" x2="90" y2="35" stroke="black" stroke-width="1.5" />
+            <line x1="10" y1="50" x2="90" y2="50" stroke="black" stroke-width="1.5" />
+            <line x1="10" y1="65" x2="90" y2="65" stroke="black" stroke-width="1.5" />
+            <line x1="10" y1="80" x2="90" y2="80" stroke="black" stroke-width="1.5" />
+            
+            <!-- Nodes (Dots) -->
+            <circle cx="20" cy="20" r="3" fill="black" />
+            <circle cx="50" cy="20" r="3" fill="black" />
+            <circle cx="80" cy="20" r="3" fill="black" />
+            <circle cx="20" cy="50" r="3" fill="black" />
+            <circle cx="65" cy="50" r="3" fill="black" />
+            <circle cx="80" cy="50" r="3" fill="black" />
+            <circle cx="20" cy="80" r="3" fill="black" />
+            <circle cx="50" cy="80" r="3" fill="black" />
+            <circle cx="65" cy="80" r="3" fill="black" />
+            
+            <!-- White mask for braces -->
+            <circle cx="40" cy="40" r="16" fill="white" />
+            <text x="40" y="47" font-family="monospace" font-size="22" font-weight="900" fill="black" text-anchor="middle">{}</text>
+            
+            <!-- Cursor -->
+            <path d="M52,52 L76,64 L68,69 L77,78 L73,82 L64,73 L59,81 Z" fill="white" stroke="black" stroke-width="2.5" stroke-linejoin="miter" />
+          </svg>
           <span class="font-semibold text-lg tracking-tight">HoverSource</span>
         </div>
         <nav class="hidden md:flex items-center gap-6 text-sm text-zinc-400 font-medium">

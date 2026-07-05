@@ -412,35 +412,24 @@ document.addEventListener('DOMContentLoaded', () => {
       const maxOpacity = 1.0;
       const opacity = baseOpacity + (maxOpacity - baseOpacity) * tag.glowIntensity;
 
-      let r;
-      let g;
-      let b;
+      let textColor;
       let shadowColor;
       
-      // Default inactive color: text-zinc-500 (RGB: 113, 113, 122)
+      // Maintain theme colors at all times, only changing opacity/glow
       if (tag.theme === "orange") {
-        // Interpolate to amber-400 (RGB: 251, 191, 36)
-        r = Math.round(113 + (251 - 113) * tag.glowIntensity);
-        g = Math.round(113 + (191 - 113) * tag.glowIntensity);
-        b = Math.round(122 + (36 - 122) * tag.glowIntensity);
-        shadowColor = `rgba(245, 158, 11, ${0.5 * tag.glowIntensity})`;
+        textColor = "rgb(245, 158, 11)"; // Amber-500
+        shadowColor = `rgba(245, 158, 11, ${0.6 * tag.glowIntensity})`;
       } else if (tag.theme === "purple") {
-        // Interpolate to purple-400 (RGB: 192, 132, 252)
-        r = Math.round(113 + (192 - 113) * tag.glowIntensity);
-        g = Math.round(113 + (132 - 113) * tag.glowIntensity);
-        b = Math.round(122 + (252 - 122) * tag.glowIntensity);
-        shadowColor = `rgba(168, 85, 247, ${0.5 * tag.glowIntensity})`;
+        textColor = "rgb(168, 85, 247)"; // Purple-500
+        shadowColor = `rgba(168, 85, 247, ${0.6 * tag.glowIntensity})`;
       } else {
-        // Interpolate to blue-400 (RGB: 96, 165, 250)
-        r = Math.round(113 + (96 - 113) * tag.glowIntensity);
-        g = Math.round(113 + (165 - 113) * tag.glowIntensity);
-        b = Math.round(122 + (250 - 122) * tag.glowIntensity);
-        shadowColor = `rgba(59, 130, 246, ${0.5 * tag.glowIntensity})`;
+        textColor = "rgb(59, 130, 246)"; // Blue-500
+        shadowColor = `rgba(59, 130, 246, ${0.6 * tag.glowIntensity})`;
       }
 
-      tag.element.style.color = `rgb(${r}, ${g}, ${b})`;
+      tag.element.style.color = textColor;
       tag.element.style.opacity = opacity;
-      tag.element.style.filter = tag.glowIntensity > 0.05 ? `drop-shadow(0 0 10px ${shadowColor})` : 'none';
+      tag.element.style.filter = tag.glowIntensity > 0.05 ? `drop-shadow(0 0 12px ${shadowColor})` : 'none';
       tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0) scale(${scale})`;
     });
 

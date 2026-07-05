@@ -404,13 +404,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const activeCls = activeClasses[data.theme];
       const inactiveCls = inactiveClasses[data.theme];
 
-      activeCls.forEach(cls => activeGlowTag.element.classList.remove(cls));
-      inactiveCls.forEach(cls => activeGlowTag.element.classList.add(cls));
+      for (const cls of activeCls) {
+        activeGlowTag.element.classList.remove(cls);
+      }
+      for (const cls of inactiveCls) {
+        activeGlowTag.element.classList.add(cls);
+      }
       activeGlowTag = null;
     }
 
-    // 2. Randomly select a new tag, excluding currently dragged tag
-    const eligibleTags = tags.filter(tag => !tag.isDragging);
+    // 2. Randomly select a new tag, excluding currently dragged or hovered tags
+    const eligibleTags = tags.filter(tag => !tag.isDragging && !tag.element.matches(':hover'));
     if (eligibleTags.length === 0) {
       setTimeout(runAmbientGlow, 1000);
       return;
@@ -423,8 +427,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeCls = activeClasses[data.theme];
     const inactiveCls = inactiveClasses[data.theme];
     
-    inactiveCls.forEach(cls => randomTag.element.classList.remove(cls));
-    activeCls.forEach(cls => randomTag.element.classList.add(cls));
+    for (const cls of inactiveCls) {
+      randomTag.element.classList.remove(cls);
+    }
+    for (const cls of activeCls) {
+      randomTag.element.classList.add(cls);
+    }
     activeGlowTag = randomTag;
 
     // 4. Schedule deactivation and next glow pulse
@@ -434,8 +442,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setTimeout(() => {
       if (activeGlowTag === randomTag) {
-        activeCls.forEach(cls => randomTag.element.classList.remove(cls));
-        inactiveCls.forEach(cls => randomTag.element.classList.add(cls));
+        for (const cls of activeCls) {
+          randomTag.element.classList.remove(cls);
+        }
+        for (const cls of inactiveCls) {
+          randomTag.element.classList.add(cls);
+        }
         activeGlowTag = null;
       }
     }, glowDuration);

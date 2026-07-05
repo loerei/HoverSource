@@ -344,3 +344,46 @@ if (keyC) {
     keyC.classList.toggle('key-active-glow');
   }, 1500);
 }
+
+// Custom Easing Smooth Scroll Transition (easeInOutCubic)
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function customSmoothScroll(targetEl, duration = 1000) {
+  const targetPos = targetEl.getBoundingClientRect().top + window.pageYOffset;
+  const startPos = window.pageYOffset;
+  const distance = targetPos - startPos;
+  let startTime = null;
+
+  // Temporarily disable CSS scroll snapping to avoid animation jitter
+  document.documentElement.style.scrollSnapType = 'none';
+
+  function animation(currentTime) {
+    if (startTime === null) startTime = currentTime;
+    const timeElapsed = currentTime - startTime;
+    const progress = easeInOutCubic(Math.min(timeElapsed / duration, 1));
+    
+    window.scrollTo(0, startPos + distance * progress);
+
+    if (timeElapsed < duration) {
+      requestAnimationFrame(animation);
+    } else {
+      // Re-enable CSS scroll snapping once easing transition completes
+      document.documentElement.style.scrollSnapType = 'y mandatory';
+    }
+  }
+  requestAnimationFrame(animation);
+}
+
+// Intercept all anchor link clicks for custom eased transition
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+  anchor.addEventListener('click', function(e) {
+    e.preventDefault();
+    const targetId = this.getAttribute('href');
+    const targetEl = document.querySelector(targetId);
+    if (targetEl) {
+      customSmoothScroll(targetEl, 900); // 900ms easing slide transition
+    }
+  });
+});

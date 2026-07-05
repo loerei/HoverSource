@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   canvas.id = 'floating-physics-canvas';
   canvas.className = 'absolute inset-0 pointer-events-none overflow-hidden z-0';
   hero.appendChild(canvas);
-  console.log("HoverSource Physics: Canvas created and appended.");
+  console.log("HoverSource Physics: Canvas created.");
 
   const tagsData = [
     { text: "-94.5% Tokens", theme: "orange", size: "text-2xl" },
@@ -33,24 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   const tags = [];
-  const themeClasses = {
-    orange: "text-amber-500/25 hover:text-amber-400 hover:drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]",
-    purple: "text-purple-500/25 hover:text-purple-400 hover:drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]",
-    blue: "text-blue-500/25 hover:text-blue-400 hover:drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"
-  };
-
-  const activeClasses = {
-    orange: ["text-amber-400", "scale-105", "drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]"],
-    purple: ["text-purple-400", "scale-105", "drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]"],
-    blue: ["text-blue-400", "scale-105", "drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"]
-  };
-
-  const inactiveClasses = {
-    orange: ["text-amber-500/25"],
-    purple: ["text-purple-500/25"],
-    blue: ["text-blue-500/25"]
-  };
-
   const header = hero.querySelector('header');
   let headerHeight = header ? header.offsetHeight : 80;
 
@@ -59,8 +41,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const el = document.createElement('div');
     
     // Start with opacity 0 to prevent flash/pile-up before layout calculation
-    el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto transition-all duration-300 hover:scale-105 opacity-0 ${data.size}`;
+    // Crucial: No generic transition-all! Only transition opacity, color and filters inline.
+    el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto opacity-0 ${data.size}`;
     el.innerText = data.text;
+    
+    // Smooth transitions for color, opacity and glow filter. No transform transition to avoid physics jitter!
+    el.style.transition = 'color 0.6s ease, opacity 0.6s ease, filter 0.6s ease';
     canvas.appendChild(el);
 
     // Initialize with rough random position to prevent starting at 0,0
@@ -132,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Reveal element smoothly after positioning
       tag.element.classList.remove('opacity-0');
     });
-    console.log("HoverSource Physics: Tags positioned and revealed.");
+    console.log("HoverSource Physics: Tags positioned.");
   }
 
   // Initial layout delay to ensure offsets are computed correctly
@@ -155,6 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.lastMouseTime = Date.now();
       tag.history = [{ x: clientX, y: clientY, t: tag.lastMouseTime }];
 
+      // Temporarily disable transitions during dragging for zero lag
       tag.element.style.transition = 'none';
 
       window.addEventListener('mousemove', onMouseMove);
@@ -196,7 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!tag.isDragging) return;
       tag.isDragging = false;
       
-      tag.element.style.transition = 'color 0.3s ease, text-shadow 0.3s ease, filter 0.3s ease, transform 0.3s ease';
+      // Restore smooth color/glow transitions
+      tag.element.style.transition = 'color 0.6s ease, opacity 0.6s ease, filter 0.6s ease';
 
       // Calculate throwing momentum
       if (tag.history.length >= 2) {
@@ -261,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let w = activeWaves.length - 1; w >= 0; w--) {
       const wave = activeWaves[w];
       wave.radius += wave.speed;
-      wave.strength *= 0.985; // Decay wave strength gently as it travels
+      wave.strength *= 0.995; // Decay wave strength extremely slowly for full range impact
 
       // Check impact on each tag
       tags.forEach(tag => {
@@ -275,11 +263,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const ty = tag.y + tag.height / 2;
         const distance = Math.hypot(tx - wave.x, ty - wave.y) || 1;
 
-        // Wave has hit this tag (detection band width of 200px)
-        if (wave.radius >= distance && wave.radius - 200 < distance) {
-          const proximity = Math.max(0, 1.0 - distance / wave.maxRadius);
-          const intensity = proximity * wave.strength;
-          tag.glowIntensity = Math.max(tag.glowIntensity, intensity);
+        // Wave has hit this tag (wide detection band of 220px)
+        if (wave.radius >= distance && wave.radius - 220 < distance) {
+          // Flatten proximity to sustain intensity over distance, then drop off
+          const proximity = Math.min(1.0, (1.0 - distance / wave.maxRadius) * 2.0);
+          
+          // Boost intensity factor to 1.8 to ensure highly visible glows
+          const intensity = proximity * wave.strength * 1.8;
+          tag.glowIntensity = Math.min(1.0, Math.max(tag.glowIntensity, intensity));
         }
       });
 

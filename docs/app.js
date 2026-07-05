@@ -176,6 +176,7 @@ searchTriggerBtn.addEventListener('mouseenter', (e) => {
   specCard.classList.remove('hidden');
 });
 
+// Position HoverSource floating card near the button
 searchTriggerBtn.addEventListener('mouseleave', () => {
   mockOverlay.classList.add('hidden');
   specCard.classList.add('hidden');
@@ -371,7 +372,7 @@ function customSmoothScroll(targetEl, duration = 1000) {
       requestAnimationFrame(animation);
     } else {
       // Re-enable CSS scroll snapping once easing transition completes
-      document.documentElement.style.scrollSnapType = 'y mandatory';
+      document.documentElement.style.scrollSnapType = 'y proximity';
       document.documentElement.style.scrollBehavior = '';
     }
   }

@@ -2,7 +2,7 @@
 html {
   margin: 0;
   padding: 0;
-  scroll-snap-type: y mandatory;
+  scroll-snap-type: y proximity;
   overflow-y: auto;
   height: 100%;
 }
@@ -16,7 +16,7 @@ body {
 
 .snap-section {
   scroll-snap-align: start;
-  scroll-snap-stop: always;
+  scroll-snap-stop: normal;
   min-height: 100vh;
   display: flex;
   flex-direction: column;

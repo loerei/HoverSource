@@ -387,6 +387,24 @@ function updateBenchmarkUI() {
     btnGroupB.className = `hover:text-zinc-300 transition-colors focus:outline-none ${val === 1 ? 'text-brand-purple font-semibold' : 'text-zinc-500 font-normal'}`;
     btnGroupC.className = `hover:text-zinc-300 transition-colors focus:outline-none ${val === 2 ? 'text-brand-blue font-semibold' : 'text-zinc-500 font-normal'}`;
   }
+
+  // Update custom slider visual position and color
+  const handle = document.getElementById('custom-slider-handle');
+  const progress = document.getElementById('custom-slider-progress');
+  if (handle && progress) {
+    const pct = val / 2;
+    handle.style.transition = 'left 0.2s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.3s ease, box-shadow 0.3s ease';
+    progress.style.transition = 'width 0.2s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.3s ease';
+    
+    handle.style.left = `${pct * 100}%`;
+    progress.style.width = `${pct * 100}%`;
+    
+    const colorClass = val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue';
+    const shadowClass = val === 0 ? 'shadow-brand-amber/30' : val === 1 ? 'shadow-brand-purple/30' : 'shadow-brand-blue/30';
+    
+    handle.className = `absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full shadow-lg cursor-grab active:cursor-grabbing ${colorClass} ${shadowClass}`;
+    progress.className = `absolute left-0 top-1/2 -translate-y-1/2 h-1 rounded-full pointer-events-none ${colorClass}`;
+  }
 }
 
 if (benchmarkSlider) {
@@ -407,6 +425,90 @@ if (btnGroupA && btnGroupB && btnGroupC && benchmarkSlider) {
     updateBenchmarkUI();
   });
 }
+
+// Custom Slider Dragging & Snapping Logic
+function initCustomSlider() {
+  const track = document.getElementById('custom-slider-track');
+  const handle = document.getElementById('custom-slider-handle');
+  const progress = document.getElementById('custom-slider-progress');
+  if (!track || !handle || !progress || !benchmarkSlider) return;
+
+  let isDragging = false;
+
+  function updateSliderPosition(clientX) {
+    const rect = track.getBoundingClientRect();
+    let pct = (clientX - rect.left) / rect.width;
+    pct = Math.max(0, Math.min(1, pct));
+
+    // Update visuals instantly during drag (no transition)
+    handle.style.transition = 'none';
+    progress.style.transition = 'none';
+    handle.style.left = `${pct * 100}%`;
+    progress.style.width = `${pct * 100}%`;
+
+    // Determine nearest step (0, 1, 2)
+    const val = Math.round(pct * 2);
+    if (parseInt(benchmarkSlider.value, 10) !== val) {
+      benchmarkSlider.value = val;
+      updateBenchmarkUI();
+    }
+  }
+
+  function onMouseDown(e) {
+    isDragging = true;
+    updateSliderPosition(e.clientX);
+    document.body.style.cursor = 'grabbing';
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  function onMouseMove(e) {
+    if (!isDragging) return;
+    updateSliderPosition(e.clientX);
+  }
+
+  function onMouseUp(e) {
+    if (!isDragging) return;
+    isDragging = false;
+    document.body.style.cursor = '';
+
+    // Snap to nearest step
+    updateBenchmarkUI();
+
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+  }
+
+  // Touch support for mobile devices
+  function onTouchStart(e) {
+    isDragging = true;
+    updateSliderPosition(e.touches[0].clientX);
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd);
+  }
+
+  function onTouchMove(e) {
+    if (!isDragging) return;
+    updateSliderPosition(e.touches[0].clientX);
+  }
+
+  function onTouchEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    updateBenchmarkUI();
+
+    window.removeEventListener('touchmove', onTouchMove);
+    window.removeEventListener('touchend', onTouchEnd);
+  }
+
+  track.addEventListener('mousedown', onMouseDown);
+  track.addEventListener('touchstart', onTouchStart, { passive: true });
+}
+
+// Initialize Custom Slider
+initCustomSlider();
 
 // Codebase Toggle Listeners
 if (toggleCalcom && toggleYumeshelf) {

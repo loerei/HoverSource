@@ -163,29 +163,21 @@ body {
 }
 
 /* Custom range slider styling */
-#benchmark-slider {
-  -webkit-appearance: none;
-  appearance: none;
+#custom-slider-track {
   background: #18181b; /* zinc-900 */
   border: 1px solid #27272a; /* zinc-800 */
-  height: 8px;
-  border-radius: 9999px;
-  outline: none;
 }
-#benchmark-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #3b82f6; /* brand-blue */
-  cursor: pointer;
-  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease;
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+#custom-slider-handle {
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s ease, box-shadow 0.3s ease;
 }
-#benchmark-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-  background: #60a5fa; /* lighter blue */
+#custom-slider-handle:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+}
+#custom-slider-handle:active {
+  transform: translate(-50%, -50%) scale(1.1);
+  cursor: grabbing;
 }
 
 /* Active Keyboard key glow effect */

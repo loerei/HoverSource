@@ -217,7 +217,7 @@ function findConfigPath(actualCmd: string): string | undefined {
   const configMatch = /(?:--config|-c)\s+([^\s"'\\]+)/.exec(actualCmd);
   if (configMatch) return configMatch[1];
   
-  const fileMatch = /([\w\-./\\]+\.config\.[jt]s)/.exec(actualCmd);
+  const fileMatch = /([\w\-./\\]+?\.config\.[jt]s)/.exec(actualCmd);
   return fileMatch ? fileMatch[1] : undefined;
 }
 
@@ -767,6 +767,39 @@ async function handleRestartSubcommand(requestedPort: number, projectRoot: strin
   console.log(`[HoverSource] Companion server restarted on port ${serverPort}.`);
 }
 
+function checkHasStartScript(projectRoot: string): boolean {
+  try {
+    const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+      return !!pkg?.scripts?.start;
+    }
+  } catch {}
+  return false;
+}
+
+async function handleTargetOrExec(
+  targetArg: string | undefined,
+  execArg: string | undefined,
+  serverPort: number,
+  projectRoot: string,
+  debugPort: number,
+  args: any,
+  subcommand: string | undefined
+) {
+  if (targetArg) {
+    const safeTarget = validateSafeUrl(targetArg);
+    const isTargetUp = await checkTargetUrlUp(safeTarget);
+    if (!isTargetUp) {
+      console.warn(`\x1b[33m[HoverSource] ⚠️  WARNING: Target server at ${safeTarget} is not responding.\x1b[0m`);
+      console.warn(`[HoverSource] If your dev server starts slowly, HoverSource will automatically retry requests.`);
+    }
+    await runProxyMode(safeTarget, serverPort, args);
+  } else if (execArg) {
+    await handleExecMode(execArg, subcommand, projectRoot, debugPort, serverPort, args);
+  }
+}
+
 async function main() {
   restoreLeftoverPatches();
 
@@ -782,16 +815,7 @@ async function main() {
   const debugPort = Number.parseInt(String(args["debug-port"] || 9222), 10);
 
   // Check if start script exists in package.json to avoid conflict
-  let hasStartScript = false;
-  try {
-    const pkgPath = validateSafePath(path.join(projectRoot, "package.json"));
-    if (fs.existsSync(pkgPath)) {
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-      if (pkg?.scripts?.start) {
-        hasStartScript = true;
-      }
-    }
-  } catch {}
+  const hasStartScript = checkHasStartScript(projectRoot);
 
   // суб-команда Start
   // subcommand Restart
@@ -825,17 +849,7 @@ async function main() {
   await startCompanionServer({ port: serverPort, projectRoot, debugPort });
   console.log(`[HoverSource] Companion server running on port ${serverPort}.`);
 
-  if (targetArg) {
-    const safeTarget = validateSafeUrl(targetArg);
-    const isTargetUp = await checkTargetUrlUp(safeTarget);
-    if (!isTargetUp) {
-      console.warn(`\x1b[33m[HoverSource] ⚠️  WARNING: Target server at ${safeTarget} is not responding.\x1b[0m`);
-      console.warn(`[HoverSource] If your dev server starts slowly, HoverSource will automatically retry requests.`);
-    }
-    await runProxyMode(safeTarget, serverPort, args);
-  } else if (execArg) {
-    await handleExecMode(execArg, subcommand, projectRoot, debugPort, serverPort, args);
-  }
+  await handleTargetOrExec(targetArg, execArg, serverPort, projectRoot, debugPort, args, subcommand);
 }
 
 function showHelp() {

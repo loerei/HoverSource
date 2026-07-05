@@ -43,7 +43,7 @@ export class ProxyResponsePipeline {
     let html = buffer.toString("utf-8");
     
     // Strip integrity attributes to avoid SRI mismatches when injecting or modifying scripts/styles
-    html = html.replace(/\s+integrity\s*=\s*(?:"[^"]*"|'[^']*'|[^'"\s>]+)/gi, "");
+    html = html.replace(/\sintegrity\s*=\s*(?:"[^"]*"|'[^']*'|[^'"\s>]+)/gi, "");
 
     const injection = `<script src="${options.overlayScriptUrl}"></script>`;
 

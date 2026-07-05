@@ -62,6 +62,15 @@ describe("ProxyResponsePipeline", () => {
       expect(resultStr).toContain(expectedInjection);
     });
 
+    it("should strip integrity attributes", () => {
+      const htmlWithIntegrity = '<html><head><script src="test.js" integrity="sha384-xyz" crossorigin="anonymous"></script></head><body><h1>Hello World</h1></body></html>';
+      const body = Buffer.from(htmlWithIntegrity, "utf-8");
+      const result = pipeline.transform(body, "", options);
+      const resultStr = result.toString("utf-8");
+      expect(resultStr).not.toContain("integrity");
+      expect(resultStr).toContain('<script src="test.js" crossorigin="anonymous">');
+    });
+
     it("should return empty buffer if body is empty", () => {
       const body = Buffer.alloc(0);
       const result = pipeline.transform(body, "", options);

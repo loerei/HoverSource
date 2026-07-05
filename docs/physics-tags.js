@@ -167,8 +167,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const now = Date.now();
       const rect = canvas.getBoundingClientRect();
       
-      let newX = clientX - rect.left - tag.dragOffsetX;
-      let newY = clientY - rect.top - tag.dragOffsetY;
+      const newX = clientX - rect.left - tag.dragOffsetX;
+      const newY = clientY - rect.top - tag.dragOffsetY;
 
       // Keep within boundaries during drag
       tag.x = Math.max(0, Math.min(containerWidth - tag.width, newX));
@@ -219,8 +219,43 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Physics animation loop
   function updatePhysics() {
-    containerWidth = canvas.clientWidth;
-    containerHeight = canvas.clientHeight;
+    containerWidth = canvas.clientWidth || window.innerWidth;
+    containerHeight = canvas.clientHeight || window.innerHeight;
+
+    // 1. Calculate mutual repulsion forces to prevent overlapping
+    for (let i = 0; i < tags.length; i++) {
+      for (let j = i + 1; j < tags.length; j++) {
+        const tagA = tags[i];
+        const tagB = tags[j];
+
+        // Centers
+        const ax = tagA.x + tagA.width / 2;
+        const ay = tagA.y + tagA.height / 2;
+        const bx = tagB.x + tagB.width / 2;
+        const by = tagB.y + tagB.height / 2;
+
+        const dx = bx - ax;
+        const dy = by - ay;
+        const dist = Math.hypot(dx, dy) || 1;
+
+        // Threshold distance for repulsion (combined radius + padding)
+        const minDist = (tagA.width + tagB.width) / 2 + 25;
+        if (dist < minDist) {
+          const force = (minDist - dist) * 0.015; // Gentle pushing force
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          if (!tagA.isDragging) {
+            tagA.vx -= nx * force;
+            tagA.vy -= ny * force;
+          }
+          if (!tagB.isDragging) {
+            tagB.vx += nx * force;
+            tagB.vy += ny * force;
+          }
+        }
+      }
+    }
 
     tags.forEach(tag => {
       if (tag.isDragging) return;
@@ -237,11 +272,20 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.vx += (Math.random() - 0.5) * 0.04;
       tag.vy += (Math.random() - 0.5) * 0.04;
 
-      // Speed limits
+      // Ensure minimum drift speed so they never stop completely
+      const minSpeed = 0.35;
       const currentSpeed = Math.hypot(tag.vx, tag.vy);
-      if (currentSpeed > 3.0) {
-        tag.vx = (tag.vx / currentSpeed) * 3.0;
-        tag.vy = (tag.vy / currentSpeed) * 3.0;
+      if (currentSpeed < minSpeed) {
+        const angle = currentSpeed > 0.01 ? Math.atan2(tag.vy, tag.vx) : Math.random() * Math.PI * 2;
+        tag.vx = Math.cos(angle) * minSpeed;
+        tag.vy = Math.sin(angle) * minSpeed;
+      }
+
+      // Speed limits
+      const maxSpeed = 12.0;
+      if (currentSpeed > maxSpeed) {
+        tag.vx = (tag.vx / currentSpeed) * maxSpeed;
+        tag.vy = (tag.vy / currentSpeed) * maxSpeed;
       }
 
       // Bounce with damping off container borders

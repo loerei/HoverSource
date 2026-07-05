@@ -60,8 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
       theme: data.theme,
       x: roughX,
       y: roughY,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: (Math.random() - 0.5) * 0.5,
+      vx: (Math.random() - 0.5) * 0.2, // Very slow initial drift (0.2)
+      vy: (Math.random() - 0.5) * 0.2,
       width: 0,
       height: 0,
       glowIntensity: 0.0,
@@ -348,12 +348,12 @@ document.addEventListener('DOMContentLoaded', () => {
         tag.vx *= 0.985;
         tag.vy *= 0.985;
 
-        // Subtle ambient drift force so they never stop completely
-        tag.vx += (Math.random() - 0.5) * 0.04;
-        tag.vy += (Math.random() - 0.5) * 0.04;
+        // Extremely subtle ambient drift force (reduced to 0.012)
+        tag.vx += (Math.random() - 0.5) * 0.012;
+        tag.vy += (Math.random() - 0.5) * 0.012;
 
         // Ensure minimum drift speed so they never stop completely
-        const minSpeed = 0.2; // Slow elegant drift (0.2)
+        const minSpeed = 0.08; // Extremely slow elegant drift (0.08)
         const currentSpeed = Math.hypot(tag.vx, tag.vy);
         if (currentSpeed < minSpeed) {
           const angle = currentSpeed > 0.01 ? Math.atan2(tag.vy, tag.vx) : Math.random() * Math.PI * 2;
@@ -362,7 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Speed limits
-        const maxSpeed = 2.0; // Slow max speed cap (2.0)
+        const maxSpeed = 0.8; // Slow max speed cap (0.8) to prevent chaotic movements
         if (currentSpeed > maxSpeed) {
           tag.vx = (tag.vx / currentSpeed) * maxSpeed;
           tag.vy = (tag.vy / currentSpeed) * maxSpeed;

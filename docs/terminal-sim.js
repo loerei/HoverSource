@@ -393,8 +393,8 @@ function updateBenchmarkUI() {
   const progress = document.getElementById('custom-slider-progress');
   if (handle && progress) {
     const pct = val / 2;
-    handle.style.transition = 'left 0.2s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.3s ease, box-shadow 0.3s ease';
-    progress.style.transition = 'width 0.2s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.3s ease';
+    handle.style.transition = 'left 0.2s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.5s ease, box-shadow 0.5s ease';
+    progress.style.transition = 'width 0.2s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.5s ease';
     
     handle.style.left = `${pct * 100}%`;
     progress.style.width = `${pct * 100}%`;
@@ -440,9 +440,9 @@ function initCustomSlider() {
     let pct = (clientX - rect.left) / rect.width;
     pct = Math.max(0, Math.min(1, pct));
 
-    // Update visuals instantly during drag (no transition)
-    handle.style.transition = 'none';
-    progress.style.transition = 'none';
+    // Update visuals instantly during drag (no left/width transition, but keep smooth color transition)
+    handle.style.transition = 'background-color 0.5s ease, box-shadow 0.5s ease';
+    progress.style.transition = 'background-color 0.5s ease';
     handle.style.left = `${pct * 100}%`;
     progress.style.width = `${pct * 100}%`;
 

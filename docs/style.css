@@ -171,3 +171,15 @@ body {
   outline: 1px dashed rgba(59, 130, 246, 0.5);
   background-color: rgba(59, 130, 246, 0.03);
 }
+
+/* Interactive Hover Border Highlight for scrollable mock containers */
+#mock-browser-canvas,
+#mock-terminal-container {
+  transition: border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#mock-browser-canvas:hover,
+#mock-terminal-container:hover {
+  border-color: rgba(59, 130, 246, 0.4) !important; /* Brand blue border glow */
+  box-shadow: 0 0 25px rgba(59, 130, 246, 0.06), 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}

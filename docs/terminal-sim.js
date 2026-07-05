@@ -492,6 +492,17 @@ const hudObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
     if (entry.isIntersecting) {
       const targetId = `#${entry.target.id}`;
+      
+      // Expand HUD navigation at Overview section, collapse elsewhere
+      const hudContainer = document.querySelector('.hud-nav-container');
+      if (hudContainer) {
+        if (targetId === '#hero-section') {
+          hudContainer.classList.add('hud-nav-expanded');
+        } else {
+          hudContainer.classList.remove('hud-nav-expanded');
+        }
+      }
+
       hudItems.forEach(item => {
         if (item.getAttribute('data-target') === targetId) {
           item.classList.add('active-nav-title');

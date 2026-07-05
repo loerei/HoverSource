@@ -50,19 +50,22 @@ body {
   outline: none;
 }
 
-/* Show text on hover */
-.hud-nav-container:hover .nav-title-item {
+/* Show text on hover or when expanded (e.g. on Overview hero section) */
+.hud-nav-container:hover .nav-title-item,
+.hud-nav-container.hud-nav-expanded .nav-title-item {
   opacity: 0.6;
   transform: translateX(0);
   pointer-events: auto;
 }
 
-.hud-nav-container:hover .nav-title-item:hover {
+.hud-nav-container:hover .nav-title-item:hover,
+.hud-nav-container.hud-nav-expanded .nav-title-item:hover {
   opacity: 1;
   color: #f4f4f5; /* zinc-100 */
 }
 
-.hud-nav-container:hover .nav-title-item.active-nav-title {
+.hud-nav-container:hover .nav-title-item.active-nav-title,
+.hud-nav-container.hud-nav-expanded .nav-title-item.active-nav-title {
   opacity: 1;
   color: #3b82f6; /* brand-blue */
   font-weight: 600;

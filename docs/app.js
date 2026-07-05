@@ -288,7 +288,7 @@ sendBtn.addEventListener('click', () => {
 const benchmarkData = {
   calcom: [
     {
-      label: 'Group A: No Context (Cal.com)',
+      label: 'Group A: No Context',
       steps: '65.6',
       tokens: '651,681',
       peak: '28,257',
@@ -299,7 +299,7 @@ const benchmarkData = {
       colorClass: 'text-brand-amber'
     },
     {
-      label: 'Group B: File Only (Cal.com)',
+      label: 'Group B: File Only',
       steps: '18.0',
       tokens: '37,858',
       peak: '7,372',
@@ -310,7 +310,7 @@ const benchmarkData = {
       colorClass: 'text-brand-purple'
     },
     {
-      label: 'Group C: HoverSource (Cal.com)',
+      label: 'Group C: HoverSource',
       steps: '17.1',
       tokens: '35,733',
       peak: '6,486',
@@ -323,7 +323,7 @@ const benchmarkData = {
   ],
   yumeshelf: [
     {
-      label: 'Group A: No Context (YumeShelf)',
+      label: 'Group A: No Context',
       steps: '34.4',
       tokens: '118,354',
       peak: '14,140',
@@ -334,7 +334,7 @@ const benchmarkData = {
       colorClass: 'text-brand-amber'
     },
     {
-      label: 'Group B: File Only (YumeShelf)',
+      label: 'Group B: File Only',
       steps: '22.0',
       tokens: '44,382',
       peak: '8,589',
@@ -345,7 +345,7 @@ const benchmarkData = {
       colorClass: 'text-brand-purple'
     },
     {
-      label: 'Group C: HoverSource (YumeShelf)',
+      label: 'Group C: HoverSource',
       steps: '26.0',
       tokens: '61,255',
       peak: '9,984',

@@ -437,10 +437,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     activeGlowTag = randomTag;
 
-    // 4. Schedule deactivation and next glow pulse
-    // Duration: 1800ms glowing, next pulse starts after 2800ms (1000ms pause)
+    // 4. Schedule deactivation and next glow pulse (cross-fade continuously)
     const glowDuration = 1800;
-    const interval = 2800;
+    const interval = 1800;
 
     setTimeout(() => {
       if (activeGlowTag === randomTag) {

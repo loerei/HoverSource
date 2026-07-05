@@ -35,6 +35,9 @@ document.addEventListener('DOMContentLoaded', () => {
     blue: "text-blue-500/25 hover:text-blue-400 hover:drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"
   };
 
+  const header = hero.querySelector('header');
+  let headerHeight = header ? header.offsetHeight : 80;
+
   // Setup tag elements
   tagsData.forEach((data) => {
     const el = document.createElement('div');
@@ -51,7 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const roughW = window.innerWidth || 1200;
     const roughH = window.innerHeight || 800;
     const roughX = Math.random() * (roughW - 150);
-    const roughY = Math.random() * (roughH - 100);
+    const roughY = Math.random() * (roughH - 180) + 80;
 
     tags.push({
       element: el,
@@ -77,10 +80,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let containerWidth = canvas.clientWidth;
   let containerHeight = canvas.clientHeight;
 
-  // Position tags randomly, avoiding the exact center initially
+  // Position tags randomly, avoiding the exact center initially and staying below header
   function positionTags() {
     containerWidth = canvas.clientWidth || window.innerWidth;
     containerHeight = canvas.clientHeight || window.innerHeight;
+    headerHeight = header ? header.offsetHeight : 80;
 
     tags.forEach((tag) => {
       tag.width = tag.element.offsetWidth || 100;
@@ -88,10 +92,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Distribute in sections to avoid clustering in the center text area
       let posX = Math.random() * (containerWidth - tag.width);
-      let posY = Math.random() * (containerHeight - tag.height);
+      let posY = Math.random() * (containerHeight - tag.height - headerHeight) + headerHeight;
 
       const centerX = containerWidth / 2;
-      const centerY = containerHeight / 2;
+      const centerY = (containerHeight - headerHeight) / 2 + headerHeight;
       const marginX = containerWidth * 0.25;
       const marginY = containerHeight * 0.25;
 
@@ -106,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Clamp values
       tag.x = Math.max(0, Math.min(containerWidth - tag.width, posX));
-      tag.y = Math.max(0, Math.min(containerHeight - tag.height, posY));
+      tag.y = Math.max(headerHeight, Math.min(containerHeight - tag.height, posY));
       
       tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0)`;
       
@@ -161,9 +165,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const newX = clientX - rect.left - tag.dragOffsetX;
       const newY = clientY - rect.top - tag.dragOffsetY;
 
-      // Keep within boundaries during drag
+      // Keep within boundaries during drag (respect header upper boundary)
       tag.x = Math.max(0, Math.min(containerWidth - tag.width, newX));
-      tag.y = Math.max(0, Math.min(containerHeight - tag.height, newY));
+      tag.y = Math.max(headerHeight, Math.min(containerHeight - tag.height, newY));
 
       tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0)`;
 
@@ -219,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function updatePhysics() {
     containerWidth = canvas.clientWidth || window.innerWidth;
     containerHeight = canvas.clientHeight || window.innerHeight;
+    headerHeight = header ? header.offsetHeight : 80;
 
     const canvasRect = canvas.getBoundingClientRect();
     const obsCoords = obstacles.map(obs => {
@@ -352,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tag.vy = (tag.vy / currentSpeed) * maxSpeed;
       }
 
-      // Bounce with damping off container borders
+      // Bounce with damping off container borders (respect header height as top border)
       const restitution = 0.85; // Bounciness factor
       if (tag.x < 0) {
         tag.x = 0;
@@ -362,8 +367,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tag.vx = -Math.abs(tag.vx) * restitution;
       }
 
-      if (tag.y < 0) {
-        tag.y = 0;
+      if (tag.y < headerHeight) {
+        tag.y = headerHeight;
         tag.vy = Math.abs(tag.vy) * restitution;
       } else if (tag.y + tag.height > containerHeight) {
         tag.y = containerHeight - tag.height;

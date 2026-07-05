@@ -1,4 +1,15 @@
-# HoverSource
+<div align="center">
+  <picture>
+    <img alt="HoverSource Logo" src="docs/logo.png" width="180">
+  </picture>
+  
+  <p><b>Translate what you see in your browser directly into context for your AI coding agents.</b></p>
+
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/loerei/HoverSource/pulls)
+</div>
+
+---
 
 You are a VibeCoder? Ever tried to describe a UI element with human language then see your agent **burn your quota just to figure out what on Earth you are talking about, then fix the wrong thing**?
 

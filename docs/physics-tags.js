@@ -29,24 +29,6 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   const tags = [];
-  const themeClasses = {
-    orange: "text-amber-500/25 hover:text-amber-400 hover:drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]",
-    purple: "text-purple-500/25 hover:text-purple-400 hover:drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]",
-    blue: "text-blue-500/25 hover:text-blue-400 hover:drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"
-  };
-
-  const activeClasses = {
-    orange: ["text-amber-400", "scale-105", "drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]"],
-    purple: ["text-purple-400", "scale-105", "drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]"],
-    blue: ["text-blue-400", "scale-105", "drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"]
-  };
-
-  const inactiveClasses = {
-    orange: ["text-amber-500/25"],
-    purple: ["text-purple-500/25"],
-    blue: ["text-blue-500/25"]
-  };
-
   const header = hero.querySelector('header');
   let headerHeight = header ? header.offsetHeight : 80;
 
@@ -56,9 +38,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start with opacity 0 to prevent flash/pile-up before layout calculation
     el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto transition-all duration-300 hover:scale-105 opacity-0 ${data.size}`;
-    for (const cls of themeClasses[data.theme].split(' ')) {
-      el.classList.add(cls);
-    }
     el.innerText = data.text;
     canvas.appendChild(el);
 
@@ -71,12 +50,14 @@ document.addEventListener('DOMContentLoaded', () => {
     tags.push({
       element: el,
       text: data.text,
+      theme: data.theme,
       x: roughX,
       y: roughY,
       vx: (Math.random() - 0.5) * 1.2,
       vy: (Math.random() - 0.5) * 1.2,
       width: 0,
       height: 0,
+      glowIntensity: 0.0,
       isDragging: false,
       dragOffsetX: 0,
       dragOffsetY: 0,
@@ -231,6 +212,9 @@ document.addEventListener('DOMContentLoaded', () => {
     hero.querySelector('.flex.items-center.justify-center.gap-4')
   ].filter(Boolean);
 
+  // Active glowing waves propagating across the screen
+  const activeWaves = [];
+
   // Physics animation loop
   function updatePhysics() {
     containerWidth = canvas.clientWidth || window.innerWidth;
@@ -250,7 +234,33 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     });
 
-    // 0. Resolve collisions with static obstacles (H1, Paragraph, CTA Buttons)
+    // 1. Update active waves
+    for (let w = activeWaves.length - 1; w >= 0; w--) {
+      const wave = activeWaves[w];
+      wave.radius += wave.speed;
+      wave.strength *= 0.985; // Decay wave strength gently as it travels
+
+      // Check impact on each tag
+      tags.forEach(tag => {
+        const tx = tag.x + tag.width / 2;
+        const ty = tag.y + tag.height / 2;
+        const distance = Math.hypot(tx - wave.x, ty - wave.y) || 1;
+
+        // Wave has hit this tag
+        if (wave.radius >= distance && wave.radius - 150 < distance) {
+          const proximity = Math.max(0, 1.0 - distance / wave.maxRadius);
+          const intensity = proximity * wave.strength;
+          tag.glowIntensity = Math.max(tag.glowIntensity, intensity);
+        }
+      });
+
+      // Remove wave when fully propagated or weak
+      if (wave.radius > wave.maxRadius || wave.strength < 0.05) {
+        activeWaves.splice(w, 1);
+      }
+    }
+
+    // 2. Resolve collisions with static obstacles (H1, Paragraph, CTA Buttons)
     tags.forEach(tag => {
       if (tag.isDragging) return;
 
@@ -287,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // 1. Calculate mutual repulsion forces to prevent overlapping
+    // 3. Calculate mutual repulsion forces to prevent overlapping
     for (let i = 0; i < tags.length; i++) {
       for (let j = i + 1; j < tags.length; j++) {
         const tagA = tags[i];
@@ -339,125 +349,134 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     tags.forEach(tag => {
-      if (tag.isDragging) return;
-
-      // Update position by velocity
-      tag.x += tag.vx;
-      tag.y += tag.vy;
-
-      // Apply air friction / damping
-      tag.vx *= 0.985;
-      tag.vy *= 0.985;
-
-      // Subtle ambient drift force so they never stop completely
-      tag.vx += (Math.random() - 0.5) * 0.04;
-      tag.vy += (Math.random() - 0.5) * 0.04;
-
-      // Ensure minimum drift speed so they never stop completely
-      const minSpeed = 0.35;
-      const currentSpeed = Math.hypot(tag.vx, tag.vy);
-      if (currentSpeed < minSpeed) {
-        const angle = currentSpeed > 0.01 ? Math.atan2(tag.vy, tag.vx) : Math.random() * Math.PI * 2;
-        tag.vx = Math.cos(angle) * minSpeed;
-        tag.vy = Math.sin(angle) * minSpeed;
+      // If hovered or dragged, force maximum glow intensity
+      const isHovered = tag.element.matches(':hover') || tag.isDragging;
+      if (isHovered) {
+        tag.glowIntensity = 1.0;
+      } else {
+        // Natural smooth fade-out decay (0.94)
+        tag.glowIntensity *= 0.945;
       }
 
-      // Speed limits
-      const maxSpeed = 12.0;
-      if (currentSpeed > maxSpeed) {
-        tag.vx = (tag.vx / currentSpeed) * maxSpeed;
-        tag.vy = (tag.vy / currentSpeed) * maxSpeed;
+      if (!tag.isDragging) {
+        // Update position by velocity
+        tag.x += tag.vx;
+        tag.y += tag.vy;
+
+        // Apply air friction / damping
+        tag.vx *= 0.985;
+        tag.vy *= 0.985;
+
+        // Subtle ambient drift force so they never stop completely
+        tag.vx += (Math.random() - 0.5) * 0.04;
+        tag.vy += (Math.random() - 0.5) * 0.04;
+
+        // Ensure minimum drift speed so they never stop completely
+        const minSpeed = 0.35;
+        const currentSpeed = Math.hypot(tag.vx, tag.vy);
+        if (currentSpeed < minSpeed) {
+          const angle = currentSpeed > 0.01 ? Math.atan2(tag.vy, tag.vx) : Math.random() * Math.PI * 2;
+          tag.vx = Math.cos(angle) * minSpeed;
+          tag.vy = Math.sin(angle) * minSpeed;
+        }
+
+        // Speed limits
+        const maxSpeed = 12.0;
+        if (currentSpeed > maxSpeed) {
+          tag.vx = (tag.vx / currentSpeed) * maxSpeed;
+          tag.vy = (tag.vy / currentSpeed) * maxSpeed;
+        }
+
+        // Bounce with damping off container borders (respect header height as top border)
+        const restitution = 0.85; // Bounciness factor
+        if (tag.x < 0) {
+          tag.x = 0;
+          tag.vx = Math.abs(tag.vx) * restitution;
+        } else if (tag.x + tag.width > containerWidth) {
+          tag.x = containerWidth - tag.width;
+          tag.vx = -Math.abs(tag.vx) * restitution;
+        }
+
+        if (tag.y < headerHeight) {
+          tag.y = headerHeight;
+          tag.vy = Math.abs(tag.vy) * restitution;
+        } else if (tag.y + tag.height > containerHeight) {
+          tag.y = containerHeight - tag.height;
+          tag.vy = -Math.abs(tag.vy) * restitution;
+        }
       }
 
-      // Bounce with damping off container borders (respect header height as top border)
-      const restitution = 0.85; // Bounciness factor
-      if (tag.x < 0) {
-        tag.x = 0;
-        tag.vx = Math.abs(tag.vx) * restitution;
-      } else if (tag.x + tag.width > containerWidth) {
-        tag.x = containerWidth - tag.width;
-        tag.vx = -Math.abs(tag.vx) * restitution;
+      // Render updated positions & inline color/opacity/glow filters
+      const scale = 1.0 + 0.05 * tag.glowIntensity;
+      const baseOpacity = 0.22;
+      const maxOpacity = 1.0;
+      const opacity = baseOpacity + (maxOpacity - baseOpacity) * tag.glowIntensity;
+
+      let r;
+      let g;
+      let b;
+      let shadowColor;
+      
+      // Default inactive color: text-zinc-500 (RGB: 113, 113, 122)
+      if (tag.theme === "orange") {
+        // Interpolate to amber-400 (RGB: 251, 191, 36)
+        r = Math.round(113 + (251 - 113) * tag.glowIntensity);
+        g = Math.round(113 + (191 - 113) * tag.glowIntensity);
+        b = Math.round(122 + (36 - 122) * tag.glowIntensity);
+        shadowColor = `rgba(245, 158, 11, ${0.5 * tag.glowIntensity})`;
+      } else if (tag.theme === "purple") {
+        // Interpolate to purple-400 (RGB: 192, 132, 252)
+        r = Math.round(113 + (192 - 113) * tag.glowIntensity);
+        g = Math.round(113 + (132 - 113) * tag.glowIntensity);
+        b = Math.round(122 + (252 - 122) * tag.glowIntensity);
+        shadowColor = `rgba(168, 85, 247, ${0.5 * tag.glowIntensity})`;
+      } else {
+        // Interpolate to blue-400 (RGB: 96, 165, 250)
+        r = Math.round(113 + (96 - 113) * tag.glowIntensity);
+        g = Math.round(113 + (165 - 113) * tag.glowIntensity);
+        b = Math.round(122 + (250 - 122) * tag.glowIntensity);
+        shadowColor = `rgba(59, 130, 246, ${0.5 * tag.glowIntensity})`;
       }
 
-      if (tag.y < headerHeight) {
-        tag.y = headerHeight;
-        tag.vy = Math.abs(tag.vy) * restitution;
-      } else if (tag.y + tag.height > containerHeight) {
-        tag.y = containerHeight - tag.height;
-        tag.vy = -Math.abs(tag.vy) * restitution;
-      }
-
-      // Render updated positions
-      tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0)`;
+      tag.element.style.color = `rgb(${r}, ${g}, ${b})`;
+      tag.element.style.opacity = opacity;
+      tag.element.style.filter = tag.glowIntensity > 0.05 ? `drop-shadow(0 0 10px ${shadowColor})` : 'none';
+      tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0) scale(${scale})`;
     });
 
     requestAnimationFrame(updatePhysics);
   }
 
-  // Ambient Twinkling Glow effect (at most 1 tag glowing programmatically at a time)
-  let activeGlowTag = null;
+  // Trigger glowing waves from a random tag
   let lastGlowTag = null;
 
-  function runAmbientGlow() {
-    // 1. Deactivate current glowing tag if any
-    if (activeGlowTag) {
-      const data = tagsData.find(d => d.text === activeGlowTag.text);
-      const activeCls = activeClasses[data.theme];
-      const inactiveCls = inactiveClasses[data.theme];
-
-      for (const cls of activeCls) {
-        activeGlowTag.element.classList.remove(cls);
-      }
-      for (const cls of inactiveCls) {
-        activeGlowTag.element.classList.add(cls);
-      }
-      lastGlowTag = activeGlowTag;
-      activeGlowTag = null;
-    }
-
-    // 2. Randomly select a new tag, excluding currently dragged, hovered, or the last glowing tags
+  function triggerWave() {
+    // Exclude currently dragged or hovered tags as sources
     const eligibleTags = tags.filter(tag => !tag.isDragging && !tag.element.matches(':hover') && tag !== lastGlowTag);
     if (eligibleTags.length === 0) {
-      setTimeout(runAmbientGlow, 1000);
+      setTimeout(triggerWave, 1000);
       return;
     }
 
     const randomTag = eligibleTags[Math.floor(Math.random() * eligibleTags.length)];
-    const data = tagsData.find(d => d.text === randomTag.text);
-    
-    // 3. Activate new tag
-    const activeCls = activeClasses[data.theme];
-    const inactiveCls = inactiveClasses[data.theme];
-    
-    for (const cls of inactiveCls) {
-      randomTag.element.classList.remove(cls);
-    }
-    for (const cls of activeCls) {
-      randomTag.element.classList.add(cls);
-    }
-    activeGlowTag = randomTag;
+    lastGlowTag = randomTag;
 
-    // 4. Schedule deactivation and next glow pulse (cross-fade continuously)
-    const glowDuration = 1800;
-    const interval = 1800;
+    // Push new wave propagating outward
+    activeWaves.push({
+      x: randomTag.x + randomTag.width / 2,
+      y: randomTag.y + randomTag.height / 2,
+      radius: 0,
+      maxRadius: 750, // Wave max range
+      strength: 1.0,
+      speed: 10 // pixels per frame
+    });
 
-    setTimeout(() => {
-      if (activeGlowTag === randomTag) {
-        for (const cls of activeCls) {
-          randomTag.element.classList.remove(cls);
-        }
-        for (const cls of inactiveCls) {
-          randomTag.element.classList.add(cls);
-        }
-        activeGlowTag = null;
-      }
-    }, glowDuration);
-
-    setTimeout(runAmbientGlow, interval);
+    // Schedule next wave pulse in 2.5 seconds
+    setTimeout(triggerWave, 2500);
   }
 
-  // Start ambient glow after 2 seconds
-  setTimeout(runAmbientGlow, 2000);
+  // Start wave pulses after 2 seconds
+  setTimeout(triggerWave, 2000);
 
   // Start physics loop
   requestAnimationFrame(updatePhysics);

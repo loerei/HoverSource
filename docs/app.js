@@ -390,3 +390,43 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     }
   });
 });
+
+// Coordinate custom HUD Text Scrollbar active states with scroll observer
+const hudItems = document.querySelectorAll('.nav-title-item');
+const snapSections = document.querySelectorAll('.snap-section');
+
+const hudObserverOptions = {
+  root: null,
+  rootMargin: '-50% 0px -50% 0px', // Target when center of section crosses center of viewport
+  threshold: 0
+};
+
+const hudObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const targetId = `#${entry.target.id}`;
+      hudItems.forEach(item => {
+        if (item.getAttribute('data-target') === targetId) {
+          item.classList.add('active-nav-title');
+        } else {
+          item.classList.remove('active-nav-title');
+        }
+      });
+    }
+  });
+}, hudObserverOptions);
+
+snapSections.forEach(section => {
+  if (section.id) hudObserver.observe(section);
+});
+
+// Bind custom smooth scrolling to HUD menu item clicks
+hudItems.forEach(item => {
+  item.addEventListener('click', function(e) {
+    const targetId = this.getAttribute('data-target');
+    const targetEl = document.querySelector(targetId);
+    if (targetEl) {
+      customSmoothScroll(targetEl, 900);
+    }
+  });
+});

@@ -5,6 +5,14 @@ html {
   scroll-snap-type: y mandatory;
   overflow-y: auto;
   height: 100%;
+  
+  /* Hide scrollbar completely to replace with vertical textual HUD menu */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+html::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 body {
@@ -22,6 +30,22 @@ body {
   flex-direction: column;
   justify-content: center;
   will-change: transform, scroll-position;
+}
+
+/* Custom Floating HUD Text Navigation (Scrollbar replacement) */
+.nav-title-item {
+  position: relative;
+  transition: color 0.30s cubic-bezier(0.4, 0, 0.2, 1), transform 0.30s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+.nav-title-item:hover {
+  transform: translateX(-4px);
+}
+.nav-title-item.active-nav-title {
+  color: #3b82f6; /* brand-blue */
+  font-weight: 600;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+  transform: translateX(-6px);
 }
 
 /* Premium visual effects */

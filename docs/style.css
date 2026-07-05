@@ -1,10 +1,8 @@
-/* Reset & Scroll Snapping Core on HTML root for hardware-accelerated compositor-thread smoothness */
+/* Reset & Core Styling */
 html {
   margin: 0;
   padding: 0;
-  scroll-snap-type: y mandatory;
   overflow-y: auto;
-  height: 100%;
   
   /* Hide scrollbar completely to replace with vertical textual HUD menu */
   scrollbar-width: none; /* Firefox */
@@ -19,17 +17,30 @@ body {
   margin: 0;
   padding: 0;
   background-color: #0b0b0d;
-  min-height: 100%;
+  min-height: 100vh;
 }
 
 .snap-section {
-  scroll-snap-align: center;
-  scroll-snap-stop: normal;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   justify-content: center;
   will-change: transform, scroll-position;
+}
+
+/* GPU-Accelerated Scroll Snapping ONLY on Desktop Viewports to prevent Mobile address-bar stutters */
+@media (min-width: 1024px) {
+  html {
+    scroll-snap-type: y mandatory;
+    height: 100%;
+  }
+  body {
+    min-height: 100%;
+  }
+  .snap-section {
+    scroll-snap-align: center;
+    scroll-snap-stop: normal;
+  }
 }
 
 /* Custom Floating HUD Text Navigation (Scrollbar replacement) */

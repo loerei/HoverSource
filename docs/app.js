@@ -51,6 +51,9 @@ const benchmarkSlider = document.getElementById('benchmark-slider');
 const sliderGroupLabel = document.getElementById('slider-group-label');
 const toggleCalcom = document.getElementById('toggle-calcom');
 const toggleYumeshelf = document.getElementById('toggle-yumeshelf');
+const btnGroupA = document.getElementById('btn-group-a');
+const btnGroupB = document.getElementById('btn-group-b');
+const btnGroupC = document.getElementById('btn-group-c');
 
 const benchSteps = document.getElementById('bench-steps');
 const benchTokens = document.getElementById('bench-tokens');
@@ -396,10 +399,33 @@ function updateBenchmarkUI() {
   barTimeVal.className = `transition-all duration-500 ${val === 0 ? 'text-brand-amber' : val === 1 ? 'text-brand-purple' : 'text-brand-blue'}`;
   barTimeFill.style.width = data.timeWidth;
   barTimeFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
+
+  // Update group label active state styling
+  if (btnGroupA && btnGroupB && btnGroupC) {
+    btnGroupA.className = `hover:text-zinc-300 transition-colors focus:outline-none ${val === 0 ? 'text-brand-amber font-semibold' : 'text-zinc-500 font-normal'}`;
+    btnGroupB.className = `hover:text-zinc-300 transition-colors focus:outline-none ${val === 1 ? 'text-brand-purple font-semibold' : 'text-zinc-500 font-normal'}`;
+    btnGroupC.className = `hover:text-zinc-300 transition-colors focus:outline-none ${val === 2 ? 'text-brand-blue font-semibold' : 'text-zinc-500 font-normal'}`;
+  }
 }
 
 if (benchmarkSlider) {
   benchmarkSlider.addEventListener('input', updateBenchmarkUI);
+}
+
+// Group Label Click Listeners
+if (btnGroupA && btnGroupB && btnGroupC && benchmarkSlider) {
+  btnGroupA.addEventListener('click', () => {
+    benchmarkSlider.value = 0;
+    updateBenchmarkUI();
+  });
+  btnGroupB.addEventListener('click', () => {
+    benchmarkSlider.value = 1;
+    updateBenchmarkUI();
+  });
+  btnGroupC.addEventListener('click', () => {
+    benchmarkSlider.value = 2;
+    updateBenchmarkUI();
+  });
 }
 
 // Codebase Toggle Listeners

@@ -44,29 +44,34 @@ body {
   align-items: center;
   justify-content: flex-end;
   color: #71717a; /* zinc-400 */
-  opacity: 0;
-  transform: translateX(10px);
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
+  opacity: 1; /* Keep button visible to render the dots */
   pointer-events: none;
   outline: none;
 }
 
-/* Show text on hover or when expanded (e.g. on Overview hero section) */
-.hud-nav-container:hover .nav-title-item,
-.hud-nav-container.hud-nav-expanded .nav-title-item {
+/* Animate only the text span inside the HUD items */
+.nav-title-item span {
+  opacity: 0;
+  transform: translateX(10px);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
+}
+
+/* Show text on hover or when expanded */
+.hud-nav-container:hover .nav-title-item span,
+.hud-nav-container.hud-nav-expanded .nav-title-item span {
   opacity: 0.6;
   transform: translateX(0);
   pointer-events: auto;
 }
 
-.hud-nav-container:hover .nav-title-item:hover,
-.hud-nav-container.hud-nav-expanded .nav-title-item:hover {
+.hud-nav-container:hover .nav-title-item:hover span,
+.hud-nav-container.hud-nav-expanded .nav-title-item:hover span {
   opacity: 1;
   color: #f4f4f5; /* zinc-100 */
 }
 
-.hud-nav-container:hover .nav-title-item.active-nav-title,
-.hud-nav-container.hud-nav-expanded .nav-title-item.active-nav-title {
+.hud-nav-container:hover .nav-title-item.active-nav-title span,
+.hud-nav-container.hud-nav-expanded .nav-title-item.active-nav-title span {
   opacity: 1;
   color: #3b82f6; /* brand-blue */
   font-weight: 600;

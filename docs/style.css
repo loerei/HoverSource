@@ -1,3 +1,28 @@
+/* Reset & Scroll Snapping Core */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.snap-container {
+  height: 100vh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.snap-section {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 /* Premium visual effects */
 .glow-bg {
   background: radial-gradient(circle 800px at 50% -100px, rgba(59, 130, 246, 0.08), transparent 80%);
@@ -46,11 +71,6 @@
 #benchmark-slider::-webkit-slider-thumb:hover {
   transform: scale(1.2);
   background: #60a5fa; /* lighter blue */
-}
-
-/* Smooth HTML scroll-behavior */
-html {
-  scroll-behavior: smooth;
 }
 
 /* Active Keyboard key glow effect */

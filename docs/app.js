@@ -76,12 +76,12 @@ function initInputs() {
 initInputs();
 
 function getActiveTerminalScreen() {
-  return document.getElementById('terminal-screen-' + activeTab);
+  return document.getElementById(`terminal-screen-${activeTab}`);
 }
 
 function switchTerminalScreen() {
   ['with-hs', 'file-only', 'no-context'].forEach(tab => {
-    const screen = document.getElementById('terminal-screen-' + tab);
+    const screen = document.getElementById(`terminal-screen-${tab}`);
     if (tab === activeTab) {
       screen.classList.remove('hidden');
     } else {
@@ -171,8 +171,8 @@ searchTriggerBtn.addEventListener('mouseenter', (e) => {
   
   // Position HoverSource floating card near the button
   const rect = searchTriggerBtn.getBoundingClientRect();
-  specCard.style.top = `${window.scrollY + rect.bottom + 8}px`;
-  specCard.style.left = `${window.scrollX + rect.left - 100}px`;
+  specCard.style.top = `${rect.bottom + 8}px`;
+  specCard.style.left = `${rect.left - 100}px`;
   specCard.classList.remove('hidden');
 });
 

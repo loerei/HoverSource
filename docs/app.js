@@ -126,10 +126,12 @@ function restoreTabUI() {
   }
 
   // Restore target search button style in Mock Sidebar
-  if (tabStates[activeTab].patchApplied) {
-    searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 border border-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-all duration-200 shadow-sm';
-  } else {
-    searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200';
+  if (searchTriggerBtn) {
+    if (tabStates[activeTab].patchApplied) {
+      searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 border border-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-all duration-200 shadow-sm';
+    } else {
+      searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200';
+    }
   }
 }
 
@@ -161,8 +163,10 @@ function resetActiveTabSimulation() {
   statTime.innerText = '0s';
   instructionTooltip.innerHTML = tabStates[activeTab].tooltip;
 
-  searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200';
-  searchTriggerBtn.classList.remove('border', 'border-zinc-700', 'ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+  if (searchTriggerBtn) {
+    searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200';
+    searchTriggerBtn.classList.remove('border', 'border-zinc-700', 'ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+  }
 }
 
 function resetTerminal() {
@@ -183,147 +187,561 @@ function resetTerminal() {
 }
 
 // Interactive UI Sandbox Inspector Logic
-let activeHsMode = 'target-pin'; // 'target-pin' or 'cursor-track'
+const mockMetadata = {
+  PostHeaderPfp: {
+    component: "PostHeaderAvatar",
+    element: "img.post_header_avatar ➔ [feed.css:62]",
+    file: "PostHeaderAvatar.tsx:10",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/PostHeaderAvatar.tsx",
+    size: "24px × 24px",
+    color: "rgba(255, 255, 255, 1)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "border-radius: 50%",
+    parentStyles: [
+      { tag: "div.post_header_container", css: "[feed.css:14]", style: "display: flex" },
+      { tag: "article.post_card", css: "[feed.css:42]", style: "display: flex" }
+    ],
+    stack: [
+      "PostHeaderAvatar",
+      "PostHeader",
+      "PostCard",
+      "FeedLayout",
+      "div"
+    ]
+  },
+  PostHeaderUsername: {
+    component: "PostHeaderUsername",
+    element: "span.post_header_username ➔ [feed.css:66]",
+    file: "PostHeaderUsername.tsx:8",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/PostHeaderUsername.tsx",
+    size: "72px × 12px",
+    color: "rgb(212, 212, 216)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: inline",
+    parentStyles: [
+      { tag: "div.post_header_container", css: "[feed.css:14]", style: "display: flex" },
+      { tag: "article.post_card", css: "[feed.css:42]", style: "display: flex" }
+    ],
+    stack: [
+      "PostHeaderUsername",
+      "PostHeader",
+      "PostCard",
+      "FeedLayout",
+      "div"
+    ]
+  },
+  PostHeaderMoreOptions: {
+    component: "PostHeaderMoreButton",
+    element: "button.more_options_btn ➔ [feed.css:70]",
+    file: "PostHeaderMoreButton.tsx:12",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/PostHeaderMoreButton.tsx",
+    size: "18px × 18px",
+    color: "rgb(113, 113, 122)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: inline-block",
+    parentStyles: [
+      { tag: "div.post_header_container", css: "[feed.css:14]", style: "display: flex" },
+      { tag: "article.post_card", css: "[feed.css:42]", style: "display: flex" }
+    ],
+    stack: [
+      "PostHeaderMoreButton",
+      "PostHeader",
+      "PostCard",
+      "FeedLayout",
+      "div"
+    ]
+  },
+  Sidebar: {
+    component: "Sidebar",
+    element: "aside.left_sidebar ➔ [sidebar.css:1]",
+    file: "Sidebar.tsx:1",
+    path: "D:/Projects/InstagramClone/src/components/Sidebar/Sidebar.tsx",
+    size: "70px × 550px",
+    color: "rgb(255, 255, 255)",
+    background: "rgb(0, 0, 0)",
+    layout: "display: flex (direction: column)",
+    parentStyles: [
+      { tag: "div.app_layout", css: "[layout.css:1]", style: "display: flex" }
+    ],
+    stack: [
+      "Sidebar",
+      "AppLayout",
+      "div"
+    ]
+  },
+  AppBackground: {
+    component: "AppBackground",
+    element: "main.feed_container ➔ [feed.css:12]",
+    file: "AppLayout.tsx:12",
+    path: "D:/Projects/InstagramClone/src/components/Layout/AppLayout.tsx",
+    size: "320px × 550px",
+    color: "rgb(255, 255, 255)",
+    background: "rgb(0, 0, 0)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "div.app_layout", css: "[layout.css:1]", style: "display: flex" }
+    ],
+    stack: [
+      "AppBackground",
+      "AppLayout",
+      "div"
+    ]
+  },
+  LikeButton: {
+    component: "LikeButton",
+    element: "svg.like_button ➔ [feed.css:120]",
+    file: "LikeButton.tsx:28",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/LikeButton.tsx",
+    size: "20px × 20px",
+    color: "rgb(239, 68, 68)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: inline-block",
+    parentStyles: [
+      { tag: "div.post_actions_row", css: "[feed.css:10]", style: "display: flex" },
+      { tag: "article.post_card", css: "[feed.css:42]", style: "display: flex" }
+    ],
+    stack: [
+      "LikeButton",
+      "PostActionButtons",
+      "PostCard",
+      "FeedList",
+      "div"
+    ]
+  },
+  CommentButton: {
+    component: "CommentButton",
+    element: "svg.comment_button ➔ [feed.css:124]",
+    file: "CommentButton.tsx:15",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/CommentButton.tsx",
+    size: "20px × 20px",
+    color: "rgb(168, 168, 168)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: inline-block",
+    parentStyles: [
+      { tag: "div.post_actions_row", css: "[feed.css:10]", style: "display: flex" },
+      { tag: "article.post_card", css: "[feed.css:42]", style: "display: flex" }
+    ],
+    stack: [
+      "CommentButton",
+      "PostActionButtons",
+      "PostCard",
+      "FeedList",
+      "div"
+    ]
+  },
+  BookmarkButton: {
+    component: "BookmarkButton",
+    element: "svg.bookmark_button ➔ [feed.css:130]",
+    file: "BookmarkButton.tsx:22",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/BookmarkButton.tsx",
+    size: "20px × 20px",
+    color: "rgb(168, 168, 168)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: inline-block",
+    parentStyles: [
+      { tag: "div.post_actions_row", css: "[feed.css:10]", style: "display: flex" },
+      { tag: "article.post_card", css: "[feed.css:42]", style: "display: flex" }
+    ],
+    stack: [
+      "BookmarkButton",
+      "PostActionButtons",
+      "PostCard",
+      "FeedList",
+      "div"
+    ]
+  },
+  InstagramLogo: {
+    component: "Logo",
+    element: "div.instagram_logo ➔ [navbar.css:12]",
+    file: "Logo.tsx:12",
+    path: "D:/Projects/InstagramClone/src/components/Navbar/Logo.tsx",
+    size: "100px × 29px",
+    color: "rgb(245, 245, 245)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: block",
+    parentStyles: [
+      { tag: "div.sidebar_header", css: "[sidebar.css:12]", style: "padding: 24px 12px" },
+      { tag: "aside.left_sidebar", css: "[sidebar.css:1]", style: "width: 244px" }
+    ],
+    stack: [
+      "Logo",
+      "Sidebar",
+      "AppLayout",
+      "div"
+    ]
+  },
+  HomeButton: {
+    component: "SidebarItem",
+    element: "a.nav_link.active ➔ [sidebar.css:42]",
+    file: "SidebarItem.tsx:42",
+    path: "D:/Projects/InstagramClone/src/components/Sidebar/SidebarItem.tsx",
+    size: "220px × 48px",
+    color: "rgb(245, 245, 245)",
+    background: "rgba(255, 255, 255, 0.08)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "nav.navigation_links", css: "[sidebar.css:32]", style: "display: flex" },
+      { tag: "aside.left_sidebar", css: "[sidebar.css:1]", style: "display: flex" }
+    ],
+    stack: [
+      "SidebarItem",
+      "Navigation",
+      "Sidebar",
+      "AppLayout",
+      "div"
+    ]
+  },
+  SearchButton: {
+    component: "SidebarItem",
+    element: "a.nav_link ➔ [sidebar.css:42]",
+    file: "SidebarItem.tsx:42",
+    path: "D:/Projects/InstagramClone/src/components/Sidebar/SidebarItem.tsx",
+    size: "220px × 48px",
+    color: "rgb(168, 168, 168)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "nav.navigation_links", css: "[sidebar.css:32]", style: "display: flex" },
+      { tag: "aside.left_sidebar", css: "[sidebar.css:1]", style: "display: flex" }
+    ],
+    stack: [
+      "SidebarItem",
+      "Navigation",
+      "Sidebar",
+      "AppLayout",
+      "div"
+    ]
+  },
+  MessagesButton: {
+    component: "SidebarItem",
+    element: "a.nav_link ➔ [sidebar.css:42]",
+    file: "SidebarItem.tsx:42",
+    path: "D:/Projects/InstagramClone/src/components/Sidebar/SidebarItem.tsx",
+    size: "220px × 48px",
+    color: "rgb(168, 168, 168)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "nav.navigation_links", css: "[sidebar.css:32]", style: "display: flex" },
+      { tag: "aside.left_sidebar", css: "[sidebar.css:1]", style: "display: flex" }
+    ],
+    stack: [
+      "SidebarItem",
+      "Navigation",
+      "Sidebar",
+      "AppLayout",
+      "div"
+    ]
+  },
+  ExploreButton: {
+    component: "SidebarItem",
+    element: "a.nav_link ➔ [sidebar.css:42]",
+    file: "SidebarItem.tsx:42",
+    path: "D:/Projects/InstagramClone/src/components/Sidebar/SidebarItem.tsx",
+    size: "220px × 48px",
+    color: "rgb(168, 168, 168)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "nav.navigation_links", css: "[sidebar.css:32]", style: "display: flex" },
+      { tag: "aside.left_sidebar", css: "[sidebar.css:1]", style: "display: flex" }
+    ],
+    stack: [
+      "SidebarItem",
+      "Navigation",
+      "Sidebar",
+      "AppLayout",
+      "div"
+    ]
+  },
+  CreateButton: {
+    component: "SidebarItem",
+    element: "a.nav_link ➔ [sidebar.css:42]",
+    file: "SidebarItem.tsx:42",
+    path: "D:/Projects/InstagramClone/src/components/Sidebar/SidebarItem.tsx",
+    size: "220px × 48px",
+    color: "rgb(168, 168, 168)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "nav.navigation_links", css: "[sidebar.css:32]", style: "display: flex" },
+      { tag: "aside.left_sidebar", css: "[sidebar.css:1]", style: "display: flex" }
+    ],
+    stack: [
+      "SidebarItem",
+      "Navigation",
+      "Sidebar",
+      "AppLayout",
+      "div"
+    ]
+  },
+  ProfileBadge: {
+    component: "ProfileAvatar",
+    element: "div.profile_avatar_badge ➔ [navbar.css:88]",
+    file: "ProfileAvatar.tsx:88",
+    path: "D:/Projects/InstagramClone/src/components/Navbar/ProfileAvatar.tsx",
+    size: "28px × 28px",
+    color: "rgb(245, 245, 245)",
+    background: "rgba(255, 255, 255, 0.1)",
+    layout: "border-radius: 50%",
+    parentStyles: [
+      { tag: "div.sidebar_footer", css: "[sidebar.css:80]", style: "margin-top: auto" }
+    ],
+    stack: [
+      "ProfileAvatar",
+      "Sidebar",
+      "AppLayout",
+      "div"
+    ]
+  },
+  StoriesTray: {
+    component: "StoriesTray",
+    element: "div.stories_tray ➔ [stories.css:5]",
+    file: "StoriesTray.tsx:5",
+    path: "D:/Projects/InstagramClone/src/features/stories/components/StoriesTray.tsx",
+    size: "600px × 84px",
+    color: "rgb(245, 245, 245)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "main.feed_container", css: "[feed.css:12]", style: "max-width: 600px" }
+    ],
+    stack: [
+      "StoriesTray",
+      "FeedLayout",
+      "AppLayout",
+      "div"
+    ]
+  },
+  StoryAvatar: {
+    component: "StoryAvatar",
+    element: "div.story_avatar_ring ➔ [stories.css:18]",
+    file: "StoryAvatar.tsx:18",
+    path: "D:/Projects/InstagramClone/src/features/stories/components/StoryAvatar.tsx",
+    size: "56px × 56px",
+    color: "rgb(245, 245, 245)",
+    background: "linear-gradient(45deg, #f09433, #dc2743, #bc1888)",
+    layout: "border-radius: 50%",
+    parentStyles: [
+      { tag: "div.story_item", css: "[stories.css:12]", style: "display: flex" },
+      { tag: "div.stories_tray", css: "[stories.css:5]", style: "display: flex" }
+    ],
+    stack: [
+      "StoryAvatar",
+      "StoryItem",
+      "StoriesTray",
+      "FeedLayout",
+      "div"
+    ]
+  },
+  PostCard: {
+    component: "PostCard",
+    element: "article.post_card ➔ [feed.css:42]",
+    file: "PostCard.tsx:42",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/PostCard.tsx",
+    size: "470px × 620px",
+    color: "rgb(245, 245, 245)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: flex (direction: column)",
+    parentStyles: [
+      { tag: "div.feed_list", css: "[feed.css:32]", style: "display: flex" },
+      { tag: "main.feed_container", css: "[feed.css:12]", style: "max-width: 600px" }
+    ],
+    stack: [
+      "PostCard",
+      "FeedList",
+      "FeedLayout",
+      "AppLayout",
+      "div"
+    ]
+  },
+  PostHeader: {
+    component: "PostHeader",
+    element: "div.post_header_container ➔ [feed.css:14]",
+    file: "PostHeader.tsx:14",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/PostHeader.tsx",
+    size: "470px × 56px",
+    color: "rgb(245, 245, 245)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "article.post_card", css: "[feed.css:42]", style: "border-bottom: 1px solid #262626" }
+    ],
+    stack: [
+      "PostHeader",
+      "PostCard",
+      "FeedList",
+      "FeedLayout",
+      "div"
+    ]
+  },
+  PostContent: {
+    component: "PostImage",
+    element: "div.post_media_wrapper ➔ [feed.css:28]",
+    file: "PostImage.tsx:28",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/PostImage.tsx",
+    size: "470px × 470px",
+    color: "rgb(0, 0, 0)",
+    background: "rgb(10, 10, 10)",
+    layout: "display: block",
+    parentStyles: [
+      { tag: "article.post_card", css: "[feed.css:42]", style: "border-bottom: 1px solid #262626" }
+    ],
+    stack: [
+      "PostImage",
+      "PostCard",
+      "FeedList",
+      "FeedLayout",
+      "div"
+    ]
+  },
+  PostActions: {
+    component: "PostActionButtons",
+    element: "div.post_actions_row ➔ [feed.css:10]",
+    file: "PostActionButtons.tsx:10",
+    path: "D:/Projects/InstagramClone/src/features/feed/components/PostActionButtons.tsx",
+    size: "470px × 40px",
+    color: "rgb(245, 245, 245)",
+    background: "rgba(0, 0, 0, 0)",
+    layout: "display: flex",
+    parentStyles: [
+      { tag: "article.post_card", css: "[feed.css:42]", style: "border-bottom: 1px solid #262626" }
+    ],
+    stack: [
+      "PostActionButtons",
+      "PostCard",
+      "FeedList",
+      "FeedLayout",
+      "div"
+    ]
+  }
+};
 
-// Mode switching listeners
-if (modeTargetPin && modeCursorTrack) {
-  modeTargetPin.addEventListener('click', () => {
-    if (activeHsMode === 'target-pin') return;
-    activeHsMode = 'target-pin';
-    modeTargetPin.className = 'flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all';
-    modeCursorTrack.className = 'flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all';
-    uiInstructions.innerText = 'Hover over the search button or dashboard items. HoverSource highlights target bounds and pins metadata at fixed offsets.';
-    resetInspectorVisuals();
-  });
+let currentlyInspectedElement = null;
 
-  modeCursorTrack.addEventListener('click', () => {
-    if (activeHsMode === 'cursor-track') return;
-    activeHsMode = 'cursor-track';
-    modeCursorTrack.className = 'flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all';
-    modeTargetPin.className = 'flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all';
-    uiInstructions.innerText = 'Move your cursor freely around the viewport canvas. The metadata card will follow your cursor and inspect elements dynamically.';
-    resetInspectorVisuals();
-  });
+function getMetadataMarkdown(targetName) {
+  const metadata = mockMetadata[targetName];
+  if (!metadata) return "";
+
+  return `### HoverSource Component Metadata
+* **Component**: \`${metadata.component}\`
+* **Element**: \`${metadata.element}\`
+* **File Path**: \`${metadata.path}\` (Line: ${metadata.file.split(':')[1]}, Column: 1)
+* **Framework**: React
+* **Key Styles**:
+  - Color: \`${metadata.color}\`
+  - Background: \`${metadata.background}\`
+  - Size: \`${metadata.size}\`
+  - Layout: \`${metadata.layout}\`
+* **Parent Styles**:
+${metadata.parentStyles.map(p => `  - \`${p.tag}\` ➔ \`${p.style}\` ➔ [Source: \`${p.css}\`]`).join('\n')}`;
 }
 
 function resetInspectorVisuals() {
   specCard.classList.add('hidden');
   if (hsTargetBorder) hsTargetBorder.classList.add('hidden');
-  // Remove cursor track hover styles from all elements
-  document.querySelectorAll('#mock-browser-canvas [data-hs-component]').forEach(el => {
-    el.classList.remove('hs-cursor-track-hover');
-  });
 }
 
-let currentlyInspectedElement = null;
-
-function getMetadataMarkdown(target) {
-  if (!target) return "";
-  const component = target.getAttribute('data-hs-component');
-  const file = target.getAttribute('data-hs-file');
-  const line = target.getAttribute('data-hs-line');
-  const col = target.getAttribute('data-hs-col');
-  const styles = target.getAttribute('data-hs-styles');
-  const lang = target.getAttribute('data-hs-lang') || 'TSX';
-  const tagName = target.tagName.toLowerCase();
-  const idStr = target.id ? `#${target.id}` : '';
-  const classList = Array.from(target.classList).filter(c => !c.startsWith('hs-') && c !== 'cursor-pointer');
-  const classStr = classList.length > 0 ? `.${classList.join('.')}` : '';
-  const selector = `${tagName}${idStr}${classStr}`;
-
-  return `### HoverSource Component Metadata
-* **Component**: \`${component}\`
-* **Element**: \`${selector}\`
-* **File Path**: \`${file}\` (Line: ${line}, Column: ${col})
-* **Framework**: ${lang}
-* **Key Styles**: ${styles}`;
-}
-
-// Attach keyboard copy shortcut Alt + C
+// Keydown copy event (C or Alt+C)
 window.addEventListener('keydown', (e) => {
-  if (e.altKey && e.key.toLowerCase() === 'c') {
-    if (currentlyInspectedElement) {
-      e.preventDefault();
-      const markdown = getMetadataMarkdown(currentlyInspectedElement);
-      navigator.clipboard.writeText(markdown).then(() => {
-        // Show flash copy indicator in specCard
-        const copyHint = specCard.querySelector('.copy-hint-text');
-        if (copyHint) {
-          copyHint.innerText = 'Copied to Clipboard!';
-          copyHint.className = 'copy-hint-text text-green-400 font-bold text-[9px] animate-pulse';
-          setTimeout(() => {
-            copyHint.innerText = 'Press Alt + C to Copy';
-            copyHint.className = 'copy-hint-text text-zinc-600 text-[8px]';
-          }, 1500);
-        }
-      }).catch(err => {
-        console.error('Clipboard copy failed:', err);
-      });
-    }
+  const key = e.key.toLowerCase();
+  if (currentlyInspectedElement && (key === 'c' || (e.altKey && key === 'c'))) {
+    e.preventDefault();
+    const targetName = currentlyInspectedElement.getAttribute('data-hs-component');
+    const markdown = getMetadataMarkdown(targetName);
+    navigator.clipboard.writeText(markdown).then(() => {
+      const copyHint = specCard.querySelector('.copy-hint-text');
+      if (copyHint) {
+        copyHint.innerText = 'Copied to Clipboard!';
+        copyHint.className = 'copy-hint-text text-green-400 font-bold text-[9px] animate-pulse';
+        setTimeout(() => {
+          copyHint.innerText = 'Press C to copy';
+          copyHint.className = 'copy-hint-text text-zinc-500 text-[8px]';
+        }, 1500);
+      }
+    }).catch(err => {
+      console.error('Clipboard copy failed:', err);
+    });
   }
 });
 
-// Attach hover listener to mockup canvas
+// Attach event listeners inside the sandbox canvas
 if (mockBrowserCanvas) {
-  // Delegate event handling for data-hs-component elements
   mockBrowserCanvas.addEventListener('mouseover', (e) => {
     const target = e.target.closest('[data-hs-component]');
     if (!target) return;
 
     currentlyInspectedElement = target;
 
-    // Retrieve metadata
-    const component = target.getAttribute('data-hs-component');
-    const file = target.getAttribute('data-hs-file');
-    const line = target.getAttribute('data-hs-line');
-    const col = target.getAttribute('data-hs-col');
-    const styles = target.getAttribute('data-hs-styles');
-    const lang = target.getAttribute('data-hs-lang') || 'TSX';
+    const targetName = target.getAttribute('data-hs-component');
+    const metadata = mockMetadata[targetName];
+    if (!metadata) return;
 
-    // Populate specCard HTML dynamically
+    // Populate specCard HTML dynamically matching screenshot
     specCard.innerHTML = `
-      <div class="text-brand-blue font-bold border-b border-zinc-900 pb-1 flex justify-between">
-        <span>Component: ${component}</span>
-        <span class="text-zinc-600 text-[8px] bg-zinc-900 px-1 rounded">${lang}</span>
+      <div class="flex justify-between items-center border-b border-zinc-900 pb-2 mb-2">
+        <div>
+          <div class="text-brand-blue font-bold text-xs font-mono" id="spec-component-name">${metadata.component}</div>
+          <div class="text-zinc-500 text-[8px] mt-0.5 font-mono" id="spec-element-name">Element: ${metadata.element}</div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-[8px] bg-brand-blue/20 text-brand-blue font-bold px-1 py-0.5 rounded font-mono" id="spec-framework">REACT</span>
+          <div class="flex flex-col items-center opacity-60">
+            <svg class="h-3 w-3 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <span class="text-[5px] text-zinc-600 mt-0.5 font-mono">Alt+Shift+Scroll</span>
+          </div>
+        </div>
       </div>
-      <div><span class="text-zinc-500">File:</span> <span class="text-emerald-500">${file}</span></div>
-      <div><span class="text-zinc-500">Source Line:</span> Line ${line}, Col ${col}</div>
-      <div class="border-t border-zinc-900 pt-1 mt-1">
-        <span class="text-zinc-500">Styles:</span>
-        <div class="text-[9px] text-zinc-400 pl-2">${styles}</div>
+      <div class="space-y-1 text-[9px] text-zinc-300 font-mono">
+        <div><span class="text-zinc-500 font-medium">File:</span> <span class="text-brand-blue underline cursor-pointer">${metadata.file}</span></div>
+        <div><span class="text-zinc-500 font-medium">Path:</span> <span class="text-emerald-500">${metadata.path}</span></div>
+        <div><span class="text-zinc-500 font-medium">Size:</span> <span>${metadata.size}</span></div>
+        <div><span class="text-zinc-500 font-medium">Color:</span> <span class="text-emerald-400">${metadata.color}</span></div>
+        <div><span class="text-zinc-500 font-medium">Background:</span> <span class="text-emerald-400">${metadata.background}</span></div>
+        <div><span class="text-zinc-500 font-medium">Layout:</span> <span class="text-emerald-400">${metadata.layout}</span></div>
       </div>
-      <div class="copy-hint-text text-[8px] text-zinc-600 text-right pt-1 border-t border-zinc-900">Press Alt + C to Copy</div>
+      <div class="mt-2 font-mono">
+        <div class="text-zinc-500 text-[8px] font-bold uppercase tracking-wider mb-1">Parent Styles:</div>
+        <div class="border border-zinc-900 rounded overflow-hidden text-[8px] font-mono leading-normal bg-zinc-950/40 text-zinc-400 divide-y divide-zinc-900">
+          ${metadata.parentStyles.map(p => `
+            <div class="px-2 py-1 flex justify-between">
+              <span>${p.tag} <span class="text-zinc-600">${p.css}</span></span>
+              <span class="text-emerald-500">${p.style}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="mt-2 font-mono">
+        <div class="text-zinc-500 text-[8px] font-bold uppercase tracking-wider mb-1">Stack:</div>
+        <div class="border border-zinc-900 rounded overflow-hidden text-[8px] font-mono leading-normal bg-zinc-950/50 text-zinc-400 divide-y divide-zinc-900">
+          ${metadata.stack.map(s => `
+            <div class="px-2 py-0.5">${s}</div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="copy-hint-text text-[8px] text-zinc-500 text-center pt-2 mt-2 border-t border-zinc-900 leading-normal font-mono">
+        Press C to copy | Alt+Shift+C to copy all | Alt+P to Freeze | Alt+M for Minimal | Alt+S for Config | Alt+X to Switch Mode
+      </div>
     `;
 
     specCard.classList.remove('hidden');
 
-    if (activeHsMode === 'target-pin') {
-      // Pin mode: draw absolute border relative to mockup canvas container
-      const canvasRect = mockBrowserCanvas.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
+    const canvasRect = mockBrowserCanvas.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
 
-      if (hsTargetBorder) {
-        hsTargetBorder.style.top = `${targetRect.top - canvasRect.top}px`;
-        hsTargetBorder.style.left = `${targetRect.left - canvasRect.left}px`;
-        hsTargetBorder.style.width = `${targetRect.width}px`;
-        hsTargetBorder.style.height = `${targetRect.height}px`;
-        hsTargetBorder.classList.remove('hidden');
-      }
-
-      // Pin SpecCard nearby relative to viewport
-      specCard.style.top = `${targetRect.bottom + 8}px`;
-      specCard.style.left = `${targetRect.left}px`;
-    } else {
-      // Cursor tracking mode
-      target.classList.add('hs-cursor-track-hover');
+    if (hsTargetBorder) {
+      hsTargetBorder.style.top = `${targetRect.top - canvasRect.top}px`;
+      hsTargetBorder.style.left = `${targetRect.left - canvasRect.left}px`;
+      hsTargetBorder.style.width = `${targetRect.width}px`;
+      hsTargetBorder.style.height = `${targetRect.height}px`;
+      hsTargetBorder.classList.remove('hidden');
     }
-  });
 
-  mockBrowserCanvas.addEventListener('mousemove', (e) => {
-    if (activeHsMode !== 'cursor-track') return;
-    // SpecCard follows cursor with a slight offset
-    specCard.style.top = `${e.clientY + 12}px`;
-    specCard.style.left = `${e.clientX + 12}px`;
+    // Position SpecCard next to the element
+    specCard.style.top = `${targetRect.top}px`;
+    specCard.style.left = `${targetRect.right + 12}px`;
   });
 
   mockBrowserCanvas.addEventListener('mouseout', (e) => {
@@ -381,12 +799,14 @@ async function handleApplyPatch() {
   await writeTerminalLine(`[+] Changes successfully written to disk. Hot Module Replacement (HMR) triggered.`, 'success');
   
   // Visual validation feedback in the Sidebar Mockup
-  searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 border border-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-all duration-200 shadow-sm';
-  searchTriggerBtn.classList.add('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
-  
-  setTimeout(() => {
-    searchTriggerBtn.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
-  }, 1500);
+  if (searchTriggerBtn) {
+    searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 border border-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-all duration-200 shadow-sm';
+    searchTriggerBtn.classList.add('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+    
+    setTimeout(() => {
+      searchTriggerBtn.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+    }, 1500);
+  }
 
   tabStates[activeTab].tooltip = '<span class="text-green-400 font-semibold">Success!</span> Try hovering the mock sidebar search button now to see the applied changes!';
   instructionTooltip.innerHTML = tabStates[activeTab].tooltip;

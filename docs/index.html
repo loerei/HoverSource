@@ -37,7 +37,7 @@
   <!-- Section 1: Hero -->
   <section id="hero-section" class="snap-section w-full relative overflow-hidden flex flex-col justify-between">
     <!-- Header / Navigation (Inside first section so it scrolls away naturally) -->
-    <header class="w-full border-b border-zinc-900 bg-[#0b0b0d]/95">
+    <header class="w-full border-b border-zinc-900 bg-[#0b0b0d]/95" data-hs-component="Header" data-hs-file="docs/index.html" data-hs-line="40" data-hs-col="5" data-hs-styles="w-full border-b border-zinc-900 bg-[#0b0b0d]/95" data-hs-lang="HTML">
       <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
         <div class="flex items-center gap-3">
           <div class="h-8 w-8 rounded-lg bg-gradient-to-tr from-brand-blue to-brand-purple flex items-center justify-center font-bold text-white shadow-lg shadow-brand-blue/20">
@@ -62,14 +62,14 @@
 
     <!-- Hero Main Content -->
     <div class="max-w-7xl mx-auto px-6 flex flex-col justify-center items-center text-center flex-grow py-12">
-      <h1 class="text-4xl md:text-6xl font-bold leading-[1.05] tracking-tight text-white max-w-4xl mx-auto mb-6">
+      <h1 class="text-4xl md:text-6xl font-bold leading-[1.05] tracking-tight text-white max-w-4xl mx-auto mb-6" data-hs-component="HeroTitle" data-hs-file="docs/index.html" data-hs-line="65" data-hs-col="7" data-hs-styles="text-4xl font-bold leading-[1.05]" data-hs-lang="HTML">
         The Instant <span class="bg-gradient-to-r from-brand-blue to-brand-purple bg-clip-text text-transparent">Dev-to-Agent</span> Bridge.
       </h1>
       <p class="text-zinc-400 text-base md:text-lg leading-relaxed max-w-2xl mx-auto mb-10">
         Hover on any UI element in your browser, copy its compiler-shifted source coordinates, and let your AI agent patch it instantly.
       </p>
       <div class="flex items-center justify-center gap-4">
-        <a href="#playground-anchor" class="glow-btn bg-brand-blue hover:bg-blue-600 text-white text-sm font-medium px-6 py-3 rounded-lg shadow-lg shadow-brand-blue/20 transition-all active:scale-[0.98]">
+        <a href="#ui-sandbox-section" class="glow-btn bg-brand-blue hover:bg-blue-600 text-white text-sm font-medium px-6 py-3 rounded-lg shadow-lg shadow-brand-blue/20 transition-all active:scale-[0.98]" data-hs-component="CTAButton" data-hs-file="docs/index.html" data-hs-line="72" data-hs-col="9" data-hs-styles="glow-btn bg-brand-blue text-white" data-hs-lang="HTML">
           Try Live Sandbox
         </a>
         <a href="https://github.com/loerei/HoverSource" class="text-zinc-400 hover:text-zinc-200 text-sm font-medium px-6 py-3 rounded-lg border border-zinc-800 bg-zinc-900/20 transition-all hover:bg-zinc-900/50">
@@ -99,84 +99,171 @@
         <!-- Mode Toggles -->
         <div class="space-y-3">
           <div class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Inspection Mode</div>
-          <div class="flex bg-zinc-900/50 p-1 rounded-lg border border-zinc-800/80 font-mono text-[10px] w-full max-w-[280px]">
-            <button id="mode-target-pin" class="flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all">
-              Target Pin
-            </button>
-            <button id="mode-cursor-track" class="flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all">
-              Cursor Tracking
-            </button>
-          </div>
-          <p id="ui-sandbox-instructions" class="text-[11px] text-zinc-500 leading-relaxed">
-            Hover over the search button or dashboard items. HoverSource highlights target bounds and pins metadata at fixed offsets.
+          <p id="ui-sandbox-instructions" class="text-[11px] text-zinc-400 leading-relaxed">
+            HoverSource Inspector Mode is active. Move your cursor over any element in the interactive landing page mockup to view metadata, then press <kbd class="px-1 py-0.5 bg-zinc-900 border border-zinc-800 rounded font-mono text-[9px]">Alt + C</kbd> to copy AI-ready component metadata.
           </p>
         </div>
       </div>
 
       <!-- Right Column: Interactive Browser Dashboard Mock -->
       <div class="lg:col-span-7">
-        <div id="mock-browser-canvas" class="border border-zinc-800 bg-[#0d0d0f]/90 rounded-2xl shadow-2xl p-5 relative overflow-hidden h-[400px] select-none flex flex-col justify-between">
+        <div id="mock-browser-canvas" class="border border-zinc-850 bg-[#000000] rounded-2xl shadow-2xl relative overflow-hidden h-[550px] select-none flex flex-row">
           <!-- Canvas Overlay for Target Mode -->
           <div id="hs-canvas-overlay" class="absolute inset-0 pointer-events-none z-10">
             <div id="hs-target-border" class="absolute border border-dashed border-brand-blue bg-brand-blue/10 rounded hidden transition-all duration-150"></div>
           </div>
 
-          <!-- Browser Header Bar -->
-          <div class="flex items-center justify-between border-b border-zinc-900 pb-3 cursor-pointer" data-hs-component="HeaderBar" data-hs-file="modules/shell/HeaderBar.tsx" data-hs-line="22" data-hs-col="4" data-hs-styles="flex, items-center, justify-between, border-b" data-hs-lang="TSX">
-            <div class="flex items-center gap-2">
-              <span class="h-2 w-2 rounded-full bg-zinc-700"></span>
-              <span class="text-xs font-semibold text-zinc-400">cal.com/shell</span>
+          <!-- Left Sidebar (Instagram Style) -->
+          <div data-hs-component="Sidebar" class="w-[70px] border-r border-zinc-900 bg-[#000000] flex flex-col items-center py-6 justify-between h-full">
+            <div class="flex flex-col gap-6 items-center w-full">
+              <!-- Instagram Wordmark Logo Placeholder -->
+              <div class="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-100 cursor-pointer font-bold font-sans text-sm tracking-tighter" data-hs-component="InstagramLogo" title="Instagram Logo">
+                IG
+              </div>
+
+              <!-- Navigation links -->
+              <div class="flex flex-col gap-5 w-full items-center mt-4">
+                <!-- Home -->
+                <div id="search-trigger-btn" class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-100 bg-zinc-900/60 cursor-pointer" data-hs-component="HomeButton" title="Home">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                  </svg>
+                </div>
+                <!-- Search -->
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" data-hs-component="SearchButton" title="Search">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <!-- Messages -->
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" data-hs-component="MessagesButton" title="Messages">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
+                <!-- Explore -->
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" data-hs-component="ExploreButton" title="Explore">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <!-- Create -->
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" data-hs-component="CreateButton" title="Create">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
             </div>
-            <!-- User Profile badge element -->
-            <div class="h-6 w-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-bold text-zinc-400 cursor-pointer" data-hs-component="ProfileBadge" data-hs-file="modules/user/ProfileBadge.tsx" data-hs-line="45" data-hs-col="12" data-hs-styles="h-6, w-6, rounded-full, bg-zinc-800, border" data-hs-lang="TSX">
+
+            <!-- Profile Badge -->
+            <div class="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-bold text-zinc-400 cursor-pointer" data-hs-component="ProfileBadge" title="Profile">
               U
             </div>
           </div>
 
-          <!-- Browser Workspace Inner Grid -->
-          <div class="grid grid-cols-12 gap-4 flex-grow pt-4">
-            <!-- Mock Dashboard Sidebar -->
-            <div class="col-span-3 border-r border-zinc-900 pr-3 space-y-3 flex flex-col justify-between h-full">
-              <div class="space-y-2">
-                <div class="h-5 w-full rounded bg-zinc-900 flex items-center px-2 cursor-pointer" data-hs-component="SidebarItem" data-hs-file="modules/shell/Sidebar.tsx" data-hs-line="88" data-hs-col="8" data-hs-styles="h-5, w-full, bg-zinc-900, rounded" data-hs-lang="TSX">
-                  <div class="h-1.5 w-8 bg-zinc-700 rounded"></div>
-                </div>
-                <div class="h-5 w-full rounded bg-zinc-900 flex items-center px-2 cursor-pointer" data-hs-component="SidebarItem" data-hs-file="modules/shell/Sidebar.tsx" data-hs-line="94" data-hs-col="8" data-hs-styles="h-5, w-full, bg-zinc-900, rounded" data-hs-lang="TSX">
-                  <div class="h-1.5 w-10 bg-zinc-700 rounded"></div>
+          <!-- Main Feed Container -->
+          <div data-hs-component="AppBackground" class="flex-grow bg-[#000000] flex flex-col h-full overflow-y-auto" style="scrollbar-width: none; -ms-overflow-style: none;">
+            <!-- Stories Tray -->
+            <div class="flex items-center gap-4 px-6 py-3 border-b border-zinc-900 overflow-x-auto w-full select-none h-20 shrink-0" style="scrollbar-width: none; -ms-overflow-style: none;" data-hs-component="StoriesTray">
+              <!-- Story Item 1 -->
+              <div class="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                <div class="w-12 h-12 rounded-full p-[1.5px] bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]" data-hs-component="StoryAvatar">
+                  <div class="w-full h-full rounded-full bg-black flex items-center justify-center">
+                    <img src="avatar_photographer_1783249115968.jpg" class="w-full h-full rounded-full object-cover border border-black">
+                  </div>
                 </div>
               </div>
-
-              <!-- Sidebar trigger button (search trigger) -->
-              <div class="flex items-center justify-between cursor-pointer" data-hs-component="KbarTrigger" data-hs-file="modules/shell/Kbar.tsx" data-hs-line="371" data-hs-col="7" data-hs-styles="h-8, w-8, rounded, bg-zinc-800, text-zinc-400" data-hs-lang="TSX">
-                <div class="h-1.5 w-12 bg-zinc-850 rounded"></div>
-                <button id="search-trigger-btn" class="flex items-center justify-center h-7 w-7 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200">
-                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </button>
+              <!-- Story Item 2 -->
+              <div class="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                <div class="w-12 h-12 rounded-full p-[1.5px] bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]" data-hs-component="StoryAvatar">
+                  <div class="w-full h-full rounded-full bg-black flex items-center justify-center">
+                    <img src="story_avatar_coder_1783249127830.jpg" class="w-full h-full rounded-full object-cover border border-black">
+                  </div>
+                </div>
+              </div>
+              <!-- Story Item 3 -->
+              <div class="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                <div class="w-12 h-12 rounded-full p-[1.5px] bg-gradient-to-tr from-[#f09433] via-[#dc2743] to-[#bc1888]" data-hs-component="StoryAvatar">
+                  <div class="w-full h-full rounded-full bg-black flex items-center justify-center text-[10px] font-bold text-zinc-300 font-sans">
+                    S3
+                  </div>
+                </div>
+              </div>
+              <!-- Story Item 4 -->
+              <div class="flex flex-col items-center gap-1.5 cursor-pointer shrink-0">
+                <div class="w-12 h-12 rounded-full p-[1.5px] bg-zinc-800" data-hs-component="StoryAvatar">
+                  <div class="w-full h-full rounded-full bg-black flex items-center justify-center text-[10px] font-bold text-zinc-500 font-sans">
+                    S4
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Dashboard Main Panel -->
-            <div class="col-span-9 space-y-4 flex flex-col justify-between h-full">
-              <!-- Stats block -->
-              <div class="border border-zinc-900 bg-zinc-950/40 p-3 rounded-lg flex items-center justify-between cursor-pointer" data-hs-component="StatWidget" data-hs-file="modules/dashboard/StatWidget.tsx" data-hs-line="112" data-hs-col="6" data-hs-styles="border, border-zinc-900, p-3, rounded-lg" data-hs-lang="TSX">
-                <div class="space-y-1.5">
-                  <div class="h-1.5 w-16 bg-zinc-800 rounded"></div>
-                  <div class="h-3 w-10 bg-zinc-700 rounded"></div>
+            <!-- Feed Post List -->
+            <div class="px-6 py-4 flex flex-col items-center w-full space-y-6">
+              <!-- Post Card 1 -->
+              <div class="w-full max-w-[340px] border border-zinc-900 bg-zinc-950/20 rounded-lg overflow-hidden flex flex-col shrink-0" data-hs-component="PostCard">
+                <!-- Post Header -->
+                <div class="flex items-center justify-between p-3 border-b border-zinc-900" data-hs-component="PostHeader">
+                  <div class="flex items-center gap-2">
+                    <img data-hs-component="PostHeaderPfp" src="avatar_photographer_1783249115968.jpg" class="w-6 h-6 rounded-full object-cover border border-zinc-800 cursor-pointer">
+                    <span data-hs-component="PostHeaderUsername" class="text-[10px] font-semibold text-zinc-300 cursor-pointer hover:underline">photographer</span>
+                  </div>
+                  <span data-hs-component="PostHeaderMoreOptions" class="text-zinc-600 text-xs cursor-pointer hover:text-zinc-400">•••</span>
                 </div>
-                <div class="h-6 w-16 bg-brand-blue/10 border border-brand-blue/20 rounded-md"></div>
+
+                <!-- Post Content Media -->
+                <div class="w-full aspect-square bg-zinc-950 flex items-center justify-center relative cursor-pointer overflow-hidden" data-hs-component="PostContent">
+                  <img src="instagram_post_photo_1783249103439.jpg" class="w-full h-full object-cover">
+                </div>
+
+                <!-- Action row -->
+                <div class="flex justify-between items-center p-3" data-hs-component="PostActions">
+                  <div class="flex items-center gap-3 text-zinc-400">
+                    <svg data-hs-component="LikeButton" class="h-5 w-5 cursor-pointer hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    <svg data-hs-component="CommentButton" class="h-5 w-5 cursor-pointer hover:text-zinc-200 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <svg data-hs-component="BookmarkButton" class="h-5 w-5 text-zinc-400 cursor-pointer hover:text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                </div>
               </div>
 
-              <!-- List widget -->
-              <div class="flex-grow border border-zinc-900 bg-zinc-950/20 rounded-lg p-2.5 space-y-2 flex flex-col justify-between" data-hs-component="DatabaseList" data-hs-file="modules/dashboard/DbList.tsx" data-hs-line="52" data-hs-col="4" data-hs-styles="border, border-zinc-900, rounded-lg, p-2.5" data-hs-lang="TSX">
-                <div class="h-6 w-full rounded bg-zinc-900 flex items-center justify-between px-2 cursor-pointer" data-hs-component="DbRow" data-hs-file="modules/dashboard/DbRow.tsx" data-hs-line="67" data-hs-col="14" data-hs-styles="h-6, w-full, bg-zinc-900, flex, items-center" data-hs-lang="TSX">
-                  <div class="h-1.5 w-24 bg-zinc-700 rounded"></div>
-                  <div class="h-1.5 w-6 bg-zinc-850 rounded"></div>
+              <!-- Post Card 2 -->
+              <div class="w-full max-w-[340px] border border-zinc-900 bg-zinc-950/20 rounded-lg overflow-hidden flex flex-col shrink-0" data-hs-component="PostCard">
+                <!-- Post Header -->
+                <div class="flex items-center justify-between p-3 border-b border-zinc-900" data-hs-component="PostHeader">
+                  <div class="flex items-center gap-2">
+                    <img data-hs-component="PostHeaderPfp" src="story_avatar_coder_1783249127830.jpg" class="w-6 h-6 rounded-full object-cover border border-zinc-800 cursor-pointer">
+                    <span data-hs-component="PostHeaderUsername" class="text-[10px] font-semibold text-zinc-300 cursor-pointer hover:underline">coder</span>
+                  </div>
+                  <span data-hs-component="PostHeaderMoreOptions" class="text-zinc-600 text-xs cursor-pointer hover:text-zinc-400">•••</span>
                 </div>
-                <div class="h-6 w-full rounded bg-zinc-900 flex items-center justify-between px-2 cursor-pointer" data-hs-component="DbRow" data-hs-file="modules/dashboard/DbRow.tsx" data-hs-line="73" data-hs-col="14" data-hs-styles="h-6, w-full, bg-zinc-900, flex, items-center" data-hs-lang="TSX">
-                  <div class="h-1.5 w-20 bg-zinc-700 rounded"></div>
-                  <div class="h-1.5 w-6 bg-zinc-850 rounded"></div>
+
+                <!-- Post Content Media -->
+                <div class="w-full aspect-square bg-zinc-950 flex items-center justify-center relative cursor-pointer overflow-hidden" data-hs-component="PostContent">
+                  <img src="instagram_post_photo_2_1783249456259.jpg" class="w-full h-full object-cover">
+                </div>
+
+                <!-- Action row -->
+                <div class="flex justify-between items-center p-3" data-hs-component="PostActions">
+                  <div class="flex items-center gap-3 text-zinc-400">
+                    <svg data-hs-component="LikeButton" class="h-5 w-5 cursor-pointer hover:text-red-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    <svg data-hs-component="CommentButton" class="h-5 w-5 cursor-pointer hover:text-zinc-200 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                    </svg>
+                  </div>
+                  <svg data-hs-component="BookmarkButton" class="h-5 w-5 text-zinc-400 cursor-pointer hover:text-zinc-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
                 </div>
               </div>
             </div>
@@ -304,7 +391,7 @@
       <!-- Asymmetric Bento Grid -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <!-- Card 1: Framework Matrix -->
-        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]">
+        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]" data-hs-component="BentoIntegrationCard" data-hs-file="docs/index.html" data-hs-line="307" data-hs-col="9" data-hs-styles="border bg-zinc-950/80 rounded-2xl p-6" data-hs-lang="HTML">
           <div>
             <div class="text-brand-blue text-xs font-mono font-semibold tracking-wider uppercase mb-2">INTEGRATION</div>
             <h3 class="text-lg font-bold text-white mb-2">Framework Support Matrix</h3>
@@ -321,7 +408,7 @@
         </div>
 
         <!-- Card 2: Interactive Shortcut -->
-        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]">
+        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]" data-hs-component="BentoShortcutCard" data-hs-file="docs/index.html" data-hs-line="324" data-hs-col="9" data-hs-styles="border bg-zinc-950/80 rounded-2xl p-6" data-hs-lang="HTML">
           <div>
             <div class="text-brand-purple text-xs font-mono font-semibold tracking-wider uppercase mb-2">WORKFLOW</div>
             <h3 class="text-lg font-bold text-white mb-2">Instant Copy Mechanism</h3>
@@ -336,7 +423,7 @@
         </div>
 
         <!-- Card 3: Compiler pipeline -->
-        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]">
+        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[220px]" data-hs-component="BentoPipelineCard" data-hs-file="docs/index.html" data-hs-line="339" data-hs-col="9" data-hs-styles="border bg-zinc-950/80 rounded-2xl p-6" data-hs-lang="HTML">
           <div>
             <div class="text-brand-amber text-xs font-mono font-semibold tracking-wider uppercase mb-2">PIPELINE</div>
             <h3 class="text-lg font-bold text-white mb-2">Compiler-to-DOM Map</h3>
@@ -479,7 +566,7 @@
   </div>
 
   <!-- Mock Tooltip Card (HoverSource Floating Spec Card) -->
-  <div id="hoversource-spec-card" class="fixed bg-zinc-950/95 backdrop-blur-md border border-zinc-800 text-zinc-300 p-3 rounded-lg shadow-xl text-[10px] font-mono w-64 pointer-events-none hidden z-50 space-y-1">
+  <div id="hoversource-spec-card" class="fixed bg-zinc-950/95 backdrop-blur-md border border-zinc-800 text-zinc-300 p-4 rounded-lg shadow-2xl text-[10.5px] font-mono w-[390px] pointer-events-none hidden z-50 space-y-1.5 shadow-brand-blue/5">
     <div class="text-brand-blue font-bold border-b border-zinc-900 pb-1 flex justify-between">
       <span>Component: Kbar</span>
       <span class="text-zinc-600 text-[8px] bg-zinc-900 px-1 rounded">REACT</span>

@@ -1,6 +1,7 @@
 // State Management
 let activeTab = 'with-hs';
 let currentSimulationId = 0;
+let activeRepo = 'calcom';
 
 const tabStates = {
   'with-hs': {
@@ -45,12 +46,17 @@ const statSteps = document.getElementById('stat-steps');
 const statTokens = document.getElementById('stat-tokens');
 const statTime = document.getElementById('stat-time');
 
-// DOM Elements - Benchmark Slider
+// DOM Elements - Benchmark Slider & Toggles
 const benchmarkSlider = document.getElementById('benchmark-slider');
 const sliderGroupLabel = document.getElementById('slider-group-label');
+const toggleCalcom = document.getElementById('toggle-calcom');
+const toggleYumeshelf = document.getElementById('toggle-yumeshelf');
+
 const benchSteps = document.getElementById('bench-steps');
 const benchTokens = document.getElementById('bench-tokens');
-const benchCost = document.getElementById('bench-cost');
+const benchPeak = document.getElementById('bench-peak');
+const benchTime = document.getElementById('bench-time');
+
 const barTokenFill = document.getElementById('bar-token-fill');
 const barTokenPercent = document.getElementById('bar-token-percent');
 const barTimeFill = document.getElementById('bar-time-fill');
@@ -278,64 +284,125 @@ sendBtn.addEventListener('click', () => {
   }
 });
 
-// Benchmark Slider Data & Logic
-const sliderData = [
-  {
-    label: 'Group A: No Context',
-    steps: '65',
-    tokens: '651,681',
-    cost: '$1.95',
-    tokenPercent: '100%',
-    tokenWidth: '100%',
-    timeVal: '142.0s',
-    timeWidth: '100%',
-    colorClass: 'text-brand-amber'
-  },
-  {
-    label: 'Group B: File Path Only',
-    steps: '5',
-    tokens: '24,980',
-    cost: '$0.07',
-    tokenPercent: '3.8%',
-    tokenWidth: '3.8%',
-    timeVal: '10.2s',
-    timeWidth: '7.2%',
-    colorClass: 'text-brand-purple'
-  },
-  {
-    label: 'Group C: With HoverSource (Recommended)',
-    steps: '5',
-    tokens: '6,486',
-    cost: '$0.02',
-    tokenPercent: '0.9%',
-    tokenWidth: '0.99%',
-    timeVal: '8.2s',
-    timeWidth: '5.7%',
-    colorClass: 'text-brand-blue'
-  }
-];
+// Real-World Benchmark Dataset (Cal.com Averages & YumeShelf Averages)
+const benchmarkData = {
+  calcom: [
+    {
+      label: 'Group A: No Context (Cal.com)',
+      steps: '65.6',
+      tokens: '651,681',
+      peak: '28,257',
+      time: '142.0s',
+      tokenPercent: '100%',
+      tokenWidth: '100%',
+      timeWidth: '100%',
+      colorClass: 'text-brand-amber'
+    },
+    {
+      label: 'Group B: File Only (Cal.com)',
+      steps: '18.0',
+      tokens: '37,858',
+      peak: '7,372',
+      time: '44.2s',
+      tokenPercent: '5.8%',
+      tokenWidth: '5.8%',
+      timeWidth: '31.1%', // 44.2 / 142.0 = 31.1%
+      colorClass: 'text-brand-purple'
+    },
+    {
+      label: 'Group C: HoverSource (Cal.com)',
+      steps: '17.1',
+      tokens: '35,733',
+      peak: '6,486',
+      time: '16.4s',
+      tokenPercent: '5.4%',
+      tokenWidth: '5.4%',
+      timeWidth: '11.5%', // 16.4 / 142.0 = 11.5%
+      colorClass: 'text-brand-blue'
+    }
+  ],
+  yumeshelf: [
+    {
+      label: 'Group A: No Context (YumeShelf)',
+      steps: '34.4',
+      tokens: '118,354',
+      peak: '14,140',
+      time: '34.4s',
+      tokenPercent: '100%',
+      tokenWidth: '100%',
+      timeWidth: '88.6%', // 34.4 / 38.8 = 88.6%
+      colorClass: 'text-brand-amber'
+    },
+    {
+      label: 'Group B: File Only (YumeShelf)',
+      steps: '22.0',
+      tokens: '44,382',
+      peak: '8,589',
+      time: '38.8s',
+      tokenPercent: '37.5%',
+      tokenWidth: '37.5%',
+      timeWidth: '100%', // Max time for yumeshelf
+      colorClass: 'text-brand-purple'
+    },
+    {
+      label: 'Group C: HoverSource (YumeShelf)',
+      steps: '26.0',
+      tokens: '61,255',
+      peak: '9,984',
+      time: '24.8s',
+      tokenPercent: '51.7%',
+      tokenWidth: '51.7%',
+      timeWidth: '63.9%', // 24.8 / 38.8 = 63.9%
+      colorClass: 'text-brand-blue'
+    }
+  ]
+};
+
+function updateBenchmarkUI() {
+  if (!benchmarkSlider) return;
+  const val = parseInt(benchmarkSlider.value, 10);
+  const data = benchmarkData[activeRepo][val];
+
+  sliderGroupLabel.innerText = data.label;
+  sliderGroupLabel.className = `text-xs font-bold font-mono text-center pt-2 ${data.colorClass}`;
+
+  benchSteps.innerText = data.steps;
+  benchTokens.innerText = data.tokens;
+  benchPeak.innerText = data.peak;
+  benchTime.innerText = data.time;
+  benchTime.className = `text-lg md:text-xl font-bold font-mono mt-1 ${data.colorClass}`;
+
+  barTokenPercent.innerText = data.tokenPercent;
+  barTokenPercent.className = data.colorClass;
+  barTokenFill.style.width = data.tokenWidth;
+  barTokenFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
+
+  barTimeVal.innerText = data.time;
+  barTimeVal.className = `transition-all duration-500 ${val === 0 ? 'text-brand-amber' : val === 1 ? 'text-brand-purple' : 'text-brand-blue'}`;
+  barTimeFill.style.width = data.timeWidth;
+  barTimeFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
+}
 
 if (benchmarkSlider) {
-  benchmarkSlider.addEventListener('input', (e) => {
-    const val = parseInt(e.target.value, 10);
-    const data = sliderData[val];
+  benchmarkSlider.addEventListener('input', updateBenchmarkUI);
+}
 
-    sliderGroupLabel.innerText = data.label;
-    sliderGroupLabel.className = `text-xs font-bold font-mono text-center pt-2 ${data.colorClass}`;
+// Codebase Toggle Listeners
+if (toggleCalcom && toggleYumeshelf) {
+  toggleCalcom.addEventListener('click', () => {
+    if (activeRepo === 'calcom') return;
+    activeRepo = 'calcom';
+    toggleCalcom.className = 'flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all';
+    toggleYumeshelf.className = 'flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all';
+    updateBenchmarkUI();
+  });
 
-    benchSteps.innerText = data.steps;
-    benchTokens.innerText = data.tokens;
-    benchCost.innerText = data.cost;
-
-    barTokenPercent.innerText = data.tokenPercent;
-    barTokenPercent.className = data.colorClass;
-    barTokenFill.style.width = data.tokenWidth;
-    barTokenFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
-
-    barTimeVal.innerText = data.timeVal;
-    barTimeVal.className = `transition-all duration-500 ${val === 0 ? 'text-brand-amber' : val === 1 ? 'text-brand-purple' : 'text-brand-blue'}`;
-    barTimeFill.style.width = data.timeWidth;
-    barTimeFill.className = `h-full transition-all duration-500 ${val === 0 ? 'bg-brand-amber' : val === 1 ? 'bg-brand-purple' : 'bg-brand-blue'}`;
+  toggleYumeshelf.addEventListener('click', () => {
+    if (activeRepo === 'yumeshelf') return;
+    activeRepo = 'yumeshelf';
+    toggleYumeshelf.className = 'flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all';
+    toggleCalcom.className = 'flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all';
+    updateBenchmarkUI();
   });
 }
 

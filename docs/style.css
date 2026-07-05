@@ -33,19 +33,74 @@ body {
 }
 
 /* Custom Floating HUD Text Navigation (Scrollbar replacement) */
+.hud-nav-container {
+  border-left: 1px solid rgba(63, 63, 70, 0.2);
+  transition: border-color 0.3s ease;
+  padding-left: 16px;
+}
+.hud-nav-container:hover {
+  border-color: rgba(63, 63, 70, 0.6);
+}
+
 .nav-title-item {
   position: relative;
-  transition: color 0.30s cubic-bezier(0.4, 0, 0.2, 1), transform 0.30s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: #71717a; /* zinc-400 */
+  opacity: 0;
+  transform: translateX(10px);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
+  pointer-events: none;
   outline: none;
 }
-.nav-title-item:hover {
-  transform: translateX(-4px);
+
+/* Show text on hover */
+.hud-nav-container:hover .nav-title-item {
+  opacity: 0.6;
+  transform: translateX(0);
+  pointer-events: auto;
 }
-.nav-title-item.active-nav-title {
+
+.hud-nav-container:hover .nav-title-item:hover {
+  opacity: 1;
+  color: #f4f4f5; /* zinc-100 */
+}
+
+.hud-nav-container:hover .nav-title-item.active-nav-title {
+  opacity: 1;
   color: #3b82f6; /* brand-blue */
   font-weight: 600;
   text-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
-  transform: translateX(-6px);
+}
+
+/* Scroll indicator dots (always visible) */
+.nav-title-item::after {
+  content: '';
+  position: absolute;
+  right: -19px; /* Align precisely with the left border line */
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #27272a; /* zinc-800 */
+  opacity: 1;
+  transition: background-color 0.3s ease, transform 0.3s ease, height 0.3s ease, border-radius 0.3s ease;
+}
+
+/* Active indicator dot */
+.nav-title-item.active-nav-title::after {
+  background-color: #3b82f6; /* brand-blue */
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6);
+  height: 12px;
+  border-radius: 2px;
+}
+
+.hud-nav-container:hover .nav-title-item::after {
+  background-color: #3f3f46; /* zinc-700 */
+}
+
+.hud-nav-container:hover .nav-title-item.active-nav-title::after {
+  background-color: #3b82f6;
 }
 
 /* Premium visual effects */

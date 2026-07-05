@@ -639,6 +639,9 @@ window.addEventListener('wheel', (e) => {
   // Only apply custom scrolling on desktop screens where the HUD is active
   if (window.innerWidth < 1024) return;
 
+  // Do not intercept or block page zooming gestures (Ctrl + Scroll / Pinch-to-zoom)
+  if (e.ctrlKey || e.metaKey) return;
+
   // Allow native scrolling inside scrollable mock containers (Instagram feed, terminals)
   if (e.target.closest('#mock-browser-canvas') || e.target.closest('.terminal-scroll')) {
     return;

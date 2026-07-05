@@ -75,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
       history: []
     });
 
-    el.style.transform = `translate3d(${roughX}px, ${roughY}px, 0)`;
+    el.style.transform = `translate3d(${roughX}px, ${roughY}px, 0) scale(0.5)`;
   });
 
   let containerWidth = canvas.clientWidth;
@@ -88,8 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
     headerHeight = header ? header.offsetHeight : 80;
 
     tags.forEach((tag) => {
-      tag.width = tag.element.offsetWidth || 100;
-      tag.height = tag.element.offsetHeight || 30;
+      // Physically scale width and height down to 0.5x to match the visual scale(0.5)
+      tag.width = (tag.element.offsetWidth || 100) * 0.5;
+      tag.height = (tag.element.offsetHeight || 30) * 0.5;
 
       // Distribute in sections to avoid clustering in the center text area
       let posX = Math.random() * (containerWidth - tag.width);
@@ -113,7 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.x = Math.max(0, Math.min(containerWidth - tag.width, posX));
       tag.y = Math.max(headerHeight, Math.min(containerHeight - tag.height, posY));
       
-      tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0)`;
+      tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0) scale(0.5)`;
       
       // Reveal element smoothly after positioning
       tag.element.classList.remove('opacity-0');
@@ -133,8 +134,9 @@ document.addEventListener('DOMContentLoaded', () => {
       tag.vy = 0;
       
       const rect = tag.element.getBoundingClientRect();
-      tag.dragOffsetX = clientX - rect.left;
-      tag.dragOffsetY = clientY - rect.top;
+      // Adjust offset for scaled elements
+      tag.dragOffsetX = (clientX - rect.left) * 2;
+      tag.dragOffsetY = (clientY - rect.top) * 2;
 
       tag.lastMouseX = clientX;
       tag.lastMouseY = clientY;
@@ -162,14 +164,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const now = Date.now();
       const rect = canvas.getBoundingClientRect();
       
-      const newX = clientX - rect.left - tag.dragOffsetX;
-      const newY = clientY - rect.top - tag.dragOffsetY;
+      const newX = clientX - rect.left - tag.dragOffsetX * 0.5;
+      const newY = clientY - rect.top - tag.dragOffsetY * 0.5;
 
       // Keep within boundaries during drag (respect header upper boundary)
       tag.x = Math.max(0, Math.min(containerWidth - tag.width, newX));
       tag.y = Math.max(headerHeight, Math.min(containerHeight - tag.height, newY));
 
-      tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0)`;
+      tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0) scale(0.5)`;
 
       // Track history for momentum calculation (keep last 5 frames)
       tag.history.push({ x: clientX, y: clientY, t: now });
@@ -289,8 +291,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const dy = by - ay;
         const dist = Math.hypot(dx, dy) || 1;
 
-        // Threshold distance for repulsion (combined radius + padding)
-        const minDist = (tagA.width + tagB.width) / 2 + 25;
+        // Threshold distance for repulsion (combined scaled radius + padding)
+        const minDist = (tagA.width + tagB.width) / 2 + 15; // Shrunk spacing for half-size
         if (dist < minDist) {
           const overlap = minDist - dist;
           const nx = dx / dist;
@@ -386,7 +388,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Render updated positions & inline color/opacity/glow filters
-      const scale = 1.0 + 0.08 * tag.glowIntensity; // Scale factor 1.08 for pop-out
+      const scale = 0.5 * (1.0 + 0.08 * tag.glowIntensity); // Base scale 0.5, pop-out 1.08
       const baseOpacity = 0.15; // Deeper faded state (0.15) for stronger contrast
       const maxOpacity = 1.0;
       const opacity = baseOpacity + (maxOpacity - baseOpacity) * tag.glowIntensity;
@@ -452,8 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const neighbor = sortedNeighbors[i].tag;
       const hopIndex = i + 1; // 1 to 5
       
-      // Calculate peak glow for this neighbor based on index:
-      // index 1: 0.82, index 2: 0.64, index 3: 0.46, index 4: 0.28, index 5: 0.10
+      // Calculate peak glow for this neighbor based on index
       const peakGlow = Math.max(0, 1.0 - hopIndex * 0.18);
       const delay = hopIndex * 130; // 130ms delay per hop
 

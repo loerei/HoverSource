@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let w = activeWaves.length - 1; w >= 0; w--) {
       const wave = activeWaves[w];
       wave.radius += wave.speed;
-      wave.strength *= 0.985; // Decay wave strength gently as it travels
+      wave.strength *= 0.99; // Decay wave strength slower as it travels
 
       // Check impact on each tag
       tags.forEach(tag => {
@@ -246,8 +246,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const ty = tag.y + tag.height / 2;
         const distance = Math.hypot(tx - wave.x, ty - wave.y) || 1;
 
-        // Wave has hit this tag
-        if (wave.radius >= distance && wave.radius - 150 < distance) {
+        // Wave has hit this tag (increase detection band width to 200px)
+        if (wave.radius >= distance && wave.radius - 200 < distance) {
           const proximity = Math.max(0, 1.0 - distance / wave.maxRadius);
           const intensity = proximity * wave.strength;
           tag.glowIntensity = Math.max(tag.glowIntensity, intensity);
@@ -342,7 +342,6 @@ document.addEventListener('DOMContentLoaded', () => {
           }
           if (!tagB.isDragging) {
             tagB.vx += nx * force;
-            tagB.vy += ny * force;
           }
         }
       }
@@ -354,8 +353,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isHovered) {
         tag.glowIntensity = 1.0;
       } else {
-        // Natural smooth fade-out decay (0.94)
-        tag.glowIntensity *= 0.945;
+        // Natural smooth fade-out decay (0.972 for longer lingering glow)
+        tag.glowIntensity *= 0.972;
       }
 
       if (!tag.isDragging) {
@@ -450,18 +449,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const randomTag = eligibleTags[Math.floor(Math.random() * eligibleTags.length)];
     lastGlowTag = randomTag;
 
-    // Push new wave propagating outward
+    // Push new wave propagating outward (slowing speed to 5px/frame for majestic loang effect)
     activeWaves.push({
       x: randomTag.x + randomTag.width / 2,
       y: randomTag.y + randomTag.height / 2,
       radius: 0,
-      maxRadius: 750, // Wave max range
+      maxRadius: 800, // Wave max range
       strength: 1.0,
-      speed: 10 // pixels per frame
+      speed: 4.8 // pixels per frame
     });
 
-    // Schedule next wave pulse in 2.5 seconds
-    setTimeout(triggerWave, 2500);
+    // Schedule next wave pulse in 1.8 seconds (seamless loops)
+    setTimeout(triggerWave, 1800);
   }
 
   // Start wave pulses after 2 seconds

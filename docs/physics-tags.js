@@ -332,8 +332,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Faster interpolation for instant hover response
         tag.glowIntensity += (1.0 - tag.glowIntensity) * 0.22;
       } else {
-        // Natural smooth fade-out decay (target decays exponentially, current follows target)
-        tag.targetGlowIntensity *= 0.952;
+        // Natural smooth fade-out decay (0.988 for much longer lingering glow)
+        tag.targetGlowIntensity *= 0.988;
         tag.glowIntensity += (tag.targetGlowIntensity - tag.glowIntensity) * 0.12;
       }
 

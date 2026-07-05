@@ -35,6 +35,7 @@ body {
 /* Custom Floating HUD Text Navigation (Scrollbar replacement) */
 .hud-nav-container {
   padding-left: 16px;
+  padding-right: 32px;
 }
 
 .nav-title-item {

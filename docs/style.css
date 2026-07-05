@@ -34,12 +34,7 @@ body {
 
 /* Custom Floating HUD Text Navigation (Scrollbar replacement) */
 .hud-nav-container {
-  border-left: 1px solid rgba(63, 63, 70, 0.2);
-  transition: border-color 0.3s ease;
   padding-left: 16px;
-}
-.hud-nav-container:hover {
-  border-color: rgba(63, 63, 70, 0.6);
 }
 
 .nav-title-item {

@@ -32,11 +32,17 @@ const tabStates = {
 
 // DOM Elements - Sandbox
 const searchTriggerBtn = document.getElementById('search-trigger-btn');
-const mockOverlay = document.getElementById('hoversource-mock-overlay');
 const specCard = document.getElementById('hoversource-spec-card');
 const sendBtn = document.getElementById('send-btn');
 const pseudoInput = document.getElementById('pseudo-input');
 const instructionTooltip = document.getElementById('instruction-tooltip');
+
+// DOM Elements - UI Sandbox Canvas
+const modeTargetPin = document.getElementById('mode-target-pin');
+const modeCursorTrack = document.getElementById('mode-cursor-track');
+const uiInstructions = document.getElementById('ui-sandbox-instructions');
+const mockBrowserCanvas = document.getElementById('mock-browser-canvas');
+const hsTargetBorder = document.getElementById('hs-target-border');
 
 const tabWithHs = document.getElementById('tab-with-hs');
 const tabFileOnly = document.getElementById('tab-file-only');
@@ -176,22 +182,158 @@ function resetTerminal() {
   statTime.innerText = '0s';
 }
 
-// Hover Interaction Simulator
-searchTriggerBtn.addEventListener('mouseenter', (e) => {
-  mockOverlay.classList.remove('hidden');
-  
-  // Position HoverSource floating card near the button
-  const rect = searchTriggerBtn.getBoundingClientRect();
-  specCard.style.top = `${rect.bottom + 8}px`;
-  specCard.style.left = `${rect.left - 100}px`;
-  specCard.classList.remove('hidden');
+// Interactive UI Sandbox Inspector Logic
+let activeHsMode = 'target-pin'; // 'target-pin' or 'cursor-track'
+
+// Mode switching listeners
+if (modeTargetPin && modeCursorTrack) {
+  modeTargetPin.addEventListener('click', () => {
+    if (activeHsMode === 'target-pin') return;
+    activeHsMode = 'target-pin';
+    modeTargetPin.className = 'flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all';
+    modeCursorTrack.className = 'flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all';
+    uiInstructions.innerText = 'Hover over the search button or dashboard items. HoverSource highlights target bounds and pins metadata at fixed offsets.';
+    resetInspectorVisuals();
+  });
+
+  modeCursorTrack.addEventListener('click', () => {
+    if (activeHsMode === 'cursor-track') return;
+    activeHsMode = 'cursor-track';
+    modeCursorTrack.className = 'flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all';
+    modeTargetPin.className = 'flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all';
+    uiInstructions.innerText = 'Move your cursor freely around the viewport canvas. The metadata card will follow your cursor and inspect elements dynamically.';
+    resetInspectorVisuals();
+  });
+}
+
+function resetInspectorVisuals() {
+  specCard.classList.add('hidden');
+  if (hsTargetBorder) hsTargetBorder.classList.add('hidden');
+  // Remove cursor track hover styles from all elements
+  document.querySelectorAll('#mock-browser-canvas [data-hs-component]').forEach(el => {
+    el.classList.remove('hs-cursor-track-hover');
+  });
+}
+
+let currentlyInspectedElement = null;
+
+function getMetadataMarkdown(target) {
+  if (!target) return "";
+  const component = target.getAttribute('data-hs-component');
+  const file = target.getAttribute('data-hs-file');
+  const line = target.getAttribute('data-hs-line');
+  const col = target.getAttribute('data-hs-col');
+  const styles = target.getAttribute('data-hs-styles');
+  const lang = target.getAttribute('data-hs-lang') || 'TSX';
+  const tagName = target.tagName.toLowerCase();
+  const idStr = target.id ? `#${target.id}` : '';
+  const classList = Array.from(target.classList).filter(c => !c.startsWith('hs-') && c !== 'cursor-pointer');
+  const classStr = classList.length > 0 ? `.${classList.join('.')}` : '';
+  const selector = `${tagName}${idStr}${classStr}`;
+
+  return `### HoverSource Component Metadata
+* **Component**: \`${component}\`
+* **Element**: \`${selector}\`
+* **File Path**: \`${file}\` (Line: ${line}, Column: ${col})
+* **Framework**: ${lang}
+* **Key Styles**: ${styles}`;
+}
+
+// Attach keyboard copy shortcut Alt + C
+window.addEventListener('keydown', (e) => {
+  if (e.altKey && e.key.toLowerCase() === 'c') {
+    if (currentlyInspectedElement) {
+      e.preventDefault();
+      const markdown = getMetadataMarkdown(currentlyInspectedElement);
+      navigator.clipboard.writeText(markdown).then(() => {
+        // Show flash copy indicator in specCard
+        const copyHint = specCard.querySelector('.copy-hint-text');
+        if (copyHint) {
+          copyHint.innerText = 'Copied to Clipboard!';
+          copyHint.className = 'copy-hint-text text-green-400 font-bold text-[9px] animate-pulse';
+          setTimeout(() => {
+            copyHint.innerText = 'Press Alt + C to Copy';
+            copyHint.className = 'copy-hint-text text-zinc-600 text-[8px]';
+          }, 1500);
+        }
+      }).catch(err => {
+        console.error('Clipboard copy failed:', err);
+      });
+    }
+  }
 });
 
-// Position HoverSource floating card near the button
-searchTriggerBtn.addEventListener('mouseleave', () => {
-  mockOverlay.classList.add('hidden');
-  specCard.classList.add('hidden');
-});
+// Attach hover listener to mockup canvas
+if (mockBrowserCanvas) {
+  // Delegate event handling for data-hs-component elements
+  mockBrowserCanvas.addEventListener('mouseover', (e) => {
+    const target = e.target.closest('[data-hs-component]');
+    if (!target) return;
+
+    currentlyInspectedElement = target;
+
+    // Retrieve metadata
+    const component = target.getAttribute('data-hs-component');
+    const file = target.getAttribute('data-hs-file');
+    const line = target.getAttribute('data-hs-line');
+    const col = target.getAttribute('data-hs-col');
+    const styles = target.getAttribute('data-hs-styles');
+    const lang = target.getAttribute('data-hs-lang') || 'TSX';
+
+    // Populate specCard HTML dynamically
+    specCard.innerHTML = `
+      <div class="text-brand-blue font-bold border-b border-zinc-900 pb-1 flex justify-between">
+        <span>Component: ${component}</span>
+        <span class="text-zinc-600 text-[8px] bg-zinc-900 px-1 rounded">${lang}</span>
+      </div>
+      <div><span class="text-zinc-500">File:</span> <span class="text-emerald-500">${file}</span></div>
+      <div><span class="text-zinc-500">Source Line:</span> Line ${line}, Col ${col}</div>
+      <div class="border-t border-zinc-900 pt-1 mt-1">
+        <span class="text-zinc-500">Styles:</span>
+        <div class="text-[9px] text-zinc-400 pl-2">${styles}</div>
+      </div>
+      <div class="copy-hint-text text-[8px] text-zinc-600 text-right pt-1 border-t border-zinc-900">Press Alt + C to Copy</div>
+    `;
+
+    specCard.classList.remove('hidden');
+
+    if (activeHsMode === 'target-pin') {
+      // Pin mode: draw absolute border relative to mockup canvas container
+      const canvasRect = mockBrowserCanvas.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+
+      if (hsTargetBorder) {
+        hsTargetBorder.style.top = `${targetRect.top - canvasRect.top}px`;
+        hsTargetBorder.style.left = `${targetRect.left - canvasRect.left}px`;
+        hsTargetBorder.style.width = `${targetRect.width}px`;
+        hsTargetBorder.style.height = `${targetRect.height}px`;
+        hsTargetBorder.classList.remove('hidden');
+      }
+
+      // Pin SpecCard nearby relative to viewport
+      specCard.style.top = `${targetRect.bottom + 8}px`;
+      specCard.style.left = `${targetRect.left}px`;
+    } else {
+      // Cursor tracking mode
+      target.classList.add('hs-cursor-track-hover');
+    }
+  });
+
+  mockBrowserCanvas.addEventListener('mousemove', (e) => {
+    if (activeHsMode !== 'cursor-track') return;
+    // SpecCard follows cursor with a slight offset
+    specCard.style.top = `${e.clientY + 12}px`;
+    specCard.style.left = `${e.clientX + 12}px`;
+  });
+
+  mockBrowserCanvas.addEventListener('mouseout', (e) => {
+    const target = e.target.closest('[data-hs-component]');
+    if (!target) return;
+
+    currentlyInspectedElement = null;
+    resetInspectorVisuals();
+  });
+}
 
 // Simulated typing/delay
 function delay(ms) {

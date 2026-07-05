@@ -46,7 +46,8 @@
           <span class="font-semibold text-lg tracking-tight">HoverSource</span>
         </div>
         <nav class="hidden md:flex items-center gap-6 text-sm text-zinc-400 font-medium">
-          <a href="#playground-anchor" class="hover:text-zinc-200 transition-colors">Sandbox</a>
+          <a href="#ui-sandbox-section" class="hover:text-zinc-200 transition-colors">UI Sandbox</a>
+          <a href="#cli-sandbox-section" class="hover:text-zinc-200 transition-colors">CLI Agent</a>
           <a href="#bento-anchor" class="hover:text-zinc-200 transition-colors">Features</a>
           <a href="#benchmark-anchor" class="hover:text-zinc-200 transition-colors">Benchmarks</a>
         </nav>
@@ -81,62 +82,133 @@
     <div class="h-16 hidden md:block"></div>
   </section>
 
-  <!-- Section 2: Sandbox -->
-  <section id="playground-anchor" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/20 py-12">
-    <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-      
-      <!-- Left Column: Mock App Sidebar -->
+  <!-- Section 2: UI Sandbox -->
+  <section id="ui-sandbox-section" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/20 py-12 flex flex-col justify-between">
+    <div class="h-4 hidden md:block"></div>
+    <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center w-full">
+      <!-- Left Column: Description & Toggles -->
       <div class="lg:col-span-5 space-y-6">
         <div class="space-y-2">
-          <h2 class="text-2xl md:text-3xl font-bold text-white">Interactive Sandbox</h2>
+          <div class="text-brand-blue text-xs font-mono font-semibold tracking-wider uppercase">VISUAL INSPECTOR</div>
+          <h2 class="text-2xl md:text-3xl font-bold text-white tracking-tight">Interactive UI Sandbox</h2>
           <p class="text-zinc-400 text-sm leading-relaxed">
-            Hover over the search button in the mockup sidebar to trigger the HoverSource floating card. Copy the metadata coordinates, then run the agent simulation on the right.
+            Experience HoverSource's client inspector. Toggle between targeting modes and move your cursor over components in the mock dashboard to see metadata mapped in real time.
           </p>
         </div>
-        
-        <!-- Simulated Sidebar Component Preview -->
-        <div class="border border-zinc-800 bg-zinc-950/80 rounded-xl p-5 shadow-2xl space-y-4 max-w-md relative overflow-hidden">
-          <div class="absolute top-2 right-3 text-[10px] font-mono text-zinc-600">MOCK APP SIDEBAR</div>
-          
-          <div class="flex items-center gap-3 border-b border-zinc-900 pb-3">
-            <div class="h-6 w-6 rounded bg-zinc-800 flex items-center justify-center text-xs font-bold text-zinc-400">C</div>
-            <span class="text-xs font-semibold text-zinc-300">Cal.com Shell</span>
+
+        <!-- Mode Toggles -->
+        <div class="space-y-3">
+          <div class="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Inspection Mode</div>
+          <div class="flex bg-zinc-900/50 p-1 rounded-lg border border-zinc-800/80 font-mono text-[10px] w-full max-w-[280px]">
+            <button id="mode-target-pin" class="flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all">
+              Target Pin
+            </button>
+            <button id="mode-cursor-track" class="flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all">
+              Cursor Tracking
+            </button>
           </div>
-          
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="h-2 w-2 rounded-full bg-zinc-700"></div>
-              <div class="h-2 w-20 bg-zinc-800 rounded"></div>
+          <p id="ui-sandbox-instructions" class="text-[11px] text-zinc-500 leading-relaxed">
+            Hover over the search button or dashboard items. HoverSource highlights target bounds and pins metadata at fixed offsets.
+          </p>
+        </div>
+      </div>
+
+      <!-- Right Column: Interactive Browser Dashboard Mock -->
+      <div class="lg:col-span-7">
+        <div id="mock-browser-canvas" class="border border-zinc-800 bg-[#0d0d0f]/90 rounded-2xl shadow-2xl p-5 relative overflow-hidden h-[400px] select-none flex flex-col justify-between">
+          <!-- Canvas Overlay for Target Mode -->
+          <div id="hs-canvas-overlay" class="absolute inset-0 pointer-events-none z-10">
+            <div id="hs-target-border" class="absolute border border-dashed border-brand-blue bg-brand-blue/10 rounded hidden transition-all duration-150"></div>
+          </div>
+
+          <!-- Browser Header Bar -->
+          <div class="flex items-center justify-between border-b border-zinc-900 pb-3 cursor-pointer" data-hs-component="HeaderBar" data-hs-file="modules/shell/HeaderBar.tsx" data-hs-line="22" data-hs-col="4" data-hs-styles="flex, items-center, justify-between, border-b" data-hs-lang="TSX">
+            <div class="flex items-center gap-2">
+              <span class="h-2 w-2 rounded-full bg-zinc-700"></span>
+              <span class="text-xs font-semibold text-zinc-400">cal.com/shell</span>
             </div>
-            <!-- Target Search Button (Kbar Trigger) -->
-            <div class="relative group" id="demo-search-container">
-              <button id="search-trigger-btn" class="flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200">
-                <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </button>
-              <!-- HoverSource Overlay Mock (Hidden by default, shown on pointer hover) -->
-              <div id="hoversource-mock-overlay" class="absolute -inset-1 border border-dashed border-brand-blue bg-brand-blue/10 rounded pointer-events-none hidden transition-all"></div>
+            <!-- User Profile badge element -->
+            <div class="h-6 w-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] font-bold text-zinc-400 cursor-pointer" data-hs-component="ProfileBadge" data-hs-file="modules/user/ProfileBadge.tsx" data-hs-line="45" data-hs-col="12" data-hs-styles="h-6, w-6, rounded-full, bg-zinc-800, border" data-hs-lang="TSX">
+              U
             </div>
           </div>
 
-          <div class="space-y-2 pt-2 border-t border-zinc-900">
-            <div class="h-2 w-full bg-zinc-900 rounded"></div>
-            <div class="h-2 w-5/6 bg-zinc-900 rounded"></div>
-          </div>
+          <!-- Browser Workspace Inner Grid -->
+          <div class="grid grid-cols-12 gap-4 flex-grow pt-4">
+            <!-- Mock Dashboard Sidebar -->
+            <div class="col-span-3 border-r border-zinc-900 pr-3 space-y-3 flex flex-col justify-between h-full">
+              <div class="space-y-2">
+                <div class="h-5 w-full rounded bg-zinc-900 flex items-center px-2 cursor-pointer" data-hs-component="SidebarItem" data-hs-file="modules/shell/Sidebar.tsx" data-hs-line="88" data-hs-col="8" data-hs-styles="h-5, w-full, bg-zinc-900, rounded" data-hs-lang="TSX">
+                  <div class="h-1.5 w-8 bg-zinc-700 rounded"></div>
+                </div>
+                <div class="h-5 w-full rounded bg-zinc-900 flex items-center px-2 cursor-pointer" data-hs-component="SidebarItem" data-hs-file="modules/shell/Sidebar.tsx" data-hs-line="94" data-hs-col="8" data-hs-styles="h-5, w-full, bg-zinc-900, rounded" data-hs-lang="TSX">
+                  <div class="h-1.5 w-10 bg-zinc-700 rounded"></div>
+                </div>
+              </div>
 
-          <!-- Inline instruction -->
-          <div class="text-[11px] text-zinc-500 flex items-center gap-1.5">
-            <span class="h-1 w-1 rounded-full bg-zinc-500"></span>
-            <span>Hover search button to trigger HoverSource spec card</span>
+              <!-- Sidebar trigger button (search trigger) -->
+              <div class="flex items-center justify-between cursor-pointer" data-hs-component="KbarTrigger" data-hs-file="modules/shell/Kbar.tsx" data-hs-line="371" data-hs-col="7" data-hs-styles="h-8, w-8, rounded, bg-zinc-800, text-zinc-400" data-hs-lang="TSX">
+                <div class="h-1.5 w-12 bg-zinc-850 rounded"></div>
+                <button id="search-trigger-btn" class="flex items-center justify-center h-7 w-7 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200">
+                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Dashboard Main Panel -->
+            <div class="col-span-9 space-y-4 flex flex-col justify-between h-full">
+              <!-- Stats block -->
+              <div class="border border-zinc-900 bg-zinc-950/40 p-3 rounded-lg flex items-center justify-between cursor-pointer" data-hs-component="StatWidget" data-hs-file="modules/dashboard/StatWidget.tsx" data-hs-line="112" data-hs-col="6" data-hs-styles="border, border-zinc-900, p-3, rounded-lg" data-hs-lang="TSX">
+                <div class="space-y-1.5">
+                  <div class="h-1.5 w-16 bg-zinc-800 rounded"></div>
+                  <div class="h-3 w-10 bg-zinc-700 rounded"></div>
+                </div>
+                <div class="h-6 w-16 bg-brand-blue/10 border border-brand-blue/20 rounded-md"></div>
+              </div>
+
+              <!-- List widget -->
+              <div class="flex-grow border border-zinc-900 bg-zinc-950/20 rounded-lg p-2.5 space-y-2 flex flex-col justify-between" data-hs-component="DatabaseList" data-hs-file="modules/dashboard/DbList.tsx" data-hs-line="52" data-hs-col="4" data-hs-styles="border, border-zinc-900, rounded-lg, p-2.5" data-hs-lang="TSX">
+                <div class="h-6 w-full rounded bg-zinc-900 flex items-center justify-between px-2 cursor-pointer" data-hs-component="DbRow" data-hs-file="modules/dashboard/DbRow.tsx" data-hs-line="67" data-hs-col="14" data-hs-styles="h-6, w-full, bg-zinc-900, flex, items-center" data-hs-lang="TSX">
+                  <div class="h-1.5 w-24 bg-zinc-700 rounded"></div>
+                  <div class="h-1.5 w-6 bg-zinc-850 rounded"></div>
+                </div>
+                <div class="h-6 w-full rounded bg-zinc-900 flex items-center justify-between px-2 cursor-pointer" data-hs-component="DbRow" data-hs-file="modules/dashboard/DbRow.tsx" data-hs-line="73" data-hs-col="14" data-hs-styles="h-6, w-full, bg-zinc-900, flex, items-center" data-hs-lang="TSX">
+                  <div class="h-1.5 w-20 bg-zinc-700 rounded"></div>
+                  <div class="h-1.5 w-6 bg-zinc-850 rounded"></div>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
+    </div>
+    <div class="h-4 hidden md:block"></div>
+  </section>
+
+  <!-- Section 3: CLI Sandbox -->
+  <section id="cli-sandbox-section" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/10 py-12 flex flex-col justify-between">
+    <div class="h-4 hidden md:block"></div>
+    <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center w-full">
+      <!-- Left Column: CLI Instructions -->
+      <div class="lg:col-span-5 space-y-6">
+        <div class="space-y-2">
+          <div class="text-brand-purple text-xs font-mono font-semibold tracking-wider uppercase">AGENT RUNTIME</div>
+          <h2 class="text-2xl md:text-3xl font-bold text-white tracking-tight">CLI Agent Simulator</h2>
+          <p class="text-zinc-400 text-sm leading-relaxed">
+            See how HoverSource visual coordinates are parsed directly by an autonomous coding agent. Send the instructions to trigger the agent patching flow on the terminal screen.
+          </p>
+        </div>
+
+        <div class="space-y-2 border-l-2 border-zinc-850 pl-4 text-xs text-zinc-500 leading-relaxed">
+          HoverSource passes exact AST components and file lines to the agent context. This eliminates codebase exploration overhead, cutting agent steps by 70%.
         </div>
       </div>
 
       <!-- Right Column: Simulated AI Agent Chat Terminal -->
       <div class="lg:col-span-7">
-        <div class="border border-zinc-800 bg-zinc-950/90 rounded-2xl shadow-2xl flex flex-col h-[600px] overflow-hidden relative">
-          
+        <div class="border border-zinc-800 bg-zinc-950/90 rounded-2xl shadow-2xl flex flex-col h-[520px] overflow-hidden relative">
           <!-- Terminal Header -->
           <div class="bg-zinc-900/50 border-b border-zinc-800/80 px-4 py-3 flex items-center justify-between">
             <div class="flex items-center gap-2">
@@ -210,9 +282,11 @@
               </button>
             </div>
           </div>
-
         </div>
       </div>
+    </div>
+    <div class="h-4 hidden md:block"></div>
+  </section>
 
     </div>
   </section>
@@ -398,7 +472,8 @@
   <!-- Floating Vertical Text Navigation (Scrollbar Replacement) -->
   <div class="fixed right-8 top-1/2 -translate-y-1/2 z-50 hidden lg:flex flex-col gap-6 font-mono text-[9px] tracking-widest text-zinc-500 uppercase select-none border-l border-zinc-900/60 pl-4">
     <button data-target="#hero-section" class="nav-title-item text-right hover:text-zinc-200 transition-all duration-300 text-left">Overview</button>
-    <button data-target="#playground-anchor" class="nav-title-item text-right hover:text-zinc-200 transition-all duration-300 text-left">Sandbox</button>
+    <button data-target="#ui-sandbox-section" class="nav-title-item text-right hover:text-zinc-200 transition-all duration-300 text-left">UI Sandbox</button>
+    <button data-target="#cli-sandbox-section" class="nav-title-item text-right hover:text-zinc-200 transition-all duration-300 text-left">CLI Agent</button>
     <button data-target="#bento-anchor" class="nav-title-item text-right hover:text-zinc-200 transition-all duration-300 text-left">Features</button>
     <button data-target="#benchmark-anchor" class="nav-title-item text-right hover:text-zinc-200 transition-all duration-300 text-left">Benchmarks</button>
   </div>

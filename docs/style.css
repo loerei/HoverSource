@@ -109,3 +109,15 @@ body {
   box-shadow: 0 0 15px rgba(168, 85, 247, 0.3) !important;
   transform: scale(1.05);
 }
+
+/* Interactive UI Sandbox Styles */
+#mock-browser-canvas [data-hs-component] {
+  position: relative;
+  transition: background-color 0.20s ease, border-color 0.20s ease;
+}
+
+/* In Cursor Tracking Mode, show a subtle border around hovered element */
+.hs-cursor-track-hover {
+  outline: 1px dashed rgba(59, 130, 246, 0.5);
+  background-color: rgba(59, 130, 246, 0.03);
+}

@@ -407,16 +407,16 @@ if (toggleCalcom && toggleYumeshelf) {
   toggleCalcom.addEventListener('click', () => {
     if (activeRepo === 'calcom') return;
     activeRepo = 'calcom';
-    toggleCalcom.className = 'flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all';
-    toggleYumeshelf.className = 'flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all';
+    toggleCalcom.className = 'flex-1 py-2 px-3 rounded-md text-left bg-zinc-800 text-white font-semibold focus:outline-none transition-all flex flex-col';
+    toggleYumeshelf.className = 'flex-1 py-2 px-3 rounded-md text-left text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all flex flex-col';
     updateBenchmarkUI();
   });
 
   toggleYumeshelf.addEventListener('click', () => {
     if (activeRepo === 'yumeshelf') return;
     activeRepo = 'yumeshelf';
-    toggleYumeshelf.className = 'flex-1 py-1.5 rounded-md text-center bg-zinc-800 text-white font-medium focus:outline-none transition-all';
-    toggleCalcom.className = 'flex-1 py-1.5 rounded-md text-center text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all';
+    toggleYumeshelf.className = 'flex-1 py-2 px-3 rounded-md text-left bg-zinc-800 text-white font-semibold focus:outline-none transition-all flex flex-col';
+    toggleCalcom.className = 'flex-1 py-2 px-3 rounded-md text-left text-zinc-400 hover:text-zinc-200 focus:outline-none transition-all flex flex-col';
     updateBenchmarkUI();
   });
 }

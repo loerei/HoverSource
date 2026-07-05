@@ -745,6 +745,27 @@ if (mockBrowserCanvas) {
       updateInspectorPositions();
     }
   }, true);
+
+  // Toggle Like heart active state on click
+  mockBrowserCanvas.addEventListener('click', (e) => {
+    const likeBtn = e.target.closest('[data-hs-component="LikeButton"]');
+    if (!likeBtn) return;
+
+    const isLiked = likeBtn.getAttribute('data-liked') === 'true';
+    if (isLiked) {
+      likeBtn.setAttribute('data-liked', 'false');
+      likeBtn.setAttribute('fill', 'none');
+      likeBtn.setAttribute('stroke', 'currentColor');
+      likeBtn.classList.remove('text-red-500');
+      likeBtn.classList.add('text-zinc-400');
+    } else {
+      likeBtn.setAttribute('data-liked', 'true');
+      likeBtn.setAttribute('fill', 'currentColor');
+      likeBtn.setAttribute('stroke', 'none');
+      likeBtn.classList.remove('text-zinc-400');
+      likeBtn.classList.add('text-red-500');
+    }
+  });
 }
 
 function updateInspectorPositions() {

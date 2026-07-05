@@ -35,6 +35,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const tags = [];
   const header = hero.querySelector('header');
   let headerHeight = header ? header.offsetHeight : 80;
+  let cachedObsCoords = [];
+
+  // Query static UI obstacles (H1 Title, Paragraph description, CTA Buttons container)
+  const obstacles = [
+    hero.querySelector('h1'),
+    hero.querySelector('p'),
+    hero.querySelector('.flex.items-center.justify-center.gap-4')
+  ].filter(Boolean);
 
   // Setup tag elements
   tagsData.forEach((data) => {
@@ -42,12 +50,28 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Start with opacity 0 to prevent flash/pile-up before layout calculation
     el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto opacity-0 ${data.size}`;
-    el.innerText = data.text;
     
+    // Optimize performance: hardware acceleration hints
+    el.style.willChange = 'transform, opacity';
     // No CSS transitions to avoid conflicts with frame-rate updates
     el.style.transition = 'none';
     // Align transform origin to top-left to perfectly match physical coordinate boundaries
     el.style.transformOrigin = 'top left';
+
+    // Front text layer
+    const frontSpan = document.createElement('span');
+    frontSpan.className = 'relative z-10 pointer-events-none';
+    frontSpan.innerText = data.text;
+    el.appendChild(frontSpan);
+
+    // Blurred Glow text layer behind the front text
+    const glowSpan = document.createElement('span');
+    glowSpan.className = 'absolute left-0 top-0 z-0 pointer-events-none opacity-0 select-none';
+    glowSpan.style.filter = 'blur(6px) drop-shadow(0 0 4px currentColor)';
+    glowSpan.style.willChange = 'opacity';
+    glowSpan.innerText = data.text;
+    el.appendChild(glowSpan);
+    
     canvas.appendChild(el);
 
     // Initialize with rough random position
@@ -58,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     tags.push({
       element: el,
+      glowSpan: glowSpan,
       text: data.text,
       theme: data.theme,
       x: roughX,
@@ -88,6 +113,20 @@ document.addEventListener('DOMContentLoaded', () => {
     containerWidth = canvas.clientWidth || window.innerWidth;
     containerHeight = canvas.clientHeight || window.innerHeight;
     headerHeight = header ? header.offsetHeight : 80;
+
+    // Cache static obstacle coordinates during layout phase (avoids Layout Thrashing in anim loop)
+    const canvasRect = canvas.getBoundingClientRect();
+    cachedObsCoords = obstacles.map(obs => {
+      const rect = obs.getBoundingClientRect();
+      return {
+        left: rect.left - canvasRect.left,
+        right: rect.right - canvasRect.left,
+        top: rect.top - canvasRect.top,
+        bottom: rect.bottom - canvasRect.top,
+        width: rect.right - rect.left,
+        height: rect.bottom - rect.top
+      };
+    });
 
     tags.forEach((tag) => {
       // Physically scale width and height down to 0.75x to match the visual scale(0.75)
@@ -121,7 +160,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Reveal element smoothly after positioning
       tag.element.classList.remove('opacity-0');
     });
-    console.log("HoverSource Physics: Tags positioned.");
+    console.log("HoverSource Physics: Tags positioned and obstacles cached.");
   }
 
   // Initial layout delay to ensure offsets are computed correctly
@@ -214,37 +253,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive: true });
   });
 
-  // Query static UI obstacles (H1 Title, Paragraph description, CTA Buttons container)
-  const obstacles = [
-    hero.querySelector('h1'),
-    hero.querySelector('p'),
-    hero.querySelector('.flex.items-center.justify-center.gap-4')
-  ].filter(Boolean);
-
   // Physics animation loop
   function updatePhysics() {
     containerWidth = canvas.clientWidth || window.innerWidth;
     containerHeight = canvas.clientHeight || window.innerHeight;
     headerHeight = header ? header.offsetHeight : 80;
 
-    const canvasRect = canvas.getBoundingClientRect();
-    const obsCoords = obstacles.map(obs => {
-      const rect = obs.getBoundingClientRect();
-      return {
-        left: rect.left - canvasRect.left,
-        right: rect.right - canvasRect.left,
-        top: rect.top - canvasRect.top,
-        bottom: rect.bottom - canvasRect.top,
-        width: rect.right - rect.left,
-        height: rect.bottom - rect.top
-      };
-    });
-
-    // 1. Resolve collisions with static obstacles (H1, Paragraph, CTA Buttons)
+    // 1. Resolve collisions with static obstacles (H1, Paragraph, CTA Buttons) using cached coordinates
     tags.forEach(tag => {
       if (tag.isDragging) return;
 
-      for (const obs of obsCoords) {
+      for (const obs of cachedObsCoords) {
         // Bounding box centers
         const tagCenterX = tag.x + tag.width / 2;
         const tagCenterY = tag.y + tag.height / 2;
@@ -400,28 +419,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const opacity = baseOpacity + (maxOpacity - baseOpacity) * tag.glowIntensity;
 
       let textColor;
-      let shadowColor;
-      
-      // Boost color intensity and opacity coefficient to 1.0 for double brightness
-      const glowAlpha = Math.min(1.0, 1.8 * tag.glowIntensity);
       if (tag.theme === "orange") {
         textColor = "rgb(245, 158, 11)"; // Amber-500
-        shadowColor = `rgba(245, 158, 11, ${glowAlpha})`;
       } else if (tag.theme === "purple") {
         textColor = "rgb(168, 85, 247)"; // Purple-500
-        shadowColor = `rgba(168, 85, 247, ${glowAlpha})`;
       } else {
         textColor = "rgb(59, 130, 246)"; // Blue-500
-        shadowColor = `rgba(59, 130, 246, ${glowAlpha})`;
       }
 
       tag.element.style.color = textColor;
       tag.element.style.opacity = opacity;
       
-      // Stack two drop-shadow filters for a double-intensity neon glow effect
-      tag.element.style.filter = tag.glowIntensity > 0.05 
-        ? `drop-shadow(0 0 8px ${shadowColor}) drop-shadow(0 0 20px ${shadowColor})` 
-        : 'none';
+      // Control glow intensity by changing opacity of the blurred layer (processed directly by GPU Compositor)
+      tag.glowSpan.style.color = textColor;
+      tag.glowSpan.style.opacity = tag.glowIntensity;
+      
       tag.element.style.transform = `translate3d(${tag.x}px, ${tag.y}px, 0) scale(${scale})`;
     });
 

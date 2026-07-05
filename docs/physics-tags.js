@@ -30,15 +30,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const tags = [];
   const themeClasses = {
-    orange: "border-zinc-800 bg-zinc-950/40 text-zinc-500 hover:text-amber-400 hover:border-amber-500/50 hover:bg-amber-950/30 hover:shadow-[0_0_15px_rgba(245,158,11,0.25)]",
-    purple: "border-zinc-800 bg-zinc-950/40 text-zinc-500 hover:text-purple-400 hover:border-purple-500/50 hover:bg-purple-950/30 hover:shadow-[0_0_15px_rgba(168,85,247,0.25)]",
-    blue: "border-zinc-800 bg-zinc-950/40 text-zinc-500 hover:text-blue-400 hover:border-blue-500/50 hover:bg-blue-950/30 hover:shadow-[0_0_15px_rgba(59,130,246,0.25)]"
+    orange: "text-amber-500/25 hover:text-amber-400 hover:drop-shadow-[0_0_12px_rgba(245,158,11,0.6)]",
+    purple: "text-purple-500/25 hover:text-purple-400 hover:drop-shadow-[0_0_12px_rgba(168,85,247,0.6)]",
+    blue: "text-blue-500/25 hover:text-blue-400 hover:drop-shadow-[0_0_12px_rgba(59,130,246,0.6)]"
   };
+
+  const sizes = [
+    "text-[10px]",
+    "text-xs",
+    "text-sm",
+    "text-base",
+    "text-lg",
+    "text-xl",
+    "text-2xl"
+  ];
 
   // Setup tag elements
   tagsData.forEach((data, index) => {
     const el = document.createElement('div');
-    el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono text-[9px] md:text-[10px] tracking-wider border rounded-full px-3.5 py-1.5 pointer-events-auto transition-colors transition-shadow duration-300`;
+    const sizeClass = sizes[index % sizes.length];
+    
+    el.className = `absolute select-none cursor-grab active:cursor-grabbing font-mono font-bold tracking-wider pointer-events-auto transition-all duration-300 hover:scale-105 ${sizeClass}`;
     themeClasses[data.theme].split(' ').forEach(cls => el.classList.add(cls));
     el.innerText = data.text;
     canvas.appendChild(el);
@@ -162,7 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!tag.isDragging) return;
       tag.isDragging = false;
       
-      tag.element.style.transition = 'color 0.3s ease, text-shadow 0.3s ease, border-color 0.3s ease, background-color 0.3s ease';
+      tag.element.style.transition = 'color 0.3s ease, text-shadow 0.3s ease, filter 0.3s ease, transform 0.3s ease';
 
       // Calculate throwing momentum
       if (tag.history.length >= 2) {

@@ -42,6 +42,7 @@ Adds a user-friendly CLI help interface and short option aliases.
 ## Workflows
 
 Checklist for generating PR descriptions:
+- [ ] **Verify Session History & Scope**: Before drafting the description, retrieve the current conversational history using the `chronicle-mcp` server's `get_session_details` tool (prioritize `conversationStepsOnly: true`). Review the sequence of actions and check against the base branch status. Do NOT read raw SQLite or jsonl transcripts directly. Ensure you distinguish between newly introduced features and modifications to pre-existing code.
 - [ ] **Determine Scope**: Pick a scope for the title (e.g. `cli`, `server`, `core`, `utils`).
 - [ ] **Draft Summary**: Summarize modifications and affected files concisely.
 - [ ] **State Rationale (Why)**: Detail the problem solved and core improvements.

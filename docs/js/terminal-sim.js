@@ -633,7 +633,7 @@ hudItems.forEach(item => {
 
 // Intercept desktop mouse wheel scroll and route to smooth section snap transitions
 let isHudScrolling = false;
-const hudSectionIds = ['#hero-section', '#ui-sandbox-section', '#cli-sandbox-section', '#bento-anchor', '#benchmark-anchor'];
+const hudSectionIds = ['#hero-section', '#ui-sandbox-section', '#cli-sandbox-section', '#bento-anchor', '#quickstart-section', '#benchmark-anchor'];
 
 window.addEventListener('wheel', (e) => {
   // Only apply custom scrolling on desktop screens where the HUD is active

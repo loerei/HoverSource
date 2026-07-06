@@ -48,6 +48,7 @@
           <a href="#ui-sandbox-section" class="hover:text-zinc-200 transition-colors">UI Sandbox</a>
           <a href="#cli-sandbox-section" class="hover:text-zinc-200 transition-colors">CLI Agent</a>
           <a href="#bento-anchor" class="hover:text-zinc-200 transition-colors">Features</a>
+          <a href="#quickstart-section" class="hover:text-zinc-200 transition-colors">Quick Start</a>
           <a href="#benchmark-anchor" class="hover:text-zinc-200 transition-colors">Benchmarks</a>
         </nav>
         <div>
@@ -482,7 +483,65 @@
     <div class="h-4 hidden md:block"></div>
   </section>
 
-  <!-- Section 4: Benchmark & Footer -->
+  <!-- Section 5: Quick Start -->
+  <section id="quickstart-section" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/10 py-16 flex flex-col justify-between">
+    <div class="h-4 hidden md:block"></div>
+    <div class="max-w-7xl mx-auto px-6 w-full">
+      <div class="text-center max-w-xl mx-auto mb-12 space-y-3">
+        <h2 class="text-2xl md:text-4xl font-bold text-white tracking-tight">Quick Start</h2>
+        <p class="text-zinc-400 text-sm leading-relaxed">
+          Install HoverSource globally and start debugging your application in seconds.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <!-- Step 1 Card -->
+        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[200px]">
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-brand-blue/15 text-brand-blue text-[10px] font-mono font-bold border border-brand-blue/30">1</span>
+              <h3 class="text-base font-bold text-white">Install CLI Globally</h3>
+            </div>
+            <p class="text-zinc-400 text-xs leading-relaxed mb-4">
+              Get the `hs` and `hoversource` commands set up anywhere on your machine by installing from npm.
+            </p>
+          </div>
+          <div class="relative bg-zinc-900/40 rounded-lg border border-zinc-800/80 p-3 font-mono text-[11px] text-zinc-300 flex items-center justify-between">
+            <span>npm install -g hoversource</span>
+            <button onclick="navigator.clipboard.writeText('npm install -g hoversource')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1" title="Copy to clipboard">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2 Card -->
+        <div class="border border-zinc-800 bg-zinc-950/80 rounded-2xl p-6 flex flex-col justify-between min-h-[200px]">
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <span class="flex items-center justify-center w-5 h-5 rounded-full bg-brand-purple/15 text-brand-purple text-[10px] font-mono font-bold border border-brand-purple/30">2</span>
+              <h3 class="text-base font-bold text-white">Start Your Project</h3>
+            </div>
+            <p class="text-zinc-400 text-xs leading-relaxed mb-4">
+              Run this in your project root. HoverSource detects your package.json, starts it, and attaches the overlay.
+            </p>
+          </div>
+          <div class="relative bg-zinc-900/40 rounded-lg border border-zinc-800/80 p-3 font-mono text-[11px] text-zinc-300 flex items-center justify-between">
+            <span>hs start</span>
+            <button onclick="navigator.clipboard.writeText('hs start')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1" title="Copy to clipboard">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="h-4 hidden md:block"></div>
+  </section>
+
+  <!-- Section 6: Benchmark & Footer -->
   <section id="benchmark-anchor" class="snap-section w-full border-t border-zinc-900 bg-zinc-950/20 pt-12 pb-0 flex flex-col justify-between">
     <!-- Empty space to balance content vertically -->
     <div class="h-4 hidden md:block"></div>
@@ -615,6 +674,7 @@
     <button data-target="#ui-sandbox-section" class="nav-title-item text-right text-left"><span>UI Sandbox</span></button>
     <button data-target="#cli-sandbox-section" class="nav-title-item text-right text-left"><span>CLI Agent</span></button>
     <button data-target="#bento-anchor" class="nav-title-item text-right text-left"><span>Features</span></button>
+    <button data-target="#quickstart-section" class="nav-title-item text-right text-left"><span>Quick Start</span></button>
     <button data-target="#benchmark-anchor" class="nav-title-item text-right text-left"><span>Benchmarks</span></button>
   </div>
 

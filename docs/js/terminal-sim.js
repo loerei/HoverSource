@@ -754,3 +754,50 @@ function initCliTicker() {
 }
 
 initCliTicker();
+
+// Copy to clipboard with micro-interaction feedback animation
+window.copyToClipboard = function(text, buttonEl) {
+  navigator.clipboard.writeText(text).then(() => {
+    if (buttonEl.classList.contains('copied-active')) return;
+    buttonEl.classList.add('copied-active');
+
+    const originalHTML = buttonEl.innerHTML;
+
+    // Switch to active green checkmark icon
+    buttonEl.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-green-400 transition-all duration-300 scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    `;
+
+    // Create floating "copied!" text bubble
+    const bubble = document.createElement('span');
+    bubble.className = 'absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-800 text-zinc-300 text-[9px] font-mono px-1.5 py-0.5 rounded shadow-lg pointer-events-none transition-all duration-300 opacity-0 transform translate-y-1 z-50';
+    bubble.innerText = 'copied!';
+    
+    const originalPos = buttonEl.style.position;
+    if (getComputedStyle(buttonEl).position === 'static') {
+      buttonEl.style.position = 'relative';
+    }
+    buttonEl.appendChild(bubble);
+
+    // Trigger animate-in
+    requestAnimationFrame(() => {
+      bubble.classList.remove('opacity-0', 'translate-y-1');
+      bubble.classList.add('opacity-100', 'translate-y-0');
+    });
+
+    // Reset back to original state after 1.2s
+    setTimeout(() => {
+      bubble.classList.remove('opacity-100', 'translate-y-0');
+      bubble.classList.add('opacity-0', '-translate-y-1.5');
+      
+      setTimeout(() => {
+        bubble.remove();
+        buttonEl.innerHTML = originalHTML;
+        buttonEl.classList.remove('copied-active');
+        buttonEl.style.position = originalPos;
+      }, 300);
+    }, 1200);
+  });
+};

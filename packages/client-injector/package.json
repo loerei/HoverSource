@@ -4,6 +4,12 @@
   "type": "module",
   "main": "./dist/injector.js",
   "types": "./dist/injector.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "clean": "tsc -b --clean"

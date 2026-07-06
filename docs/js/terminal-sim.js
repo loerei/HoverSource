@@ -631,9 +631,21 @@ hudItems.forEach(item => {
   });
 });
 
+// Bind custom smooth scrolling to Header navigation links
+document.querySelectorAll('header nav a').forEach(link => {
+  link.addEventListener('click', function(e) {
+    e.preventDefault();
+    const targetId = this.getAttribute('href');
+    const targetEl = document.querySelector(targetId);
+    if (targetEl) {
+      customSmoothScroll(targetEl, 900);
+    }
+  });
+});
+
 // Intercept desktop mouse wheel scroll and route to smooth section snap transitions
 let isHudScrolling = false;
-const hudSectionIds = ['#hero-section', '#ui-sandbox-section', '#cli-sandbox-section', '#bento-anchor', '#benchmark-anchor'];
+const hudSectionIds = ['#hero-section', '#ui-sandbox-section', '#cli-sandbox-section', '#bento-anchor', '#quickstart-section', '#benchmark-anchor'];
 
 window.addEventListener('wheel', (e) => {
   // Only apply custom scrolling on desktop screens where the HUD is active
@@ -686,3 +698,118 @@ window.addEventListener('resize', () => {
     }
   }
 });
+
+// CLI Ticker Carousel Logic
+function initCliTicker() {
+  const track = document.getElementById('cli-ticker-track');
+  if (!track) return;
+
+  const subcommands = [
+    'dev',
+    'serve',
+    'restart',
+    '--target=http://localhost:3000',
+    '--exec="npm run dev"',
+    '--dashboard',
+    '--port=7300',
+    '--proxy-port=7301',
+    '--debug-port=9222',
+    '--auto-resolve',
+    '--help'
+  ];
+
+  const itemsToRender = [...subcommands];
+  const lastItem = itemsToRender[itemsToRender.length - 1];
+  const firstItem = itemsToRender[0];
+  const secondItem = itemsToRender[1];
+  
+  const finalItems = [lastItem, ...itemsToRender, firstItem, secondItem];
+  
+  track.innerHTML = finalItems.map((cmd, index) => {
+    return `<div class="h-4 leading-4 text-[10.5px] font-mono transition-colors duration-300" style="height: 16px; line-height: 16px;" data-index="${index}">${cmd}</div>`;
+  }).join('');
+
+  let currentIndex = 1; // Starts at index 1 (which is the actual first item `dev`)
+  const itemHeight = 16;
+
+  function updateActiveState() {
+    const divs = track.querySelectorAll('div');
+    divs.forEach((div, idx) => {
+      if (idx === currentIndex) {
+        div.className = "h-4 leading-4 text-[10.5px] font-mono font-bold text-zinc-200 transition-colors duration-300";
+      } else {
+        div.className = "h-4 leading-4 text-[10.5px] font-mono text-zinc-600 transition-colors duration-300";
+      }
+    });
+  }
+
+  // Initial state
+  track.style.transform = `translateY(-${(currentIndex - 1) * itemHeight}px)`;
+  updateActiveState();
+
+  setInterval(() => {
+    currentIndex++;
+    track.style.transition = 'transform 0.5s ease-out';
+    track.style.transform = `translateY(-${(currentIndex - 1) * itemHeight}px)`;
+    updateActiveState();
+
+    // If we reached the clone of the first item at the end
+    if (currentIndex === finalItems.length - 2) {
+      setTimeout(() => {
+        track.style.transition = 'none';
+        currentIndex = 1;
+        track.style.transform = `translateY(0px)`;
+        updateActiveState();
+      }, 500); // Wait for transition to finish
+    }
+  }, 2000);
+}
+
+initCliTicker();
+
+// Copy to clipboard with micro-interaction feedback animation
+window.copyToClipboard = function(text, buttonEl) {
+  navigator.clipboard.writeText(text).then(() => {
+    if (buttonEl.classList.contains('copied-active')) return;
+    buttonEl.classList.add('copied-active');
+
+    const originalHTML = buttonEl.innerHTML;
+
+    // Switch to active green checkmark icon
+    buttonEl.innerHTML = `
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-green-400 transition-all duration-300 scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    `;
+
+    // Create floating "copied!" text bubble
+    const bubble = document.createElement('span');
+    bubble.className = 'absolute -top-7 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-800 text-zinc-300 text-[9px] font-mono px-1.5 py-0.5 rounded shadow-lg pointer-events-none transition-all duration-300 opacity-0 transform translate-y-1 z-50';
+    bubble.innerText = 'copied!';
+    
+    const originalPos = buttonEl.style.position;
+    if (getComputedStyle(buttonEl).position === 'static') {
+      buttonEl.style.position = 'relative';
+    }
+    buttonEl.appendChild(bubble);
+
+    // Trigger animate-in
+    requestAnimationFrame(() => {
+      bubble.classList.remove('opacity-0', 'translate-y-1');
+      bubble.classList.add('opacity-100', 'translate-y-0');
+    });
+
+    // Reset back to original state after 1.2s
+    setTimeout(() => {
+      bubble.classList.remove('opacity-100', 'translate-y-0');
+      bubble.classList.add('opacity-0', '-translate-y-1.5');
+      
+      setTimeout(() => {
+        bubble.remove();
+        buttonEl.innerHTML = originalHTML;
+        buttonEl.classList.remove('copied-active');
+        buttonEl.style.position = originalPos;
+      }, 300);
+    }, 1200);
+  });
+};

@@ -4,6 +4,14 @@
   "type": "module",
   "main": "./dist/overlay.bundle.js",
   "types": "./dist/overlay.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "!dist/**/__tests__",
+    "!dist/**/*.test.*"
+  ],
   "scripts": {
     "build": "tsc -b && node build.js",
     "clean": "tsc -b --clean"

@@ -375,15 +375,19 @@ Suggested layout insertion (heuristic only):
 
 ## Install HoverSource
 
-Clone, build, and install the `hs` command globally:
+You can install HoverSource globally from npm:
 
 ```bash
-git clone https://github.com/loerei/HoverSource.git
-cd HoverSource && npm install && npm run build
-npm install -g ./packages/cli
+npm install -g hoversource
 ```
 
-The `hs` command is now available anywhere in your terminal.
+Or run it directly on-the-fly using `npx`:
+
+```bash
+npx hoversource start
+```
+
+The `hs` (and `hoversource`) command is now available anywhere in your terminal.
 
 ## Run It With Your Project
 

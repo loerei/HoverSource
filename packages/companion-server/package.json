@@ -4,6 +4,14 @@
   "type": "module",
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "!dist/**/__tests__",
+    "!dist/**/*.test.*"
+  ],
   "scripts": {
     "build": "tsc -b",
     "clean": "tsc -b --clean",

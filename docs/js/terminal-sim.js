@@ -734,8 +734,12 @@ function initCliTicker() {
 
   function updateActiveState() {
     const divs = track.querySelectorAll('div');
+    // Highlight both the active item and its clone to prevent transition flashing on jump
+    const isLastClone = currentIndex === finalItems.length - 2;
+    
     divs.forEach((div, idx) => {
-      if (idx === currentIndex) {
+      const isActive = idx === currentIndex || (isLastClone && idx === 1);
+      if (isActive) {
         div.className = "h-4 leading-4 text-[10.5px] font-mono font-bold text-zinc-200 transition-colors duration-300";
       } else {
         div.className = "h-4 leading-4 text-[10.5px] font-mono text-zinc-600 transition-colors duration-300";

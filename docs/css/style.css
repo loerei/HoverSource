@@ -259,3 +259,9 @@ body {
     display: none !important;
   }
 }
+
+/* CLI Ticker Mask Fade Effect */
+.cli-mask-fade {
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 70%, transparent 100%);
+}

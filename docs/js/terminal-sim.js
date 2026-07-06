@@ -686,3 +686,71 @@ window.addEventListener('resize', () => {
     }
   }
 });
+
+// CLI Ticker Carousel Logic
+function initCliTicker() {
+  const track = document.getElementById('cli-ticker-track');
+  if (!track) return;
+
+  const subcommands = [
+    'dev',
+    'serve',
+    'restart',
+    '--target=http://localhost:3000',
+    '--exec="npm run dev"',
+    '--dashboard',
+    '--port=7300',
+    '--proxy-port=7301',
+    '--debug-port=9222',
+    '--auto-resolve',
+    '--help'
+  ];
+
+  const itemsToRender = [...subcommands];
+  const lastItem = itemsToRender[itemsToRender.length - 1];
+  const firstItem = itemsToRender[0];
+  const secondItem = itemsToRender[1];
+  
+  const finalItems = [lastItem, ...itemsToRender, firstItem, secondItem];
+  
+  track.innerHTML = finalItems.map((cmd, index) => {
+    return `<div class="h-4 leading-4 text-[10.5px] font-mono transition-colors duration-300" style="height: 16px; line-height: 16px;" data-index="${index}">${cmd}</div>`;
+  }).join('');
+
+  let currentIndex = 1; // Starts at index 1 (which is the actual first item `dev`)
+  const itemHeight = 16;
+
+  function updateActiveState() {
+    const divs = track.querySelectorAll('div');
+    divs.forEach((div, idx) => {
+      if (idx === currentIndex) {
+        div.className = "h-4 leading-4 text-[10.5px] font-mono font-bold text-zinc-200 transition-colors duration-300";
+      } else {
+        div.className = "h-4 leading-4 text-[10.5px] font-mono text-zinc-600 transition-colors duration-300";
+      }
+    });
+  }
+
+  // Initial state
+  track.style.transform = `translateY(-${(currentIndex - 1) * itemHeight}px)`;
+  updateActiveState();
+
+  setInterval(() => {
+    currentIndex++;
+    track.style.transition = 'transform 0.5s ease-out';
+    track.style.transform = `translateY(-${(currentIndex - 1) * itemHeight}px)`;
+    updateActiveState();
+
+    // If we reached the clone of the first item at the end
+    if (currentIndex === finalItems.length - 2) {
+      setTimeout(() => {
+        track.style.transition = 'none';
+        currentIndex = 1;
+        track.style.transform = `translateY(0px)`;
+        updateActiveState();
+      }, 500); // Wait for transition to finish
+    }
+  }, 2000);
+}
+
+initCliTicker();

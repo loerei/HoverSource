@@ -70,6 +70,12 @@ body {
   opacity: 0;
   transform: translateX(10px);
   transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
+  
+  /* Localized dark glow behind each line to prevent blending into page content */
+  text-shadow: 
+    0 0 10px #09090b,
+    0 0 5px #09090b,
+    0 0 2px #09090b;
 }
 
 /* Show text on hover or when expanded */
@@ -91,7 +97,13 @@ body {
   opacity: 1;
   color: #3b82f6; /* brand-blue */
   font-weight: 600;
-  text-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+  
+  /* Glowing blue text on a dark protective shadow background */
+  text-shadow: 
+    0 0 10px rgba(59, 130, 246, 0.6),
+    0 0 5px rgba(59, 130, 246, 0.4),
+    0 0 8px #09090b,
+    0 0 4px #09090b;
 }
 
 /* --- Morphing HUD Scrollbar & Dot Navigation --- */

@@ -33,7 +33,6 @@ body {
   html {
     scroll-snap-type: y mandatory;
     height: 100%;
-    scroll-padding-top: 72px; /* Prevent sticky header from covering content of snapped sections */
   }
   body {
     min-height: 100%;
@@ -41,6 +40,7 @@ body {
   .snap-section {
     scroll-snap-align: start;
     scroll-snap-stop: normal;
+    padding-top: 72px; /* Prevent sticky header from covering content while keeping full viewport height */
   }
 }
 

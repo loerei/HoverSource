@@ -631,6 +631,18 @@ hudItems.forEach(item => {
   });
 });
 
+// Bind custom smooth scrolling to Header navigation links
+document.querySelectorAll('header nav a').forEach(link => {
+  link.addEventListener('click', function(e) {
+    e.preventDefault();
+    const targetId = this.getAttribute('href');
+    const targetEl = document.querySelector(targetId);
+    if (targetEl) {
+      customSmoothScroll(targetEl, 900);
+    }
+  });
+});
+
 // Intercept desktop mouse wheel scroll and route to smooth section snap transitions
 let isHudScrolling = false;
 const hudSectionIds = ['#hero-section', '#ui-sandbox-section', '#cli-sandbox-section', '#bento-anchor', '#quickstart-section', '#benchmark-anchor'];

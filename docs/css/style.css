@@ -48,6 +48,37 @@ body {
 .hud-nav-container {
   padding-left: 16px;
   padding-right: 0px !important;
+  
+  /* Glassmorphism background defaults */
+  background: rgba(9, 9, 11, 0);
+  border-left: 1px solid rgba(39, 39, 42, 0);
+  border-top: 1px solid rgba(39, 39, 42, 0);
+  border-bottom: 1px solid rgba(39, 39, 42, 0);
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  border-radius: 20px 0 0 20px;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0);
+  
+  transition: background 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              -webkit-backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-left 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hud-nav-container:hover,
+.hud-nav-container.hud-nav-expanded {
+  background: rgba(9, 9, 11, 0.45); /* zinc-950/45 */
+  border-left: 1px solid rgba(39, 39, 42, 0.45); /* zinc-800/45 */
+  border-top: 1px solid rgba(39, 39, 42, 0.2);
+  border-bottom: 1px solid rgba(39, 39, 42, 0.2);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: -15px 0 35px rgba(0, 0, 0, 0.6), inset 1px 1px 0px rgba(255, 255, 255, 0.03);
+  padding-left: 32px;
+  padding-right: 4px !important;
 }
 
 .nav-title-item {

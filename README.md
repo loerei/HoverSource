@@ -3,7 +3,7 @@
     <img alt="HoverSource Banner" src="docs/assets/banner.svg?v=3" width="650">
   </picture>
   
-  <p><b>Translate what you see in your browser directly into context for your AI coding agents.</b></p>
+  <p><b>Translate What You See To What Your Agent Needs.</b></p>
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/loerei/HoverSource/pulls)

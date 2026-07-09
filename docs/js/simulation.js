@@ -17,20 +17,16 @@ const fileOnlyTemplate = `In apps/web/modules/shell/Kbar.tsx, style the quick se
 const noContextTemplate = `The quick search search bar trigger button in the sidebar (looks like a search icon or shortcut key) has a neutral background that blends in too much. Let's make it look more like a distinct button by adding a subtle border and making the hover background lighter.`;
 
 // Tab C (With HoverSource) Sequence
-async function runWithHsSimulation(simId) {
-  const check = () => { if (simId !== currentSimulationId) throw new Error('cancelled'); };
-  const write = async (html, type) => { check(); await writeTerminalLine(html, type); check(); };
-  const sleep = async (ms) => { check(); await delay(ms); check(); };
-
+async function runWithHsSimulation(ctx) {
   try {
-    updateStats(1, 500, '0.2s');
-    await write(`<span class="text-zinc-500">system$</span> initializing session b1adcb8c-82a0-46c8-bdcb-c7e7704413c0...`, 'system');
-    await sleep(400);
-    await write(`<span class="text-brand-blue">user$</span> hs-agent --task "Styling search button in Kbar module" --metadata-clipboard`, 'system');
-    await sleep(300);
+    ctx.updateStats(1, 500, '0.2s');
+    await ctx.write(`<span class="text-zinc-500">system$</span> initializing session b1adcb8c-82a0-46c8-bdcb-c7e7704413c0...`, 'system');
+    await ctx.sleep(400);
+    await ctx.write(`<span class="text-brand-blue">user$</span> hs-agent --task "Styling search button in Kbar module" --metadata-clipboard`, 'system');
+    await ctx.sleep(300);
 
     // Render parsed prompt
-    await write(`<div class="bg-zinc-900/40 p-2.5 rounded border border-zinc-800 text-[10px] text-zinc-400 space-y-1">
+    await ctx.write(`<div class="bg-zinc-900/40 p-2.5 rounded border border-zinc-800 text-[10px] text-zinc-400 space-y-1">
       <div class="text-zinc-300 font-mono text-[9.5px] leading-relaxed">
         <span class="text-zinc-500 font-bold">Instruction:</span> "The quick search search bar trigger button in the sidebar (looks like a search icon or shortcut key) has a neutral background that blends in too much..."
       </div>
@@ -46,22 +42,22 @@ async function runWithHsSimulation(simId) {
         <div>* Layout Constraints: display: flex</div>
       </div>
     </div>`);
-    await sleep(800);
+    await ctx.sleep(800);
 
     // Step 2
-    updateStats(2, 1200, '1.2s');
-    await write(`[Step 2] Thinking: Locating the target element in workspace based on HoverSource metadata...`, 'thinking');
-    await sleep(600);
-    await write(`<span class="text-zinc-500">tool_call$</span> view_file(AbsolutePath="D:/Projects/cal.diy/apps/web/modules/shell/Kbar.tsx", StartLine=350, EndLine=400)`, 'system');
-    await sleep(500);
+    ctx.updateStats(2, 1200, '1.2s');
+    await ctx.write(`[Step 2] Thinking: Locating the target element in workspace based on HoverSource metadata...`, 'thinking');
+    await ctx.sleep(600);
+    await ctx.write(`<span class="text-zinc-500">tool_call$</span> view_file(AbsolutePath="D:/Projects/cal.diy/apps/web/modules/shell/Kbar.tsx", StartLine=350, EndLine=400)`, 'system');
+    await ctx.sleep(500);
 
     // Step 3
-    updateStats(3, 4800, '3.4s');
-    await write(`<span class="text-zinc-500">tool_response$</span> Completed successfully. Showing lines 350 to 400 of Kbar.tsx:`, 'system');
-    await sleep(300);
+    ctx.updateStats(3, 4800, '3.4s');
+    await ctx.write(`<span class="text-zinc-500">tool_response$</span> Completed successfully. Showing lines 350 to 400 of Kbar.tsx:`, 'system');
+    await ctx.sleep(300);
 
     // Render Codeblock
-    await write(`<div class="bg-zinc-950 p-2.5 rounded border border-zinc-900 font-mono text-[10px] text-zinc-400 leading-normal max-h-40 overflow-y-auto terminal-scroll space-y-0.5">
+    await ctx.write(`<div class="bg-zinc-950 p-2.5 rounded border border-zinc-900 font-mono text-[10px] text-zinc-400 leading-normal max-h-40 overflow-y-auto terminal-scroll space-y-0.5">
       <div><span class="text-zinc-700">350:</span>       &lt;/KBarPositioner&gt;</div>
       <div><span class="text-zinc-700">351:</span>     &lt;/KBarPortal&gt;</div>
       <div><span class="text-zinc-700">352:</span>   );</div>
@@ -86,22 +82,22 @@ async function runWithHsSimulation(simId) {
       <div><span class="text-zinc-700">378:</span>   );</div>
       <div><span class="text-zinc-700">379:</span> };</div>
     </div>`);
-    await sleep(1000);
+    await ctx.sleep(1000);
 
     // Step 4
-    updateStats(4, 5800, '5.8s');
-    await write(`[Step 4] Thinking: Preparing the proposed diff to modify button styles...`, 'thinking');
-    await sleep(500);
-    await write(`<span class="text-zinc-500">tool_call$</span> send_message(Recipient="parent", Message="Proposed diff created.")`, 'system');
-    await sleep(400);
+    ctx.updateStats(4, 5800, '5.8s');
+    await ctx.write(`[Step 4] Thinking: Preparing the proposed diff to modify button styles...`, 'thinking');
+    await ctx.sleep(500);
+    await ctx.write(`<span class="text-zinc-500">tool_call$</span> send_message(Recipient="parent", Message="Proposed diff created.")`, 'system');
+    await ctx.sleep(400);
 
     // Step 5
-    updateStats(5, 6486, '8.2s');
-    await write(`<span class="text-brand-blue">agent$</span> I have completed the analysis and prepared the proposed changes for the search button.`);
-    await sleep(500);
+    ctx.updateStats(5, 6486, '8.2s');
+    await ctx.write(`<span class="text-brand-blue">agent$</span> I have completed the analysis and prepared the proposed changes for the search button.`);
+    await ctx.sleep(500);
 
     // Render Diff block with alert
-    await write(`<div class="bg-zinc-950 rounded border border-zinc-900 overflow-hidden text-[10px]">
+    await ctx.write(`<div class="bg-zinc-950 rounded border border-zinc-900 overflow-hidden text-[10px]">
       <div class="bg-zinc-900 border-b border-zinc-800 px-3 py-1.5 flex justify-between items-center text-[9px] text-zinc-500 font-mono">
         <span>PROPOSED PATCH</span>
         <span>Kbar.tsx</span>
@@ -116,7 +112,7 @@ async function runWithHsSimulation(simId) {
         <div>         &lt;SearchIcon className="h-4 w-4 shrink-0 text-inherit" /&gt;</div>
       </div>
       <div class="p-2 border-t border-zinc-900 bg-zinc-900/30 flex justify-end">
-        <button id="apply-patch-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] px-3 py-1 rounded transition-colors active:scale-[0.97]">
+        <button id="apply-patch-btn-${ctx.tabName}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] px-3 py-1 rounded transition-colors active:scale-[0.97]">
           Apply Patch
         </button>
       </div>
@@ -130,7 +126,7 @@ async function runWithHsSimulation(simId) {
      </div>`);
 
     // Add listener to the dynamically created Apply Patch button
-    document.getElementById('apply-patch-btn').addEventListener('click', handleApplyPatch);
+    document.getElementById(`apply-patch-btn-${ctx.tabName}`).addEventListener('click', () => handleApplyPatch(ctx.tabName));
   } catch (err) {
     if (err.message === 'cancelled') return;
     throw err;
@@ -138,38 +134,34 @@ async function runWithHsSimulation(simId) {
 }
 
 // Tab B (File Path Only) Sequence
-async function runFileOnlySimulation(simId) {
-  const check = () => { if (simId !== currentSimulationId) throw new Error('cancelled'); };
-  const write = async (html, type) => { check(); await writeTerminalLine(html, type); check(); };
-  const sleep = async (ms) => { check(); await delay(ms); check(); };
-
+async function runFileOnlySimulation(ctx) {
   try {
-    updateStats(1, 500, '0.2s');
-    await write(`<span class="text-zinc-500">system$</span> initializing session c367ae2f-161c-4c80-bcfb-49bf5c255d81...`, 'system');
-    await sleep(400);
-    await write(`<span class="text-brand-blue">user$</span> hs-agent --task "Style the quick search/kbar trigger button" --file "apps/web/modules/shell/Kbar.tsx"`, 'system');
-    await sleep(300);
-    await write(`<div class="bg-zinc-900/40 p-2.5 rounded border border-zinc-800 text-[10px] text-zinc-400 space-y-1">
+    ctx.updateStats(1, 500, '0.2s');
+    await ctx.write(`<span class="text-zinc-500">system$</span> initializing session c367ae2f-161c-4c80-bcfb-49bf5c255d81...`, 'system');
+    await ctx.sleep(400);
+    await ctx.write(`<span class="text-brand-blue">user$</span> hs-agent --task "Style the quick search/kbar trigger button" --file "apps/web/modules/shell/Kbar.tsx"`, 'system');
+    await ctx.sleep(300);
+    await ctx.write(`<div class="bg-zinc-900/40 p-2.5 rounded border border-zinc-800 text-[10px] text-zinc-400 space-y-1">
       <div class="text-zinc-300 font-mono text-[9.5px] leading-relaxed">
         <span class="text-zinc-500 font-bold">Instruction:</span> "In apps/web/modules/shell/Kbar.tsx, style the quick search/kbar trigger button so it looks more like a distinct button. Add a subtle border, a light hover background, and increase its horizontal padding on desktop screens."
       </div>
     </div>`);
-    await sleep(600);
+    await ctx.sleep(600);
 
     // Step 2
-    updateStats(2, 1200, '1.5s');
-    await write(`[Step 2] Thinking: Target file locked at apps/web/modules/shell/Kbar.tsx. Opening file to locate the trigger component...`, 'thinking');
-    await sleep(700);
-    await write(`<span class="text-zinc-500">tool_call$</span> view_file(AbsolutePath="D:/Projects/cal.diy/apps/web/modules/shell/Kbar.tsx")`, 'system');
-    await sleep(800);
+    ctx.updateStats(2, 1200, '1.5s');
+    await ctx.write(`[Step 2] Thinking: Target file locked at apps/web/modules/shell/Kbar.tsx. Opening file to locate the trigger component...`, 'thinking');
+    await ctx.sleep(700);
+    await ctx.write(`<span class="text-zinc-500">tool_call$</span> view_file(AbsolutePath="D:/Projects/cal.diy/apps/web/modules/shell/Kbar.tsx")`, 'system');
+    await ctx.sleep(800);
 
     // Step 3
-    updateStats(3, 23720, '5.4s');
-    await write(`<span class="text-zinc-500">tool_response$</span> Completed successfully. Showing lines 1 to 480 of Kbar.tsx:`, 'system');
-    await sleep(300);
+    ctx.updateStats(3, 23720, '5.4s');
+    await ctx.write(`<span class="text-zinc-500">tool_response$</span> Completed successfully. Showing lines 1 to 480 of Kbar.tsx:`, 'system');
+    await ctx.sleep(300);
 
     // Render Codeblock showing full file with truncation
-    await write(`<div class="bg-zinc-950 p-2.5 rounded border border-zinc-900 font-mono text-[10px] text-zinc-400 leading-normal max-h-40 overflow-y-auto terminal-scroll space-y-0.5">
+    await ctx.write(`<div class="bg-zinc-950 p-2.5 rounded border border-zinc-900 font-mono text-[10px] text-zinc-400 leading-normal max-h-40 overflow-y-auto terminal-scroll space-y-0.5">
       <div><span class="text-zinc-700">1:</span> import { useSession } from "next-auth/react";</div>
       <div><span class="text-zinc-700">2:</span> import { appStoreMetadata } from "@calcom/app-store/appStoreMetaData";</div>
       <div><span class="text-zinc-500 pl-3">... [360 lines of configuration & kbar provider code omitted for preview] ...</span></div>
@@ -184,22 +176,22 @@ async function runFileOnlySimulation(simId) {
       <div class="bg-brand-purple/5 border-l-2 border-brand-purple pl-1"><span class="text-zinc-700">374:</span>         className="todesktop:hover:!bg-transparent group flex rounded-md px-3 py-2 font-medium text-default text-sm transition hover:bg-subtle lg:px-2 lg:hover:bg-emphasis lg:hover:text-emphasis"&gt;</div>
       <div><span class="text-zinc-500 pl-3">... [100 lines remaining omitted] ...</span></div>
     </div>`);
-    await sleep(1000);
+    await ctx.sleep(1000);
 
     // Step 4
-    updateStats(4, 24200, '7.8s');
-    await write(`[Step 4] Thinking: Target search button located inside Kbar.tsx at line 371. Preparing proposed diff...`, 'thinking');
-    await sleep(650);
-    await write(`<span class="text-zinc-500">tool_call$</span> send_message(Recipient="parent", Message="Proposed diff created.")`, 'system');
-    await sleep(400);
+    ctx.updateStats(4, 24200, '7.8s');
+    await ctx.write(`[Step 4] Thinking: Target search button located inside Kbar.tsx at line 371. Preparing proposed diff...`, 'thinking');
+    await ctx.sleep(650);
+    await ctx.write(`<span class="text-zinc-500">tool_call$</span> send_message(Recipient="parent", Message="Proposed diff created.")`, 'system');
+    await ctx.sleep(400);
 
     // Step 5
-    updateStats(5, 24980, '10.2s');
-    await write(`<span class="text-brand-blue">agent$</span> Target search button located inside Kbar.tsx. Proposing change (Step 5).`);
-    await sleep(500);
+    ctx.updateStats(5, 24980, '10.2s');
+    await ctx.write(`<span class="text-brand-blue">agent$</span> Target search button located inside Kbar.tsx. Proposing change (Step 5).`);
+    await ctx.sleep(500);
 
     // Render Diff block with alert
-    await write(`<div class="bg-zinc-950 rounded border border-zinc-900 overflow-hidden text-[10px]">
+    await ctx.write(`<div class="bg-zinc-950 rounded border border-zinc-900 overflow-hidden text-[10px]">
       <div class="bg-zinc-900 border-b border-zinc-800 px-3 py-1.5 flex justify-between items-center text-[9px] text-zinc-500 font-mono">
         <span>PROPOSED PATCH</span>
         <span>Kbar.tsx</span>
@@ -214,7 +206,7 @@ async function runFileOnlySimulation(simId) {
         <div>         &lt;SearchIcon className="h-4 w-4 shrink-0 text-inherit" /&gt;</div>
       </div>
       <div class="p-2 border-t border-zinc-900 bg-zinc-900/30 flex justify-end">
-        <button id="apply-patch-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] px-3 py-1 rounded transition-colors active:scale-[0.97]">
+        <button id="apply-patch-btn-${ctx.tabName}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] px-3 py-1 rounded transition-colors active:scale-[0.97]">
           Apply Patch
         </button>
       </div>
@@ -228,7 +220,7 @@ async function runFileOnlySimulation(simId) {
      </div>`);
 
     // Add listener to the dynamically created Apply Patch button
-    document.getElementById('apply-patch-btn').addEventListener('click', handleApplyPatch);
+    document.getElementById(`apply-patch-btn-${ctx.tabName}`).addEventListener('click', () => handleApplyPatch(ctx.tabName));
   } catch (err) {
     if (err.message === 'cancelled') return;
     throw err;
@@ -236,70 +228,65 @@ async function runFileOnlySimulation(simId) {
 }
 
 // Tab A (No HoverSource) Sequence
-async function runNoContextSimulation(simId) {
-  const check = () => { if (simId !== currentSimulationId) throw new Error('cancelled'); };
-  const write = async (html, type) => { check(); await writeTerminalLine(html, type); check(); };
-  const sleep = async (ms) => { check(); await delay(ms); check(); };
-
+async function runNoContextSimulation(ctx) {
   try {
-    updateStats(1, 500, '0.2s');
-    await write(`<span class="text-zinc-500">system$</span> initializing session a643bff0-85d0-48c0-98ac-25b74b50cc8e...`, 'system');
-    await sleep(400);
-    await write(`<span class="text-brand-blue">user$</span> hs-agent --task "Styling search button in sidebar"`, 'system');
-    await sleep(300);
-    await write(`<div class="bg-zinc-900/40 p-2.5 rounded border border-zinc-800 text-[10px] text-zinc-400 space-y-1">
+    ctx.updateStats(1, 500, '0.2s');
+    await ctx.write(`<span class="text-zinc-500">system$</span> initializing session a643bff0-85d0-48c0-98ac-25b74b50cc8e...`, 'system');
+    await ctx.sleep(400);
+    await ctx.write(`<span class="text-brand-blue">user$</span> hs-agent --task "Styling search button in sidebar"`, 'system');
+    await ctx.sleep(300);
+    await ctx.write(`<div class="bg-zinc-900/40 p-2.5 rounded border border-zinc-800 text-[10px] text-zinc-400 space-y-1">
       <div class="text-zinc-300 font-mono text-[9.5px] leading-relaxed">
         <span class="text-zinc-500 font-bold">Instruction:</span> "The quick search search bar trigger button in the sidebar (looks like a search icon or shortcut key) has a neutral background that blends in too much. Let's make it look more like a distinct button by adding a subtle border and making the hover background lighter."
       </div>
     </div>`);
-    await sleep(600);
+    await ctx.sleep(600);
 
     // Step 2
-    updateStats(2, 1500, '1.5s');
-    await write(`[Step 2] Thinking: Searching for references to "search" or "sidebar" in codebase...`, 'thinking');
-    await sleep(700);
-    await write(`<span class="text-zinc-500">tool_call$</span> grep_search(Query="search", SearchPath="D:/Projects/cal.diy")`, 'system');
-    await sleep(800);
+    ctx.updateStats(2, 1500, '1.5s');
+    await ctx.write(`[Step 2] Thinking: Searching for references to "search" or "sidebar" in codebase...`, 'thinking');
+    await ctx.sleep(700);
+    await ctx.write(`<span class="text-zinc-500">tool_call$</span> grep_search(Query="search", SearchPath="D:/Projects/cal.diy")`, 'system');
+    await ctx.sleep(800);
 
     // Step 3
-    updateStats(3, 18500, '4.2s');
-    await write(`<span class="text-zinc-500">tool_response$</span> Completed. Found 1,248 matches across 142 files. Truncating display to first 4 results:`, 'system');
-    await write(`<div class="text-[10px] text-zinc-500 pl-3">
+    ctx.updateStats(3, 18500, '4.2s');
+    await ctx.write(`<span class="text-zinc-500">tool_response$</span> Completed. Found 1,248 matches across 142 files. Truncating display to first 4 results:`, 'system');
+    await ctx.write(`<div class="text-[10px] text-zinc-500 pl-3">
       - apps/web/modules/shell/Kbar.tsx:L355<br>
       - packages/ui/components/Sidebar.tsx:L12<br>
       - packages/core/search/SearchIndex.ts:L42<br>
       - obsidian-vault/SKILL.md:L3
     </div>`);
-    await sleep(800);
+    await ctx.sleep(800);
 
     // Step 4
-    updateStats(4, 28000, '6.8s');
-    await write(`[Step 4] Thinking: The search query returned too many generic results. Listing repository folders to locate visual packages...`, 'thinking');
-    await sleep(600);
-    await write(`<span class="text-zinc-500">tool_call$</span> list_dir(DirectoryPath="D:/Projects/cal.diy")`, 'system');
-    await sleep(700);
+    ctx.updateStats(4, 28000, '6.8s');
+    await ctx.write(`[Step 4] Thinking: The search query returned too many generic results. Listing repository folders to locate visual packages...`, 'thinking');
+    await ctx.sleep(600);
+    await ctx.write(`<span class="text-zinc-500">tool_call$</span> list_dir(DirectoryPath="D:/Projects/cal.diy")`, 'system');
+    await ctx.sleep(700);
 
     // Step 5
-    updateStats(5, 34500, '8.9s');
-    await write(`<span class="text-zinc-500">tool_response$</span> Completed. Directory structure contains 32 items (apps, packages, etc.).`, 'system');
-    await sleep(600);
+    ctx.updateStats(5, 34500, '8.9s');
+    await ctx.write(`<span class="text-zinc-500">tool_response$</span> Completed. Directory structure contains 32 items (apps, packages, etc.).`, 'system');
+    await ctx.sleep(600);
 
     // Step 6
-    updateStats(6, 42000, '11.5s');
-    await write(`[Step 6] Thinking: Listing packages to find UI components...`, 'thinking');
-    await sleep(600);
-    await write(`<span class="text-zinc-500">tool_call$</span> list_dir(DirectoryPath="D:/Projects/cal.diy/packages")`, 'system');
-    await sleep(600);
+    ctx.updateStats(6, 42000, '11.5s');
+    await ctx.write(`[Step 6] Thinking: Listing packages to find UI components...`, 'thinking');
+    await ctx.sleep(600);
+    await ctx.write(`<span class="text-zinc-500">tool_call$</span> list_dir(DirectoryPath="D:/Projects/cal.diy/packages")`, 'system');
+    await ctx.sleep(600);
 
     // Fast Loop simulation
-    await write(`[Step 7] Thinking: Searching for "shortcut" or "search icon" inside packages/ui...`, 'thinking');
-    await sleep(400);
+    await ctx.write(`[Step 7] Thinking: Searching for "shortcut" or "search icon" inside packages/ui...`, 'thinking');
+    await ctx.sleep(400);
     
     const loopContainer = document.createElement('div');
     loopContainer.className = 'text-zinc-500 space-y-1 pl-3';
-    const activeScreen = getActiveTerminalScreen();
-    activeScreen.appendChild(loopContainer);
-    activeScreen.scrollTop = activeScreen.scrollHeight;
+    ctx.screen.appendChild(loopContainer);
+    ctx.screen.scrollTop = ctx.screen.scrollHeight;
 
     // Stats scrolling loop animation (ticks up rapidly over 3 seconds)
     let stepsVal = 7;
@@ -322,23 +309,23 @@ async function runNoContextSimulation(simId) {
       tokensVal += Math.floor(Math.random() * 80000) + 40000;
       timeVal += Math.floor(Math.random() * 18) + 10;
       
-      updateStats(stepsVal, tokensVal, `${timeVal}s`);
+      ctx.updateStats(stepsVal, tokensVal, `${timeVal}s`);
       
-      check();
+      ctx.check();
       const logLine = document.createElement('div');
       logLine.innerHTML = `➔ [Step ${stepsVal}] scanning: ${itemsToLog[i]}`;
       loopContainer.appendChild(logLine);
-      activeScreen.scrollTop = activeScreen.scrollHeight;
-      await sleep(350);
+      ctx.screen.scrollTop = ctx.screen.scrollHeight;
+      await ctx.sleep(350);
     }
 
     // Finish loop at task 5 natural limits
-    updateStats(65, 651681, '142.0s');
-    await write(`<span class="text-brand-blue">agent$</span> Target search button located inside Kbar.tsx. Proposing change (Step 65).`);
-    await sleep(500);
+    ctx.updateStats(65, 651681, '142.0s');
+    await ctx.write(`<span class="text-brand-blue">agent$</span> Target search button located inside Kbar.tsx. Proposing change (Step 65).`);
+    await ctx.sleep(500);
 
     // Render Diff block with alert
-    await write(`<div class="bg-zinc-950 rounded border border-zinc-900 overflow-hidden text-[10px]">
+    await ctx.write(`<div class="bg-zinc-950 rounded border border-zinc-900 overflow-hidden text-[10px]">
       <div class="bg-zinc-900 border-b border-zinc-800 px-3 py-1.5 flex justify-between items-center text-[9px] text-zinc-500 font-mono">
         <span>PROPOSED PATCH</span>
         <span>Kbar.tsx</span>
@@ -353,7 +340,7 @@ async function runNoContextSimulation(simId) {
         <div>         &lt;SearchIcon className="h-4 w-4 shrink-0 text-inherit" /&gt;</div>
       </div>
       <div class="p-2 border-t border-zinc-900 bg-zinc-900/30 flex justify-end">
-        <button id="apply-patch-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] px-3 py-1 rounded transition-colors active:scale-[0.97]">
+        <button id="apply-patch-btn-${ctx.tabName}" class="bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] px-3 py-1 rounded transition-colors active:scale-[0.97]">
           Apply Patch
         </button>
       </div>
@@ -367,7 +354,7 @@ async function runNoContextSimulation(simId) {
      </div>`);
 
     // Add listener to the dynamically created Apply Patch button
-    document.getElementById('apply-patch-btn').addEventListener('click', handleApplyPatch);
+    document.getElementById(`apply-patch-btn-${ctx.tabName}`).addEventListener('click', () => handleApplyPatch(ctx.tabName));
   } catch (err) {
     if (err.message === 'cancelled') return;
     throw err;

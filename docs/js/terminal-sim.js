@@ -1,6 +1,5 @@
 // State Management
 let activeTab = 'with-hs';
-let currentSimulationId = 0;
 let activeRepo = 'calcom';
 
 const tabStates = {
@@ -10,7 +9,9 @@ const tabStates = {
     steps: '0',
     tokens: '0',
     time: '0s',
-    tooltip: 'Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.'
+    tooltip: 'Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.',
+    currentSimId: 0,
+    timers: []
   },
   'file-only': {
     hasSent: false,
@@ -18,7 +19,9 @@ const tabStates = {
     steps: '0',
     tokens: '0',
     time: '0s',
-    tooltip: 'Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.'
+    tooltip: 'Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.',
+    currentSimId: 0,
+    timers: []
   },
   'no-context': {
     hasSent: false,
@@ -26,7 +29,9 @@ const tabStates = {
     steps: '0',
     tokens: '0',
     time: '0s',
-    tooltip: 'Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.'
+    tooltip: 'Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.',
+    currentSimId: 0,
+    timers: []
   }
 };
 
@@ -69,8 +74,6 @@ const barPeakVal = document.getElementById('bar-peak-val');
 // DOM Elements - Bento
 const keyC = document.getElementById('key-c');
 
-// List to track active simulation timeouts to prevent leaks
-let activeTimers = [];
 let keyCBlinkInterval = null;
 
 // Initialize inputs
@@ -130,14 +133,48 @@ function restoreTabUI() {
   }
 }
 
-function clearAllSimulationTimers() {
-  activeTimers.forEach(timerId => clearTimeout(timerId));
-  activeTimers = [];
+function clearTabTimers(tabName) {
+  tabStates[tabName].timers.forEach(timerId => clearTimeout(timerId));
+  tabStates[tabName].timers = [];
 }
 
-function resetActiveTabSimulation() {
-  clearAllSimulationTimers();
-  const screen = getActiveTerminalScreen();
+function tabDelay(ms, tabName) {
+  return new Promise(resolve => {
+    const id = setTimeout(resolve, ms);
+    tabStates[tabName].timers.push(id);
+  });
+}
+
+function writeToScreen(screen, html, type = 'log') {
+  const line = document.createElement('div');
+  if (type === 'log') line.className = 'text-zinc-300';
+  if (type === 'system') line.className = 'text-zinc-500';
+  if (type === 'error') line.className = 'text-red-500';
+  if (type === 'success') line.className = 'text-green-500';
+  if (type === 'thinking') line.className = 'text-zinc-400 italic';
+  
+  line.innerHTML = html;
+  if (screen) {
+    screen.appendChild(line);
+    screen.scrollTop = screen.scrollHeight;
+  }
+}
+
+function updateTabStats(tabName, steps, tokens, timeStr) {
+  tabStates[tabName].steps = steps;
+  tabStates[tabName].tokens = typeof tokens === 'number' ? tokens.toLocaleString() : tokens;
+  tabStates[tabName].time = timeStr;
+
+  if (tabName === activeTab) {
+    statSteps.innerText = tabStates[tabName].steps;
+    statTokens.innerText = tabStates[tabName].tokens;
+    statTime.innerText = tabStates[tabName].time;
+  }
+}
+
+function resetTabSimulation(tabName) {
+  clearTabTimers(tabName);
+  const screen = document.getElementById(`terminal-screen-${tabName}`);
   if (screen) screen.innerHTML = '';
   
   const welcomeDiv = document.createElement('div');
@@ -148,86 +185,87 @@ function resetActiveTabSimulation() {
   `;
   if (screen) screen.appendChild(welcomeDiv);
 
-  tabStates[activeTab].hasSent = true;
-  tabStates[activeTab].patchApplied = false;
-  tabStates[activeTab].steps = '0';
-  tabStates[activeTab].tokens = '0';
-  tabStates[activeTab].time = '0s';
-  tabStates[activeTab].tooltip = 'Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.';
+  tabStates[tabName].hasSent = true;
+  tabStates[tabName].patchApplied = false;
+  tabStates[tabName].steps = '0';
+  tabStates[tabName].tokens = '0';
+  tabStates[tabName].time = '0s';
+  tabStates[tabName].tooltip = 'Click <span class="text-zinc-300 font-semibold font-mono">Send to Agent</span> to process the task.';
 
-  pseudoInput.value = '';
-  statSteps.innerText = '0';
-  statTokens.innerText = '0';
-  statTime.innerText = '0s';
-  instructionTooltip.innerHTML = tabStates[activeTab].tooltip;
+  if (tabName === activeTab) {
+    pseudoInput.value = '';
+    statSteps.innerText = '0';
+    statTokens.innerText = '0';
+    statTime.innerText = '0s';
+    instructionTooltip.innerHTML = tabStates[tabName].tooltip;
 
-  if (searchTriggerBtn) {
-    searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200';
-    searchTriggerBtn.classList.remove('border', 'border-zinc-700', 'ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+    if (searchTriggerBtn) {
+      searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-all duration-200';
+      searchTriggerBtn.classList.remove('border', 'border-zinc-700', 'ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+    }
   }
 }
 
-function delay(ms) {
-  return new Promise(resolve => {
-    const id = setTimeout(resolve, ms);
-    activeTimers.push(id);
-  });
-}
-
-async function writeTerminalLine(html, type = 'log') {
-  const line = document.createElement('div');
-  if (type === 'log') line.className = 'text-zinc-300';
-  if (type === 'system') line.className = 'text-zinc-500';
-  if (type === 'error') line.className = 'text-red-500';
-  if (type === 'success') line.className = 'text-green-500';
-  if (type === 'thinking') line.className = 'text-zinc-400 italic';
+function createSimContext(tabName) {
+  tabStates[tabName].currentSimId++;
+  const simId = tabStates[tabName].currentSimId;
+  const screen = document.getElementById(`terminal-screen-${tabName}`);
   
-  line.innerHTML = html;
-  const activeScreen = getActiveTerminalScreen();
-  if (activeScreen) {
-    activeScreen.appendChild(line);
-    activeScreen.scrollTop = activeScreen.scrollHeight;
-  }
-  await delay(100);
-}
-
-function updateStats(steps, tokens, timeStr) {
-  tabStates[activeTab].steps = steps;
-  tabStates[activeTab].tokens = typeof tokens === 'number' ? tokens.toLocaleString() : tokens;
-  tabStates[activeTab].time = timeStr;
-
-  statSteps.innerText = tabStates[activeTab].steps;
-  statTokens.innerText = tabStates[activeTab].tokens;
-  statTime.innerText = tabStates[activeTab].time;
+  const check = () => {
+    if (simId !== tabStates[tabName].currentSimId) throw new Error('cancelled');
+  };
+  
+  const write = async (html, type) => {
+    check();
+    writeToScreen(screen, html, type);
+    await tabDelay(100, tabName);
+    check();
+  };
+  
+  const sleep = async (ms) => {
+    check();
+    await tabDelay(ms, tabName);
+    check();
+  };
+  
+  const stats = (steps, tokens, timeStr) => {
+    updateTabStats(tabName, steps, tokens, timeStr);
+  };
+  
+  return { tabName, simId, screen, check, write, sleep, updateStats: stats };
 }
 
 // Apply patch logic
-async function handleApplyPatch() {
-  if (tabStates[activeTab].patchApplied) return;
-  tabStates[activeTab].patchApplied = true;
+function handleApplyPatch(tabName) {
+  if (tabStates[tabName].patchApplied) return;
+  tabStates[tabName].patchApplied = true;
   
-  const applyBtn = document.getElementById('apply-patch-btn');
+  const applyBtn = document.getElementById(`apply-patch-btn-${tabName}`);
+  if (!applyBtn) return;
   applyBtn.innerText = 'Applying...';
   applyBtn.disabled = true;
 
-  await delay(600);
-  applyBtn.className = 'bg-zinc-800 text-zinc-500 font-mono text-[10px] px-3 py-1 rounded cursor-not-allowed';
-  applyBtn.innerText = 'Patched';
+  setTimeout(() => {
+    applyBtn.className = 'bg-zinc-800 text-zinc-500 font-mono text-[10px] px-3 py-1 rounded cursor-not-allowed';
+    applyBtn.innerText = 'Patched';
 
-  await writeTerminalLine(`[+] Changes successfully written to disk. Hot Module Replacement (HMR) triggered.`, 'success');
-  
-  if (searchTriggerBtn) {
-    searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 border border-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-all duration-200 shadow-sm';
-    searchTriggerBtn.classList.add('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+    const screen = document.getElementById(`terminal-screen-${tabName}`);
+    writeToScreen(screen, '[+] Changes successfully written to disk. Hot Module Replacement (HMR) triggered.', 'success');
     
-    const feedbackTimer = setTimeout(() => {
-      searchTriggerBtn.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
-    }, 1500);
-    activeTimers.push(feedbackTimer);
-  }
+    if (searchTriggerBtn && tabName === activeTab) {
+      searchTriggerBtn.className = 'flex items-center justify-center h-8 w-8 rounded text-zinc-400 bg-zinc-800 border border-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 transition-all duration-200 shadow-sm';
+      searchTriggerBtn.classList.add('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+      
+      setTimeout(() => {
+        searchTriggerBtn.classList.remove('ring-2', 'ring-emerald-500', 'ring-offset-2', 'ring-offset-[#0b0b0d]');
+      }, 1500);
+    }
 
-  tabStates[activeTab].tooltip = '<span class="text-green-400 font-semibold">Success!</span> Hover the mock sidebar search button to view the changes.';
-  instructionTooltip.innerHTML = tabStates[activeTab].tooltip;
+    tabStates[tabName].tooltip = '<span class="text-green-400 font-semibold">Success!</span> Hover the mock sidebar search button to view the changes.';
+    if (tabName === activeTab) {
+      instructionTooltip.innerHTML = tabStates[tabName].tooltip;
+    }
+  }, 600);
 }
 
 // Tab Switching Event Listeners
@@ -251,22 +289,22 @@ if (tabNoContext) tabNoContext.addEventListener('click', () => handleTabSwitch('
 // Terminal dispatcher
 if (sendBtn) {
   sendBtn.addEventListener('click', () => {
-    if (tabStates[activeTab].hasSent) return;
+    const tabName = activeTab;
+    if (tabStates[tabName].hasSent) return;
     
-    resetActiveTabSimulation();
+    resetTabSimulation(tabName);
     
     sendBtn.disabled = true;
     sendBtn.classList.add('opacity-50', 'cursor-not-allowed');
 
-    currentSimulationId++;
-    const simId = currentSimulationId;
+    const ctx = createSimContext(tabName);
 
-    if (activeTab === 'with-hs') {
-      runWithHsSimulation(simId);
-    } else if (activeTab === 'file-only') {
-      runFileOnlySimulation(simId);
+    if (tabName === 'with-hs') {
+      runWithHsSimulation(ctx);
+    } else if (tabName === 'file-only') {
+      runFileOnlySimulation(ctx);
     } else {
-      runNoContextSimulation(simId);
+      runNoContextSimulation(ctx);
     }
   });
 }

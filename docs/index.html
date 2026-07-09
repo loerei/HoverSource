@@ -124,7 +124,7 @@
 
       <!-- Right Column: Interactive Browser Dashboard Mock -->
       <div class="lg:col-span-7 relative">
-        <div id="mock-browser-canvas" class="border border-zinc-800 bg-[#000000] rounded-2xl shadow-2xl relative overflow-hidden h-[55vh] select-none flex flex-row">
+        <div id="mock-browser-canvas" class="border border-zinc-800 bg-[#000000] rounded-2xl shadow-2xl relative overflow-hidden h-[clamp(420px,55vh,650px)] select-none flex flex-row">
           <!-- Canvas Overlay for Target Mode -->
           <div id="hs-canvas-overlay" class="absolute inset-0 pointer-events-none z-10">
             <div id="hs-target-border" class="absolute border border-dashed border-brand-blue bg-brand-blue/10 rounded hidden transition-all duration-150"></div>
@@ -352,7 +352,7 @@
 
       <!-- Right Column: Simulated AI Agent Chat Terminal -->
       <div class="lg:col-span-7">
-        <div id="mock-terminal-container" class="border border-zinc-800 bg-zinc-950/90 rounded-2xl shadow-2xl flex flex-col h-[55vh] overflow-hidden relative">
+        <div id="mock-terminal-container" class="border border-zinc-800 bg-zinc-950/90 rounded-2xl shadow-2xl flex flex-col h-[clamp(420px,55vh,650px)] overflow-hidden relative">
           <!-- Terminal Header -->
           <div class="bg-zinc-900/50 border-b border-zinc-800/80 px-4 py-3 flex items-center justify-between">
             <div class="flex items-center gap-2">

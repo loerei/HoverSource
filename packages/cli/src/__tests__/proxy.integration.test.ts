@@ -58,6 +58,11 @@ describe("Proxy Server Integration", () => {
           });
           res.end(body);
         }
+      } else if (req.url === "/redirect") {
+        res.writeHead(302, {
+          "Location": `http://127.0.0.1:${targetPort}/target-destination`,
+        });
+        res.end();
       } else {
         res.writeHead(404, { "Content-Type": "text/plain" });
         res.end("Not Found");
@@ -180,6 +185,12 @@ describe("Proxy Server Integration", () => {
       "session=123; HttpOnly",
       "theme=dark",
     ]);
+  });
+
+  it("should rewrite absolute redirect Location headers pointing to the target server", async () => {
+    const res = await getUrl("/redirect");
+    expect(res.status).toBe(302);
+    expect(res.headers["location"]).toBe(`http://127.0.0.1:${proxyPort}/target-destination`);
   });
 
   it("should strip integrity attributes from HTML response", async () => {

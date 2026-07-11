@@ -11,6 +11,7 @@ import http from "node:http";
 import https from "node:https";
 import { fileURLToPath } from "node:url";
 import { restoreLeftoverPatches, recordPatchState, removePatchState } from "./utils/patchState.js";
+import { setupConsoleMonkeypatch } from "./utils/logger.js";
 import {
   findFreePort,
   getPidUsingPort,
@@ -801,6 +802,7 @@ async function handleTargetOrExec(
 }
 
 async function main() {
+  setupConsoleMonkeypatch();
   restoreLeftoverPatches();
 
   const { args, subcommand } = getArgs();

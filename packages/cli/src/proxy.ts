@@ -38,7 +38,7 @@ export function rewriteLocationHeader(
       locUrl.host = proxyHost;
       headers["location"] = locUrl.toString();
     }
-  } catch (e) {
+  } catch {
     // Relative redirects are already correct relative to the proxy
   }
 }
@@ -158,7 +158,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
         delete responseHeaders["content-security-policy-report-only"];
         // Rewrite cookie domains and secure flag
         rewriteCookieHeaders(responseHeaders, !!useHttps);
-        rewriteLocationHeader(responseHeaders, targetUrl, proxyPort, !!useHttps, req.headers["host"]);
+        rewriteLocationHeader(responseHeaders, targetUrl, proxyPort, !!useHttps, req.headers.host);
 
         res.writeHead(proxyRes.statusCode || 200, responseHeaders);
         proxyRes.pipe(res, { end: true });
@@ -186,7 +186,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
         responseHeaders["content-type"] = "text/html; charset=utf-8";
         // Rewrite cookie domains and secure flag
         rewriteCookieHeaders(responseHeaders, !!useHttps);
-        rewriteLocationHeader(responseHeaders, targetUrl, proxyPort, !!useHttps, req.headers["host"]);
+        rewriteLocationHeader(responseHeaders, targetUrl, proxyPort, !!useHttps, req.headers.host);
 
         res.writeHead(proxyRes.statusCode || 200, responseHeaders);
         res.end(transformedBody);

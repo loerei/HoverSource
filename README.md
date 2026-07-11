@@ -3,7 +3,7 @@
     <img alt="HoverSource Banner" src="docs/assets/banner.svg?v=3" width="650">
   </picture>
   
-  <p><b>Translate What You See To What Your Agent Needs.</b></p>
+  <p><b>From pixel to source file in one keystroke.</b></p>
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/loerei/HoverSource/pulls)
@@ -452,9 +452,16 @@ Ensure the port specified (`9222`) matches the `--debug-port` flag passed to `hs
 | Flag | Default | Description |
 |---|---|---|
 | `--port=N` | auto | Companion server port |
-| `--proxy-port=N` | target port + 1 | Proxy port (web mode) |
+| `--proxy-port=N` | target port + 10000 | Proxy port (web mode) |
 | `--debug-port=N` | `9222` | CDP debug port (Electron mode) |
 | `--dashboard` / `-d` | off | Open config dashboard on start |
+
+## Troubleshooting: Overlay Disappears on Redirection
+
+If you navigate through your application (for example, clicking a "Login" or "Logout" button) and the HoverSource overlay suddenly disappears:
+1. **Check your browser's address bar**: The application might have performed a client-side navigation or redirect to the direct target port (e.g., `http://localhost:3000/...` instead of the proxy port `http://localhost:13000/...`).
+2. **The "+10000" Rule**: By default, HoverSource proxy runs on a port calculated as `target port + 10000` (so port `3000` maps to proxy port `13000`). Simply modify the URL in your browser to add `10000` to the port number (e.g., change `:3000` to `:13000`) and press Enter to restore HoverSource.
+3. **Recommended Fix**: To prevent this from happening, update your application's environment variables (such as `NEXT_PUBLIC_WEBAPP_URL` or `NEXTAUTH_URL`) to point to the HoverSource proxy URL (e.g., `http://localhost:13000`) during your development session.
 
 ## License
 

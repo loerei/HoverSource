@@ -17,6 +17,9 @@
     "clean": "tsc -b --clean",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@hoversource/client-injector": "workspace:*"
+  },
   "devDependencies": {
     "vitest": "^4.1.8"
   }

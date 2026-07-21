@@ -36,13 +36,14 @@ Always verify changes locally before pushing:
 
 - **Run Typechecks**: Execute `npm run typecheck` to verify import paths and type safety.
 - **Run Unit Tests**: Execute the test suites (e.g. `npm run test` or `npm run test:chat-turn`) to ensure behavior remains correct.
-- **Code Snippet Scan**: Run `sonarcloud:analyze_code_snippet` (or `sonarqube:analyze_code_snippet`) with the modified file contents to verify 0 issues remain.
+- **Run Local Linters**: Run fast local linters (e.g. `ruff` for Python, `eslint`/`biome` for JS/TS) to verify code style and conventions. If resolving quality or Sonar issues, proactively fix any linter warnings reported in the modified files to ensure overall code health.
 
 ### 4. Safe Issue Acceptance (Flagging on SonarQube/SonarCloud)
 
 For false positives, design/style rules where standard WCAG contrast ratios conflict with custom brand themes, or when a code fix introduces disproportionate regression risk:
 
 - **Do NOT force a code fix** if it breaks user experience or visual harmony.
+- **Cognitive Complexity rules (e.g., S3776)**: **Always flag these as ACCEPTED. Never modify the codebase to split functions just to satisfy SonarQube's complexity metrics, as this reduces locality and creates shallow, fragmented helper modules. Structural refactoring should only be driven by `/improve-codebase-architecture` and user design discussions.**
 - **MUST search for the issue key** in SonarQube/SonarCloud using `search_sonar_issues_in_projects` with `issueStatuses: ["OPEN"]` and filter by file or project.
 - **MUST call change_sonar_issue_status** to flag the issue status as `"accept"` or `"falsepositive"` instead of modifying the codebase.
 - Always explain the design or technical rationale to the user or team before flagging the issue.

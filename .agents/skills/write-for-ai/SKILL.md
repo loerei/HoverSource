@@ -18,7 +18,7 @@ Text written for AI must help it make decisions — not explain how things work,
 7. **Don't rename domain terms.** If a word is used consistently in the codebase or spec, keep it -- even if a synonym sounds simpler.
 8. **Only add information to resolve ambiguity.** Add a purpose statement only if it helps AI distinguish this tool from an alternative. Don't add what the tool name already implies.
 9. **Don't cut "e.g." from enum lists** unless you've confirmed the list is exhaustive. Removing it signals to AI that the list is complete when it may not be.
-10. **Preserve and enforce rule-strength signals.** MUST, MUST NOT, NEVER, ALWAYS, and do NOT in rule contexts are non-negotiable directive flags for LLMs. MUST preserve them when editing, and MUST proactively inject them when writing new system prompts or rules to ensure absolute compliance.
+10. **Preserve rule-strength signals.** MUST, NEVER, do NOT, 100%, always in rule context are not filler -- they signal non-negotiability. Only cut if the surrounding sentence already carries absolute force without them.
 
 ## Noise Checklist (things to cut)
 

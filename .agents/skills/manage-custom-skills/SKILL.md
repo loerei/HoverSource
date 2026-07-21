@@ -22,10 +22,10 @@ Ask the user:
 
 ---
 
-## 2. Scaffold Global Skill
+## 2. Scaffold Custom Skill
 
-Create a new directory and write the `SKILL.md` file globally:
-Path: `C:\Users\sayus\.gemini\.agents\skills\<skill-name>\SKILL.md`
+Create a new directory inside the custom skills source repository and write the `SKILL.md` file:
+Path: `<projects-dir>/myskills/<skill-name>/SKILL.md`
 
 Ensure it contains the correct YAML frontmatter:
 ```yaml
@@ -38,32 +38,53 @@ description: >
 
 ---
 
-## 3. Register & Distribute
+## 3. Distribute
 
-Update the skill installer script [install-skills.js](file:///D:/Projects/install-skills.js) to add the new skill to the distribution list:
-
-```javascript
-const CUSTOM_SKILLS = [
-  'initialize-knowledge-graph',
-  'sonarqube-workflow',
-  'manage-custom-skills',
-  '<new-skill-name>'
-];
-```
-
-Run the distribution script:
+Since the script dynamically reads the source directory, the new skill is automatically detected. Run the distribution script to deploy it to all projects:
 ```powershell
-node D:\Projects\install-skills.js
+node <projects-dir>/distribute-skills.js --all <projects-dir>
 ```
-Confirm to the user that the skill has been created/updated and synced.
+Or to a specific project:
+```powershell
+node <projects-dir>/distribute-skills.js --target <projects-dir>/<project-folder>
+```
+
+Navigate to `<projects-dir>/myskills/`, commit the new skill, and push it to the GitHub remote repository to keep it synced:
+```powershell
+git add .
+git commit -m "Create skill: <skill-name>"
+git push
+```
+
+Confirm to the user that the skill has been created, synced locally, and pushed to GitHub.
 
 ---
 
 ## 4. Updating & Redistributing Existing Skills
 
 When editing or updating an existing custom skill:
-1. **Apply changes globally first**: Always copy the updated files from the local workspace to the global customizations root directory: `C:\Users\sayus\.gemini\.agents\skills\<skill-name>\`
-2. **Redistribute**: Run the installer script to sync the updates across all project workspaces:
+1. **Apply changes to source repository**: Copy the updated files from the local workspace to the custom skills source repository directory: `<projects-dir>/myskills/<skill-name>/`
+2. **Redistribute**: Run the distribution script to sync the updates across all project workspaces:
    ```powershell
-   node D:\Projects\install-skills.js
+   node <projects-dir>/distribute-skills.js --all <projects-dir>
    ```
+3. **Push to GitHub**: Commit the modifications or deletion, and push to GitHub:
+   ```powershell
+   git add .
+   git commit -m "Update/Delete skill: <skill-name>"
+   git push
+   ```
+
+---
+
+## 5. Update Global Policy Matrix
+
+When a new custom skill is added, you MUST update the task-to-skill classification table in the Global Policy file (typically `AGENTS.md` or `GEMINI.md` at the repository/global configurations root):
+- Locate the **Task-Specific Workflows** table.
+- Categorize the new skill into one of the 5 standard categories:
+  1. **Design & Frontend UI** (styling, layout, taste, mockups)
+  2. **Engineering & Development** (testing, codebase architecture, debugging, prototyping)
+  3. **Code Quality & CI/CD** (sonar quality gates, CI logs)
+  4. **Productivity & Management** (triage, write-pr, to-issues, handoff, AI-writing)
+  5. **Content & Notes** (obsidian, drafts, writing beats)
+- Add the new skill name as a code block backtick item under the **Required Skills to Read** column for the matching category.

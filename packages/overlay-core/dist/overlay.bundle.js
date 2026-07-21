@@ -100,7 +100,7 @@
     return null;
   }
 
-  // ../source-resolver/dist/adapters/utils.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/utils.js
   function getElementMetadata(element) {
     return {
       tagName: element.tagName.toLowerCase(),
@@ -143,7 +143,7 @@
     return null;
   }
 
-  // ../source-resolver/dist/adapters/ReactFiberAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/ReactFiberAdapter.js
   var ReactFiberAdapter = class {
     name = "react-fiber";
     getFiber(element) {
@@ -192,7 +192,7 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/ReactInvasiveAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/ReactInvasiveAdapter.js
   var invasiveLocs = /* @__PURE__ */ new WeakMap();
   if (globalThis.window !== void 0 && globalThis.document !== void 0) {
     const observer = new MutationObserver((mutations) => {
@@ -276,7 +276,7 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/VueAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/VueAdapter.js
   var VueAdapter = class {
     name = "vue";
     getVueInstance(element) {
@@ -354,7 +354,7 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/SvelteAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/SvelteAdapter.js
   var SvelteAdapter = class {
     name = "svelte";
     canResolve(element) {
@@ -376,7 +376,7 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/PreactAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/PreactAdapter.js
   var PreactAdapter = class {
     name = "preact";
     getVNode(element) {
@@ -420,7 +420,7 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/SolidAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/SolidAdapter.js
   var SolidAdapter = class {
     name = "solid";
     canResolve(element) {
@@ -445,7 +445,7 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/AstroAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/AstroAdapter.js
   var AstroAdapter = class {
     name = "astro";
     canResolve(element) {
@@ -480,7 +480,7 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/AngularAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/AngularAdapter.js
   var AngularAdapter = class {
     name = "angular";
     getNgContext(element) {
@@ -536,7 +536,7 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/VanillaAdapter.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/VanillaAdapter.js
   var VanillaAdapter = class {
     name = "vanilla";
     canResolve(element) {
@@ -560,7 +560,7 @@
     }
   };
 
-  // ../source-resolver/dist/index.js
+  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/index.js
   var SourceResolver = class {
     adapters = [];
     fiberAdapter;

@@ -8,7 +8,7 @@ We evaluate the performance of an AI coding agent (Gemini 3.5 Flash) on style mo
 
 1. **Prompt A: Pure Natural Language (No Context)**
    * Describes the visual goal in natural language. No file paths, CSS selectors, or component locations are provided.
-2. **Prompt B: Manual Context**
+2. **Prompt B: File Path Only**
    * Specifies target file paths and component names, representing manual developer input. Exact element coordinates and CSS selectors are omitted.
 3. **Prompt C: HoverSource Metadata**
    * Pairs the natural language instruction with the structured component metadata block exported by HoverSource. This includes exact selectors, file paths, layout constraints, dimensions, and parent styles.
@@ -51,7 +51,7 @@ The visualization charts in the subdirectories are compiled and generated using 
 ## Analysis: Prompting Methodology & Code Quality
 
 ### Context Comparison
-* **Prompt B (Manual Context):** Relies on high-level file and component naming, leaving exact CSS selectors and DOM structures for the agent to find.
+* **Prompt B (File Path Only):** Relies on high-level file and component naming, leaving exact CSS selectors and DOM structures for the agent to find.
 * **Prompt C (HoverSource Metadata):** Provides exact file paths, line numbers, specific CSS selectors, bounding boxes, parent styles, and layout constraints.
 
 ### Performance Analysis

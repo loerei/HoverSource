@@ -46,7 +46,7 @@ Generate or update the consolidated benchmark table (e.g. `calcom-benchmark.md`)
   The tables MUST be formatted exactly like the project's main `README.md` benchmark tables:
   - **Rows**: Metrics (Task Achievement, Agent Steps, Tool Calls, Execution Time, Cumulative Input, Peak Context).
   - **Columns**: Prompt Variants on the left, Delta columns on the far right.
-    Format: `| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |`
+    Format: `| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |`
   - **Task Achievement Metric**:
     - For individual task tables: Record `1` (Succeeded - modified correct file & logic) or `0` (Failed - modified wrong file/project or wrong logic).
     - For the consolidated summary table: Calculate the average success rate percentage (e.g. `71.4% (5/7)`).

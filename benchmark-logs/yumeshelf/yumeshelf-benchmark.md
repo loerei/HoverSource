@@ -2,7 +2,7 @@
 
 This document records the benchmark metrics for the YumeShelf tasks (Tasks 11 to 15), comparing the performance of the AI coding agent under three different prompt variations:
 1. **Prompt A**: Pure Natural Language
-2. **Prompt B**: Senior Developer Context
+2. **Prompt B**: File Path Only
 3. **Prompt C**: HoverSource Metadata
 
 ![YumeShelf Benchmark Chart](yumeshelf-benchmark-chart.png)
@@ -11,7 +11,7 @@ This document records the benchmark metrics for the YumeShelf tasks (Tasks 11 to
 
 ## Consolidated Summary (Averages)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 100.0% (5/5) | 100.0% (5/5) | 100.0% (5/5) | - | - |
 | **Avg Agent Steps** | 34.4 | 22.0 | 26.0 | -36.0% | **-24.4%** |
@@ -28,7 +28,7 @@ This document records the benchmark metrics for the YumeShelf tasks (Tasks 11 to
 * **Goal**: Change the visual styling of the active favorite button inside game stack cards from bright gold to a softer pastel gold color.
 * **Full Session Logs**: [Prompt A Log](logs/yumeshelf-task11-a.md) | [Prompt B Log](logs/yumeshelf-task11-b.md) | [Prompt C Log](logs/yumeshelf-task11-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 26 | 32 | 30 | +23.1% | +15.4% |
@@ -48,7 +48,7 @@ This document records the benchmark metrics for the YumeShelf tasks (Tasks 11 to
 * **Goal**: Tone down the intense gold shadow glow of the favorited game cards to make it more subtle in the library grid.
 * **Full Session Logs**: [Prompt A Log](logs/yumeshelf-task12-a.md) | [Prompt B Log](logs/yumeshelf-task12-b.md) | [Prompt C Log](logs/yumeshelf-task12-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 32 | 16 | 30 | -50.0% | -6.3% |
@@ -63,7 +63,7 @@ This document records the benchmark metrics for the YumeShelf tasks (Tasks 11 to
 * **Goal**: Adjust the grid layout to increase the minimum column width so that game card columns are wider and titles don't get cut off.
 * **Full Session Logs**: [Prompt A Log](logs/yumeshelf-task13-a.md) | [Prompt B Log](logs/yumeshelf-task13-b.md) | [Prompt C Log](logs/yumeshelf-task13-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 34 | 22 | 16 | -35.3% | **-52.9%** |
@@ -78,7 +78,7 @@ This document records the benchmark metrics for the YumeShelf tasks (Tasks 11 to
 * **Goal**: Change the style of the delete dropdown option so that its red background is transparent by default and only appears on hover.
 * **Full Session Logs**: [Prompt A Log](logs/yumeshelf-task14-a.md) | [Prompt B Log](logs/yumeshelf-task14-b.md) | [Prompt C Log](logs/yumeshelf-task14-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 52 | 30 | 34 | -42.3% | **-34.6%** |
@@ -97,7 +97,7 @@ This document records the benchmark metrics for the YumeShelf tasks (Tasks 11 to
 * **Goal**: Update the library path links to behave like standard links by adding an underline and pointer cursor on hover.
 * **Full Session Logs**: [Prompt A Log](logs/yumeshelf-task15-a.md) | [Prompt B Log](logs/yumeshelf-task15-b.md) | [Prompt C Log](logs/yumeshelf-task15-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 28 | 10 | 20 | **-64.3%** | -28.6% |

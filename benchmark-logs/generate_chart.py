@@ -7,7 +7,7 @@ tasks = ["Task 1", "Task 2", "Task 3", "Task 4", "Task 5", "Task 6", "Task 7", "
 
 # Metrics for each prompt variant
 # Prompt A: Pure Natural Language
-# Prompt B: Senior Developer Context
+# Prompt B: File Path Only
 # Prompt C: HoverSource Metadata
 time_a = [271, 51, 46, 65, 132, 154, 115, 137, 166, 283]
 time_b = [88, 11, 18, 169, 8, 7, 109, 8, 8, 16]
@@ -33,7 +33,7 @@ color_c = '#69f0ae'  # Soft green
 
 # Plot 1: Execution Time
 ax1.plot(tasks, time_a, marker='o', linewidth=2, color=color_a, label="Prompt A (Natural Language)")
-ax1.plot(tasks, time_b, marker='o', linewidth=2, color=color_b, label="Prompt B (Senior Dev)")
+ax1.plot(tasks, time_b, marker='o', linewidth=2, color=color_b, label="Prompt B (File Path Only)")
 ax1.plot(tasks, time_c, marker='o', linewidth=2, color=color_c, label="Prompt C (HoverSource)")
 
 # Add Horizontal Average Lines for Plot 1
@@ -50,7 +50,7 @@ ax1.set_ylim(bottom=0, top=max(time_a) * 1.15)
 
 # Plot 2: Cumulative Input Tokens
 ax2.plot(tasks, tokens_a, marker='o', linewidth=2, color=color_a, label="Prompt A (Natural Language)")
-ax2.plot(tasks, tokens_b, marker='o', linewidth=2, color=color_b, label="Prompt B (Senior Dev)")
+ax2.plot(tasks, tokens_b, marker='o', linewidth=2, color=color_b, label="Prompt B (File Path Only)")
 ax2.plot(tasks, tokens_c, marker='o', linewidth=2, color=color_c, label="Prompt C (HoverSource)")
 
 # Add Horizontal Average Lines for Plot 2
@@ -68,7 +68,7 @@ ax2.set_ylim(bottom=0, top=max(tokens_a) * 1.15)
 
 # Plot 3: Peak Context Window
 ax3.plot(tasks, context_a, marker='o', linewidth=2, color=color_a, label="Prompt A (Natural Language)")
-ax3.plot(tasks, context_b, marker='o', linewidth=2, color=color_b, label="Prompt B (Senior Dev)")
+ax3.plot(tasks, context_b, marker='o', linewidth=2, color=color_b, label="Prompt B (File Path Only)")
 ax3.plot(tasks, context_c, marker='o', linewidth=2, color=color_c, label="Prompt C (HoverSource)")
 
 # Add Horizontal Average Lines for Plot 3

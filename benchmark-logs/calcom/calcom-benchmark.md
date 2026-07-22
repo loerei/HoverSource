@@ -2,7 +2,7 @@
 
 This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10), comparing the performance of the AI coding agent under three different prompt variations:
 1. **Prompt A**: Pure Natural Language
-2. **Prompt B**: Senior Developer Context
+2. **Prompt B**: File Path Only
 3. **Prompt C**: HoverSource Metadata
 
 ![Cal.com Benchmark Chart](calcom-benchmark-chart.png)
@@ -11,7 +11,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 
 ## Consolidated Summary (Averages)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 60.0% (6/10) | 100.0% (10/10) | 100.0% (10/10) | **+66.7%** | **+66.7%** |
 | **Avg Agent Steps** | 65.6 | 18.0 | 17.1 | -72.6% | **-73.9%** |
@@ -28,7 +28,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Change the hover effect of the Delete option in the dropdown menu to be smoother with a softer red tone.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task1-a.md) | [Prompt B Log](logs/calcom-task1-b.md) | [Prompt C Log](logs/calcom-task1-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 68 | 26 | 18 | -61.8% | **-73.5%** |
@@ -43,7 +43,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Update the styling of our primary action buttons to have a subtle scale-up animation on hover and scale-down on active press.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task2-a.md) | [Prompt B Log](logs/calcom-task2-b.md) | [Prompt C Log](logs/calcom-task2-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 0 | 1 | 1 | - | - |
 | **Agent Steps** | 43 | 12 | 12 | **-72.1%** | **-72.1%** |
@@ -62,7 +62,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Make the focus state border of the text input wrapper more prominent by changing it to use the brand-default color with a matching focus ring.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task3-a.md) | [Prompt B Log](logs/calcom-task3-b.md) | [Prompt C Log](logs/calcom-task3-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 32 | 12 | 18 | **-62.5%** | -43.8% |
@@ -77,7 +77,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Update the online status indicator dot next to the avatar to be slightly larger and stand out with a white border.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task4-a.md) | [Prompt B Log](logs/calcom-task4-b.md) | [Prompt C Log](logs/calcom-task4-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 27 | 44 | 10 | +63.0% | **-63.0%** |
@@ -87,8 +87,8 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 | **Peak Context** | 8,022 | 12,509 | 3,914 | +55.9% | **-51.2%** |
 
 > [!NOTE]
-> **Observation on Senior Developer (B) Cognitive Overhead:**
-> In this task, the Senior Developer prompt (B) took significantly longer (+160.0%) and consumed more tokens (+351.0%) than the Pure Natural Language prompt (A). 
+> **Observation on File Path Only (B) Cognitive Overhead:**
+> In this task, the File Path Only prompt (B) took significantly longer (+160.0%) and consumed more tokens (+351.0%) than the Pure Natural Language prompt (A). 
 > Because Prompt B provided the file path but left the design decisions open-ended, the agent attempted to analyze the entire component's layout logic. This created substantial **cognitive overhead**, leading to deep reasoning loops and extra tool calls.
 
 ---
@@ -97,7 +97,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Style the quick search/kbar trigger button so it looks more like a distinct button by adding a subtle border and making the hover background lighter.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task5-a.md) | [Prompt B Log](logs/calcom-task5-b.md) | [Prompt C Log](logs/calcom-task5-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 66 | 8 | 10 | **-87.9%** | -84.8% |
@@ -112,7 +112,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Adjust the spacing of the sidebar navigation items to increase the vertical gap between them.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task6-a.md) | [Prompt B Log](logs/calcom-task6-b.md) | [Prompt C Log](logs/calcom-task6-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 0 | 1 | 1 | - | - |
 | **Agent Steps** | 56 | 10 | 22 | **-82.1%** | -60.7% |
@@ -131,7 +131,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Add a subtle horizontal dividing line at the bottom of the Settings header to separate it cleanly from the settings forms.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task7-a.md) | [Prompt B Log](logs/calcom-task7-b.md) | [Prompt C Log](logs/calcom-task7-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 48 | 26 | 16 | -45.8% | **-66.7%** |
@@ -146,7 +146,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Change the dashed border of the empty screen container to a solid subtle border, and add a soft background color (`bg-subtle`).
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task8-a.md) | [Prompt B Log](logs/calcom-task8-b.md) | [Prompt C Log](logs/calcom-task8-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 70 | 10 | 12 | **-85.7%** | -82.9% |
@@ -161,7 +161,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Set a maximum width for the shell layout container so it doesn't stretch infinitely, and center it horizontally.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task9-a.md) | [Prompt B Log](logs/calcom-task9-b.md) | [Prompt C Log](logs/calcom-task9-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 1 | 1 | 1 | - | - |
 | **Agent Steps** | 62 | 14 | 10 | -77.4% | **-83.9%** |
@@ -176,7 +176,7 @@ This document records the benchmark metrics for the Cal.com tasks (Tasks 1 to 10
 * **Goal**: Make the helper text at the bottom of the availability view easier to read by increasing the font size and changing the text color to a higher contrast variant.
 * **Full Session Logs**: [Prompt A Log](logs/calcom-task10-a.md) | [Prompt B Log](logs/calcom-task10-b.md) | [Prompt C Log](logs/calcom-task10-c.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (B vs A) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 0 | 1 | 1 | - | - |
 | **Agent Steps** | 184 | 18 | 43 | **-90.2%** | -76.6% |

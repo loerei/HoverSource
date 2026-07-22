@@ -34,7 +34,7 @@ I cured the curse. Hover on what you want the AI to change, press `Alt + C`, the
 
 To measure the efficiency gains, we ran comprehensive benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment (logged using [chronicle-mcp](https://github.com/loerei/chronicle-mcp)). We compared three prompt variations:
 1. **Prompt A**: Pure Natural Language (simulating a user who does not know the codebase).
-2. **Prompt B**: Senior Developer Context (manual file path and component naming).
+2. **Prompt B**: File Path Only Context (manual file path and component naming).
 3. **Prompt C**: HoverSource Metadata (automatic clipboard metadata block).
 
 The benchmarks were performed on two public open-source projects of different scales:
@@ -46,7 +46,7 @@ The benchmarks were performed on two public open-source projects of different sc
 ### Benchmark 1: Cal.com Monorepo (Giant Enterprise Codebase - 10 Tasks)
 * **Detailed Report & Logs**: [Cal.com Benchmark Report](benchmark-logs/calcom/calcom-benchmark.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 60.0% (6/10) | 100.0% (10/10) | 100.0% (10/10) | **+66.7%** |
 | **Avg Agent Steps** | 65.6 | 18.0 | 17.1 | **-73.9%** |
@@ -62,7 +62,7 @@ The benchmarks were performed on two public open-source projects of different sc
 ### Benchmark 2: YumeShelf (Medium Codebase - 5 Tasks)
 * **Detailed Report & Logs**: [YumeShelf Benchmark Report](benchmark-logs/yumeshelf/yumeshelf-benchmark.md)
 
-| Metric | Pure Natural Language (A) | Senior Developer (B) | HoverSource Metadata (C) | Delta (C vs A) |
+| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 100.0% (5/5) | 100.0% (5/5) | 100.0% (5/5) | - |
 | **Avg Agent Steps** | 34.4 | 22.0 | 26.0 | **-24.4%** |
@@ -76,6 +76,10 @@ The benchmarks were performed on two public open-source projects of different sc
 ---
 
 ### Why HoverSource scales with codebase complexity
+
+> **Monorepo Efficiency Takeaway:**
+> In a 7,700-file monorepo like Cal.com, simply providing the correct file path in the prompt (**File Path Only**) saves **68.9% of execution time** and **94.2% of tokens** your agent needs to digest. HoverSource provides all necessary DOM, CSS, and component metadata to push efficiency even further to **-88.5% execution time** and **-94.5% input tokens** — basically skipping the entire code-digging session and jumping straight to reasoning and execution. These savings scale linearly with codebase size.
+
 * **Zero Search & Exploration Overhead**: In YumeShelf, the natural language agent had to scan directories and run global searches (`grep`) to locate the card and CSS files. In Cal.com's monorepo, this overhead exploded. The agent had to list multiple directories, inspect packages, and evaluate ambiguous components across different packages (such as `packages/ui` vs `packages/coss-ui`) just to find the active Button code. Guided by HoverSource, the agent went straight to the exact target line in a single turn.
 * **Context Preservation**: By bypassing global searches and file listings, HoverSource keeps the agent's context window extremely clean, leading to a **98.6% reduction in token consumption** on Cal.com (from half a million tokens to just under 7k). This directly translates to lower API costs and faster responses.
 

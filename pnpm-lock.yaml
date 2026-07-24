@@ -17,6 +17,9 @@ importers:
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9
 
   packages/babel-plugin-react:
     dependencies:

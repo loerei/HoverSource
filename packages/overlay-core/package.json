@@ -17,7 +17,7 @@
     "clean": "tsc -b --clean"
   },
   "dependencies": {
-    "@hoversource/source-resolver": "*"
+    "@hoversource/source-resolver": "workspace:*"
   },
   "devDependencies": {
     "esbuild": "^0.20.0",

@@ -28,9 +28,75 @@ function inspectLayoutConstraints(element, layoutConstraints) {
         if (computed.display && computed.display !== "inline" && computed.display !== "block") {
             layoutConstraints["display"] = computed.display;
         }
+        inspectScrollConstraints(element, computed, layoutConstraints);
     }
     catch (e) {
         console.warn("[HoverSource] Failed to compute element layout constraints", e);
+    }
+}
+function isFiniteNumber(value) {
+    return typeof value === "number" && Number.isFinite(value);
+}
+function parsePixelWidth(value) {
+    if (!value)
+        return 0;
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+function isScrollOverflow(value) {
+    return value === "auto" || value === "scroll" || value === "hidden" || value === "clip";
+}
+function allowsScrollbar(value) {
+    return value === "auto" || value === "scroll";
+}
+function inspectScrollConstraints(element, computed, layoutConstraints) {
+    const overflowX = computed.overflowX;
+    const overflowY = computed.overflowY;
+    const scrollbarGutter = computed.scrollbarGutter;
+    const clientWidth = element.clientWidth;
+    const clientHeight = element.clientHeight;
+    const scrollWidth = element.scrollWidth;
+    const scrollHeight = element.scrollHeight;
+    const offsetWidth = element.offsetWidth;
+    const offsetHeight = element.offsetHeight;
+    const hasGeometry = isFiniteNumber(clientWidth) &&
+        isFiniteNumber(clientHeight) &&
+        isFiniteNumber(scrollWidth) &&
+        isFiniteNumber(scrollHeight);
+    const hasVerticalOverflow = hasGeometry && scrollHeight > clientHeight + 1;
+    const hasHorizontalOverflow = hasGeometry && scrollWidth > clientWidth + 1;
+    if (isScrollOverflow(overflowX) || hasHorizontalOverflow) {
+        layoutConstraints["overflow-x"] = overflowX || "visible";
+    }
+    if (isScrollOverflow(overflowY) || hasVerticalOverflow) {
+        layoutConstraints["overflow-y"] = overflowY || "visible";
+    }
+    if (scrollbarGutter && scrollbarGutter !== "auto") {
+        layoutConstraints["scrollbar-gutter"] = scrollbarGutter;
+    }
+    if (hasGeometry &&
+        (allowsScrollbar(overflowX) ||
+            allowsScrollbar(overflowY) ||
+            hasVerticalOverflow ||
+            hasHorizontalOverflow)) {
+        layoutConstraints["client-size"] = `${clientWidth}x${clientHeight}`;
+        layoutConstraints["scroll-size"] = `${scrollWidth}x${scrollHeight}`;
+    }
+    if (hasGeometry && (allowsScrollbar(overflowY) || allowsScrollbar(overflowX))) {
+        const borderX = parsePixelWidth(computed.borderLeftWidth) + parsePixelWidth(computed.borderRightWidth);
+        const borderY = parsePixelWidth(computed.borderTopWidth) + parsePixelWidth(computed.borderBottomWidth);
+        const vTrack = allowsScrollbar(overflowY) && isFiniteNumber(offsetWidth)
+            ? Math.max(0, Math.round(offsetWidth - clientWidth - borderX))
+            : 0;
+        const hTrack = allowsScrollbar(overflowX) && isFiniteNumber(offsetHeight)
+            ? Math.max(0, Math.round(offsetHeight - clientHeight - borderY))
+            : 0;
+        if (hTrack > 0) {
+            layoutConstraints["scrollbar-width"] = `${vTrack}px x ${hTrack}px`;
+        }
+        else if (vTrack > 0) {
+            layoutConstraints["scrollbar-width"] = `${vTrack}px`;
+        }
     }
 }
 export function inspectVisualContext(element, maxDepth = 32) {

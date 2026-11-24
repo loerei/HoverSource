@@ -19,6 +19,7 @@ export * from "./adapters/SolidAdapter.js";
 export * from "./adapters/AstroAdapter.js";
 export * from "./adapters/AngularAdapter.js";
 export * from "./adapters/VanillaAdapter.js";
+export * from "./adapters/stackFrame.js";
 
 export class SourceResolver {
   private readonly adapters: SourceAdapter[] = [];

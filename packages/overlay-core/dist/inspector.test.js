@@ -145,4 +145,168 @@ describe("inspectVisualContext", () => {
         const res4 = parseClipPathInset("inset(10px 20px 30px 40px)", rect);
         expect(res4).toEqual({ left: 50, top: 30, width: 40, height: 160 });
     });
+    it("emits zero scroll keys in layoutConstraints for non-scrolling, non-overflowing elements", () => {
+        const targetEl = {
+            tagName: "DIV",
+            classList: [],
+            parentElement: null,
+            clientWidth: 300,
+            clientHeight: 200,
+            scrollWidth: 300,
+            scrollHeight: 200,
+            offsetWidth: 300,
+            offsetHeight: 200,
+            _mockComputedStyle: {
+                display: "block",
+                position: "static",
+                overflowX: "visible",
+                overflowY: "visible",
+                scrollbarGutter: "auto"
+            }
+        };
+        const context = inspectVisualContext(targetEl);
+        expect(context.layoutConstraints).toEqual({});
+    });
+    it("emits conditional scroll, gutter, size, and scrollbar-width metrics for a scrollable container", () => {
+        const targetEl = {
+            tagName: "DIV",
+            classList: [],
+            parentElement: null,
+            clientWidth: 747,
+            clientHeight: 579,
+            scrollWidth: 747,
+            scrollHeight: 2400,
+            offsetWidth: 757,
+            offsetHeight: 579,
+            _mockComputedStyle: {
+                display: "block",
+                overflowX: "visible",
+                overflowY: "auto",
+                scrollbarGutter: "stable"
+            }
+        };
+        const context = inspectVisualContext(targetEl);
+        expect(context.layoutConstraints).toEqual({
+            "overflow-y": "auto",
+            "scrollbar-gutter": "stable",
+            "client-size": "747x579",
+            "scroll-size": "747x2400",
+            "scrollbar-width": "10px"
+        });
+    });
+    it("subtracts element borders so a 1px border without a scrollbar does not emit scrollbar-width", () => {
+        const targetEl = {
+            tagName: "DIV",
+            classList: [],
+            parentElement: null,
+            clientWidth: 200,
+            clientHeight: 150,
+            scrollWidth: 200,
+            scrollHeight: 400,
+            offsetWidth: 202,
+            offsetHeight: 152,
+            _mockComputedStyle: {
+                overflowX: "visible",
+                overflowY: "auto",
+                borderLeftWidth: "1px",
+                borderRightWidth: "1px",
+                borderTopWidth: "1px",
+                borderBottomWidth: "1px"
+            }
+        };
+        const context = inspectVisualContext(targetEl);
+        expect(context.layoutConstraints["overflow-y"]).toBe("auto");
+        expect(context.layoutConstraints["client-size"]).toBe("200x150");
+        expect(context.layoutConstraints["scroll-size"]).toBe("200x400");
+        expect(context.layoutConstraints["scrollbar-width"]).toBeUndefined();
+    });
+    it("emits both vertical and horizontal scrollbar widths when both tracks are non-zero", () => {
+        const targetEl = {
+            tagName: "DIV",
+            classList: [],
+            parentElement: null,
+            clientWidth: 300,
+            clientHeight: 200,
+            scrollWidth: 600,
+            scrollHeight: 500,
+            offsetWidth: 312,
+            offsetHeight: 210,
+            _mockComputedStyle: {
+                overflowX: "scroll",
+                overflowY: "auto",
+                borderLeftWidth: "1px",
+                borderRightWidth: "1px",
+                borderTopWidth: "1px",
+                borderBottomWidth: "1px"
+            }
+        };
+        const context = inspectVisualContext(targetEl);
+        expect(context.layoutConstraints["overflow-x"]).toBe("scroll");
+        expect(context.layoutConstraints["overflow-y"]).toBe("auto");
+        expect(context.layoutConstraints["scrollbar-width"]).toBe("10px x 8px");
+    });
+    it("skips scroll geometry gracefully when DOM size fields are undefined", () => {
+        const targetEl = {
+            tagName: "DIV",
+            classList: [],
+            parentElement: null,
+            _mockComputedStyle: {
+                overflowY: "auto",
+                scrollbarGutter: "stable"
+            }
+        };
+        const context = inspectVisualContext(targetEl);
+        expect(context.layoutConstraints).toEqual({
+            "overflow-y": "auto",
+            "scrollbar-gutter": "stable"
+        });
+        expect(context.layoutConstraints["client-size"]).toBeUndefined();
+        expect(context.layoutConstraints["scroll-size"]).toBeUndefined();
+        expect(context.layoutConstraints["scrollbar-width"]).toBeUndefined();
+    });
+    it("reports overflow-x/y and size metrics when content overflows even with overflow visible", () => {
+        const targetEl = {
+            tagName: "DIV",
+            classList: [],
+            parentElement: null,
+            clientWidth: 200,
+            clientHeight: 100,
+            scrollWidth: 200,
+            scrollHeight: 250,
+            offsetWidth: 200,
+            offsetHeight: 100,
+            _mockComputedStyle: {
+                overflowX: "visible",
+                overflowY: "visible"
+            }
+        };
+        const context = inspectVisualContext(targetEl);
+        expect(context.layoutConstraints).toEqual({
+            "overflow-y": "visible",
+            "client-size": "200x100",
+            "scroll-size": "200x250"
+        });
+    });
+    it("emits overflow-x/y for hidden/clip without client-size/scroll-size when not overflowing", () => {
+        const targetEl = {
+            tagName: "DIV",
+            classList: [],
+            parentElement: null,
+            clientWidth: 200,
+            clientHeight: 100,
+            scrollWidth: 200,
+            scrollHeight: 100,
+            offsetWidth: 200,
+            offsetHeight: 100,
+            _mockComputedStyle: {
+                overflowX: "hidden",
+                overflowY: "clip"
+            }
+        };
+        const context = inspectVisualContext(targetEl);
+        expect(context.layoutConstraints).toEqual({
+            "overflow-x": "hidden",
+            "overflow-y": "clip"
+        });
+    });
 });

@@ -85,6 +85,180 @@ describe("ReactFiberAdapter", () => {
       framework: "React"
     });
   });
+
+  it("should resolve React 19 host fiber with _debugStack and Fiber _debugOwner", () => {
+    const adapter = new ReactFiberAdapter();
+    function SaveEditorContent() {}
+
+    const mockElement = {
+      tagName: "DIV",
+      classList: ["save-editor"],
+      __reactFiber$: {
+        tag: 5,
+        type: "div",
+        _debugStack: {
+          stack: [
+            "Error: react-stack-top-frame",
+            "    at jsxDEV (http://localhost:5173/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=abc:45:12)",
+            "    at SaveEditorContent (http://localhost:5173/renderer/save-editor/components/SaveEditorContent.tsx?t=123:741:25)"
+          ].join("\n")
+        },
+        _debugOwner: {
+          tag: 0,
+          type: SaveEditorContent
+        }
+      }
+    } as any;
+
+    verifyResolution(adapter, mockElement, {
+      fileName: "http://localhost:5173/renderer/save-editor/components/SaveEditorContent.tsx",
+      lineNumber: 741,
+      columnNumber: 25,
+      componentName: "SaveEditorContent",
+      framework: "React"
+    });
+  });
+
+  it("should normalize /@fs/ paths and strip query strings in _debugStack", () => {
+    const adapter = new ReactFiberAdapter();
+    const mockElement = {
+      tagName: "BUTTON",
+      classList: [],
+      __reactFiber$: {
+        tag: 5,
+        type: "button",
+        _debugStack: {
+          stack: [
+            "Error: react-stack-top-frame",
+            "    at Button (/@fs/D:/Projects/App/src/Button.tsx?v=1:12:4)"
+          ].join("\n")
+        }
+      }
+    } as any;
+
+    verifyResolution(adapter, mockElement, {
+      fileName: "D:/Projects/App/src/Button.tsx",
+      lineNumber: 12,
+      columnNumber: 4,
+      componentName: "Button",
+      framework: "React"
+    });
+  });
+
+  it("should resolve React 19 ComponentInfo _debugOwner", () => {
+    const adapter = new ReactFiberAdapter();
+    const mockElement = {
+      tagName: "SECTION",
+      classList: [],
+      __reactFiber$: {
+        tag: 5,
+        type: "section",
+        _debugStack: {
+          stack: [
+            "Error: react-stack-top-frame",
+            "    at Object (<anonymous>:1:1)",
+            "    at http://localhost:5173/src/components/ServerCard.tsx?t=99:22:7"
+          ].join("\n")
+        },
+        _debugOwner: {
+          name: "ServerCard",
+          owner: null
+        }
+      }
+    } as any;
+
+    verifyResolution(adapter, mockElement, {
+      fileName: "http://localhost:5173/src/components/ServerCard.tsx",
+      lineNumber: 22,
+      columnNumber: 7,
+      componentName: "ServerCard",
+      framework: "React"
+    });
+  });
+
+  it("should fall back to nearest component via fiber.return when _debugSource and _debugStack are absent", () => {
+    const adapter = new ReactFiberAdapter();
+    function ToolbarPanel() {}
+
+    const mockElement = {
+      tagName: "SPAN",
+      classList: ["toolbar-label"],
+      __reactFiber$: {
+        tag: 5,
+        type: "span",
+        return: {
+          tag: 5,
+          type: "div",
+          return: {
+            tag: 11,
+            type: {
+              render: ToolbarPanel
+            },
+            return: null
+          }
+        }
+      }
+    } as any;
+
+    verifyResolution(adapter, mockElement, {
+      fileName: "",
+      lineNumber: 0,
+      columnNumber: 0,
+      componentName: "ToolbarPanel",
+      framework: "React"
+    });
+  });
+
+  it("should resolve Memo components and nested ComponentInfo owners", () => {
+    const adapter = new ReactFiberAdapter();
+    function MemoRow() {}
+
+    const memoElement = {
+      tagName: "DIV",
+      classList: [],
+      __reactFiber$: {
+        tag: 5,
+        type: "div",
+        return: {
+          tag: 15,
+          type: { type: MemoRow },
+          return: null
+        }
+      }
+    } as any;
+
+    verifyResolution(adapter, memoElement, {
+      fileName: "",
+      lineNumber: 0,
+      columnNumber: 0,
+      componentName: "MemoRow",
+      framework: "React"
+    });
+
+    const nestedOwnerElement = {
+      tagName: "SPAN",
+      classList: [],
+      __reactFiber$: {
+        tag: 5,
+        type: "span",
+        _debugOwner: {
+          name: "",
+          owner: {
+            name: "ParentCard",
+            owner: null
+          }
+        }
+      }
+    } as any;
+
+    verifyResolution(adapter, nestedOwnerElement, {
+      fileName: "",
+      lineNumber: 0,
+      columnNumber: 0,
+      componentName: "ParentCard",
+      framework: "React"
+    });
+  });
 });
 
 describe("ReactInvasiveAdapter", () => {

@@ -14,6 +14,21 @@ export const originalLog = console.log;
 export const originalWarn = console.warn;
 export const originalError = console.error;
 
+export type LoggerMonkeypatchOptions = {
+  stderrOnly?: boolean;
+  noColor?: boolean;
+};
+
+let loggerOptions: LoggerMonkeypatchOptions = {};
+
+function shouldStripColor(): boolean {
+  return Boolean(loggerOptions.noColor || process.env.NO_COLOR || !process.stdout.isTTY);
+}
+
+function getInfoStreamLog(): (...args: unknown[]) => void {
+  return loggerOptions.stderrOnly ? originalError : originalLog;
+}
+
 function format(color: string, prefix: string, msg: string): string {
   // Loại bỏ các tag prefix [HoverSource] và ký tự xuống dòng, mã màu ANSI cũ, emoji
   const cleanMsg = msg
@@ -28,15 +43,19 @@ function format(color: string, prefix: string, msg: string): string {
   const hasLeadingNewline = msg.startsWith("\n") || msg.startsWith("\r\n") || msg.includes("\x1b[31m\n");
   const leading = hasLeadingNewline ? "\n" : "";
 
+  if (shouldStripColor()) {
+    return `${leading}${prefix} ${cleanMsg}`;
+  }
+
   return `${leading}${color}${prefix}${RESET} ${cleanMsg}`;
 }
 
 export const logger = {
   info(msg: string) {
-    originalLog(format(COLORS.cyan, "◇ hs", msg));
+    getInfoStreamLog()(format(COLORS.cyan, "◇ hs", msg));
   },
   success(msg: string) {
-    originalLog(format(COLORS.green, "✔ hs", msg));
+    getInfoStreamLog()(format(COLORS.green, "✔ hs", msg));
   },
   warn(msg: string) {
     originalWarn(format(COLORS.yellow, "⚠ hs", msg));
@@ -46,7 +65,7 @@ export const logger = {
   },
   debug(msg: string) {
     if (process.env.DEBUG || process.env.NODE_ENV === "development") {
-      originalLog(format(COLORS.gray, "● hs [debug]", msg));
+      getInfoStreamLog()(format(COLORS.gray, "● hs [debug]", msg));
     }
   }
 };
@@ -60,7 +79,12 @@ function isHoverSourceLog(val: unknown): boolean {
 }
 
 // Hàm cài đặt monkeypatch toàn cục
-export function setupConsoleMonkeypatch(): void {
+export function setupConsoleMonkeypatch(options?: LoggerMonkeypatchOptions): void {
+  loggerOptions = {
+    stderrOnly: Boolean(options?.stderrOnly),
+    noColor: Boolean(options?.noColor),
+  };
+
   console.log = (...args: unknown[]): void => {
     if (args.length > 0 && isHoverSourceLog(args[0])) {
       const msg = args[0] as string;
@@ -76,7 +100,7 @@ export function setupConsoleMonkeypatch(): void {
         logger.info(msg);
       }
       if (rest.length > 0) {
-        originalLog(...rest);
+        getInfoStreamLog()(...rest);
       }
     } else {
       originalLog(...args);

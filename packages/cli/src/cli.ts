@@ -12,6 +12,7 @@ import https from "node:https";
 import { fileURLToPath } from "node:url";
 import { restoreLeftoverPatches, recordPatchState, removePatchState } from "./utils/patchState.js";
 import { setupConsoleMonkeypatch } from "./utils/logger.js";
+import { parseCliArgs } from "./args.js";
 import {
   findFreePort,
   getPidUsingPort,
@@ -72,73 +73,6 @@ export function validateSafeUrl(urlStr: string): string {
   } catch (e: any) {
     throw new Error(`[HoverSource] Security Error: Invalid Target URL: ${e.message}`);
   }
-}
-
-function parseLongOption(arg: string, args: Record<string, string | boolean>): void {
-  const eqIdx = arg.indexOf("=");
-  if (eqIdx === -1) {
-    args[arg.slice(2)] = true;
-  } else {
-    const key = arg.slice(2, eqIdx);
-    const value = arg.slice(eqIdx + 1);
-    args[key] = value;
-  }
-}
-
-function parseShortOption(arg: string, args: Record<string, string | boolean>, argv: string[], indexRef: { index: number }): void {
-  const char = arg.slice(1);
-  const eqIdx = char.indexOf("=");
-  const optionChar = eqIdx === -1 ? char : char.slice(0, eqIdx);
-  const val = eqIdx === -1 ? undefined : char.slice(eqIdx + 1);
-
-  const optionMap: Record<string, string> = {
-    p: "port",
-    t: "target",
-    e: "exec",
-    r: "root"
-  };
-
-  const simpleFlags: Record<string, string> = {
-    d: "dashboard",
-    h: "help",
-    v: "vue",
-    s: "solid",
-    a: "angular"
-  };
-
-  if (optionChar in simpleFlags) {
-    args[simpleFlags[optionChar]] = true;
-  } else if (optionChar in optionMap) {
-    const key = optionMap[optionChar];
-    if (val === undefined) {
-      const nextArg = argv[indexRef.index + 1];
-      if (nextArg !== undefined && !nextArg.startsWith("-")) {
-        indexRef.index++;
-        args[key] = nextArg;
-      }
-    } else {
-      args[key] = val;
-    }
-  }
-}
-
-// Helper to parse arguments
-function getArgs() {
-  const args: Record<string, string | boolean> = {};
-  let subcommand: string | undefined;
-  const indexRef = { index: 2 };
-
-  for (; indexRef.index < process.argv.length; indexRef.index++) {
-    const arg = process.argv[indexRef.index];
-    if (arg.startsWith("--")) {
-      parseLongOption(arg, args);
-    } else if (arg.startsWith("-")) {
-      parseShortOption(arg, args, process.argv, indexRef);
-    } else if (!subcommand) {
-      subcommand = arg; // e.g. "start", "dev"
-    }
-  }
-  return { args, subcommand };
 }
 
 /**
@@ -802,10 +736,12 @@ async function handleTargetOrExec(
 }
 
 async function main() {
-  setupConsoleMonkeypatch();
+  const { args, subcommand } = parseCliArgs(process.argv.slice(2));
+  setupConsoleMonkeypatch({
+    stderrOnly: Boolean(args.json),
+    noColor: Boolean(args["no-color"] || args.json),
+  });
   restoreLeftoverPatches();
-
-  const { args, subcommand } = getArgs();
 
   if (args.help || args.h) {
     showHelp();

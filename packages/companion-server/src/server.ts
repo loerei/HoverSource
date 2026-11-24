@@ -26,7 +26,7 @@ import {
   saveConfigDelta,
   deleteConfigTarget,
 } from "./configStore.js";
-export { ShortcutKey, HoverSourceConfig, normalizeProjectPath, loadMergedConfig } from "./configStore.js";
+export { ShortcutKey, HoverSourceConfig, CompanionConflictPolicy, PortsConfig, normalizeProjectPath, loadMergedConfig } from "./configStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +41,19 @@ export interface ServerConfig {
 function handlePing(req: http.IncomingMessage, res: http.ServerResponse) {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("pong");
+}
+
+function handleStatus(req: http.IncomingMessage, res: http.ServerResponse, config: ServerConfig) {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(
+    JSON.stringify({
+      ok: true,
+      pid: process.pid,
+      port: config.port,
+      projectRoot: normalizeProjectPath(config.projectRoot),
+      debugPort: config.debugPort,
+    })
+  );
 }
 
 function handleShutdown(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -473,6 +486,10 @@ function routeRequest(
 
   if (path === "/ping") {
     handlePing(req, res);
+    return;
+  }
+  if (path === "/status" && method === "GET") {
+    handleStatus(req, res, config);
     return;
   }
   if (path === "/shutdown") {

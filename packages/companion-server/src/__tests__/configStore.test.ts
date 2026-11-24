@@ -237,4 +237,85 @@ describe("configStore", () => {
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     expect(Object.prototype.hasOwnProperty.call(merged, "__proto__")).toBe(false);
   });
+
+  it("validates ports config defaults, bounds, conflict policy, dot-paths, and null/auto clearing", () => {
+    expect(DEFAULT_CONFIG.ports).toEqual({
+      companion: 7300,
+      debug: 9222,
+      companionConflict: "shift",
+    });
+
+    // Valid ports delta
+    const validPorts = parseConfigDelta({
+      ports: {
+        companion: 7400,
+        debug: 9223,
+        proxy: 8080,
+        dev: 3000,
+        companionConflict: "takeover",
+      },
+    });
+    expect(validPorts.ok).toBe(true);
+
+    // Invalid bounds & fields
+    expect(parseConfigDelta({ ports: "invalid" }).ok).toBe(false);
+    expect(parseConfigDelta({ ports: { companion: 0 } }).ok).toBe(false);
+    expect(parseConfigDelta({ ports: { companion: 65536 } }).ok).toBe(false);
+    expect(parseConfigDelta({ ports: { debug: 9222.5 } }).ok).toBe(false);
+    expect(parseConfigDelta({ ports: { proxy: 0 } }).ok).toBe(false);
+    expect(parseConfigDelta({ ports: { dev: 70000 } }).ok).toBe(false);
+    expect(parseConfigDelta({ ports: { companion: null } }).ok).toBe(false);
+    expect(parseConfigDelta({ ports: { companionConflict: "ignore" } }).ok).toBe(false);
+    expect(parseConfigDelta({ ports: { unknownPort: 1234 } }).ok).toBe(false);
+
+    // Dot-path buildDeltaFromKeyValue
+    expect(buildDeltaFromKeyValue("ports.debug", "9223")).toEqual({
+      ok: true,
+      value: { ports: { debug: 9223 } },
+    });
+    expect(buildDeltaFromKeyValue("ports.dev", "auto")).toEqual({
+      ok: true,
+      value: { ports: { dev: null } },
+    });
+    expect(buildDeltaFromKeyValue("ports.proxy", "NULL")).toEqual({
+      ok: true,
+      value: { ports: { proxy: null } },
+    });
+    expect(buildDeltaFromKeyValue("ports.companionConflict", "fail")).toEqual({
+      ok: true,
+      value: { ports: { companionConflict: "fail" } },
+    });
+    expect(buildDeltaFromKeyValue("ports.companion", "0").ok).toBe(false);
+    expect(buildDeltaFromKeyValue("ports.unknown", "1234").ok).toBe(false);
+
+    // Save and clear persisted ports.dev / ports.proxy via null / auto
+    const saved = saveConfigDelta(
+      { ports: { proxy: 8081, dev: 5173, companionConflict: "fail" } },
+      "local",
+      projectDir,
+      null,
+      globalConfigPath
+    );
+    expect(saved.config.ports).toEqual({
+      companion: 7300,
+      debug: 9222,
+      proxy: 8081,
+      dev: 5173,
+      companionConflict: "fail",
+    });
+
+    const clearedDev = saveConfigDelta(
+      { ports: { dev: null, proxy: null } },
+      "local",
+      projectDir,
+      null,
+      globalConfigPath
+    );
+    expect(clearedDev.config.ports?.dev).toBeUndefined();
+    expect(clearedDev.config.ports?.proxy).toBeUndefined();
+
+    const rawOnDisk = JSON.parse(fs.readFileSync(path.join(projectDir, ".hoversourcerc"), "utf-8"));
+    expect(Object.prototype.hasOwnProperty.call(rawOnDisk.ports, "dev")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(rawOnDisk.ports, "proxy")).toBe(false);
+  });
 });

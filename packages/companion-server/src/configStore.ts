@@ -18,6 +18,15 @@ export interface LayerPickerScroll {
 export type ConfigTheme = "dark" | "light" | "system";
 export type ConfigEditor = "vscode" | "cursor" | "code";
 export type ConfigTarget = "global" | "local" | "custom";
+export type CompanionConflictPolicy = "shift" | "takeover" | "fail";
+
+export interface PortsConfig {
+  companion?: number;
+  debug?: number;
+  proxy?: number;
+  dev?: number;
+  companionConflict?: CompanionConflictPolicy;
+}
 
 export interface HoverSourceConfig {
   theme: ConfigTheme;
@@ -30,6 +39,7 @@ export interface HoverSourceConfig {
   desnappingThreshold?: number;
   maxTraversalDepth?: number;
   layerPickerScroll?: LayerPickerScroll;
+  ports?: PortsConfig;
   shortcuts: {
     toggleUI: ShortcutKey;
     toggleMinimal: ShortcutKey;
@@ -63,6 +73,13 @@ export interface ConfigDelta {
   desnappingThreshold?: number;
   maxTraversalDepth?: number;
   layerPickerScroll?: Partial<LayerPickerScroll>;
+  ports?: {
+    companion?: number;
+    debug?: number;
+    proxy?: number | null;
+    dev?: number | null;
+    companionConflict?: CompanionConflictPolicy;
+  };
   shortcuts?: Partial<Record<ShortcutAction, Partial<ShortcutKey>>>;
   metadataFilter?: {
     panelPosition?: { x?: number; y?: number };
@@ -109,6 +126,11 @@ export const DEFAULT_CONFIG: HoverSourceConfig = {
   snappingThreshold: 15,
   desnappingThreshold: 15,
   maxTraversalDepth: 32,
+  ports: {
+    companion: 7300,
+    debug: 9222,
+    companionConflict: "shift",
+  },
   shortcuts: {
     toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
     toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
@@ -165,6 +187,8 @@ const VALID_SHORTCUT_ACTIONS = new Set<string>([
 const VALID_SHORTCUT_FIELDS = new Set<string>(["key", "altKey", "ctrlKey", "shiftKey"]);
 const VALID_SCROLL_FIELDS = new Set<string>(["altKey", "ctrlKey", "shiftKey"]);
 const VALID_FILTER_CATEGORIES = new Set<string>(["component", "layer", "design"]);
+const VALID_PORT_FIELDS = new Set<string>(["companion", "debug", "proxy", "dev", "companionConflict"]);
+const VALID_CONFLICT_POLICIES = new Set<string>(["shift", "takeover", "fail"]);
 const VALID_TOP_LEVEL_KEYS = new Set<string>([
   "theme",
   "minimalModeByDefault",
@@ -176,6 +200,7 @@ const VALID_TOP_LEVEL_KEYS = new Set<string>([
   "desnappingThreshold",
   "maxTraversalDepth",
   "layerPickerScroll",
+  "ports",
   "shortcuts",
   "metadataFilter",
 ]);
@@ -468,6 +493,49 @@ function validateMetadataFilterDelta(
   return out;
 }
 
+function validatePortsDelta(
+  raw: unknown,
+  issues: ConfigValidationIssue[]
+): ConfigDelta["ports"] | undefined {
+  if (!isPlainObject(raw)) {
+    issues.push({ path: "ports", message: "ports must be an object" });
+    return undefined;
+  }
+  const out: NonNullable<ConfigDelta["ports"]> = {};
+  for (const key of Object.keys(raw)) {
+    if (DISALLOWED_PROTO_KEYS.has(key) || !VALID_PORT_FIELDS.has(key)) {
+      issues.push({ path: `ports.${key}`, message: `Unknown ports field: ports.${key}` });
+      continue;
+    }
+    const val = raw[key];
+    if (key === "companion" || key === "debug") {
+      const n = validateIntRange(val, `ports.${key}`, 1, 65535, issues);
+      if (n !== undefined) {
+        out[key] = n;
+      }
+    } else if (key === "proxy" || key === "dev") {
+      if (val === null) {
+        out[key] = null;
+      } else {
+        const n = validateIntRange(val, `ports.${key}`, 1, 65535, issues);
+        if (n !== undefined) {
+          out[key] = n;
+        }
+      }
+    } else if (key === "companionConflict") {
+      if (typeof val !== "string" || !VALID_CONFLICT_POLICIES.has(val)) {
+        issues.push({
+          path: "ports.companionConflict",
+          message: 'ports.companionConflict must be one of "shift", "takeover", "fail"',
+        });
+      } else {
+        out.companionConflict = val as CompanionConflictPolicy;
+      }
+    }
+  }
+  return out;
+}
+
 export function parseConfigDelta(raw: unknown): ParseConfigDeltaResult {
   if (!isPlainObject(raw)) {
     const issue: ConfigValidationIssue = { path: "", message: "Config delta must be a JSON object" };
@@ -537,6 +605,11 @@ export function parseConfigDelta(raw: unknown): ParseConfigDeltaResult {
       case "layerPickerScroll": {
         const scroll = validateScrollDelta(val, issues);
         if (scroll !== undefined) parsed.layerPickerScroll = scroll;
+        break;
+      }
+      case "ports": {
+        const ports = validatePortsDelta(val, issues);
+        if (ports !== undefined) parsed.ports = ports;
         break;
       }
       case "shortcuts": {
@@ -692,6 +765,27 @@ export function buildDeltaFromKeyValue(keyPath: string, rawValue: string): Parse
     return parseConfigDelta({ layerPickerScroll: { [prop]: boolVal } });
   }
 
+  if (segments[0] === "ports" && segments.length === 2) {
+    const field = segments[1];
+    if (!VALID_PORT_FIELDS.has(field)) {
+      return failKeyValue(keyPath, `Unknown config key: ${keyPath}`);
+    }
+    if (field === "companionConflict") {
+      return parseConfigDelta({ ports: { companionConflict: rawValue } });
+    }
+    if (field === "proxy" || field === "dev") {
+      const normalized = rawValue.trim().toLowerCase();
+      if (normalized === "null" || normalized === "auto") {
+        return parseConfigDelta({ ports: { [field]: null } });
+      }
+    }
+    const intVal = parseStrictInteger(rawValue);
+    if (intVal === null) {
+      return failKeyValue(keyPath, `Invalid integer value "${rawValue}" for ${keyPath}`);
+    }
+    return parseConfigDelta({ ports: { [field]: intVal } });
+  }
+
   if (segments[0] === "metadataFilter") {
     if (segments.length === 3 && segments[1] === "panelPosition" && (segments[2] === "x" || segments[2] === "y")) {
       const numVal = parseStrictNumber(rawValue);
@@ -769,6 +863,17 @@ export function getRecentProjects(globalConfigPath?: string): string[] {
   return cleaned;
 }
 
+function stripNullPortOverrides(container: Record<string, unknown>): void {
+  if (isPlainObject(container.ports)) {
+    if (container.ports.proxy === null) {
+      delete container.ports.proxy;
+    }
+    if (container.ports.dev === null) {
+      delete container.ports.dev;
+    }
+  }
+}
+
 export function loadMergedConfig(projectRoot: string, globalConfigPath?: string): HoverSourceConfig {
   let config = cloneDefaultConfig();
 
@@ -786,6 +891,7 @@ export function loadMergedConfig(projectRoot: string, globalConfigPath?: string)
     config = mergeDeep<HoverSourceConfig>(config, localConfig);
   }
 
+  stripNullPortOverrides(config as unknown as Record<string, unknown>);
   return config;
 }
 
@@ -819,6 +925,7 @@ export function getConfigForTarget(
   } else {
     targetConfig = loadMergedConfig(defaultRoot, globalConfigPath);
   }
+  stripNullPortOverrides(targetConfig as unknown as Record<string, unknown>);
   return targetConfig;
 }
 
@@ -859,6 +966,7 @@ export function saveConfigDelta(
 
   const existing = readConfigFromFile(targetPath) ?? {};
   const mergedTarget = mergeDeep<Record<string, unknown>>(existing, parsed.value);
+  stripNullPortOverrides(mergedTarget);
 
   if (target === "global" && Array.isArray(existing.recentProjects)) {
     mergedTarget.recentProjects = existing.recentProjects;

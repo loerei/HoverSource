@@ -287,4 +287,71 @@ describe("Companion Server /config and /reload-config routes", () => {
     expect(reloadData.config.theme).toBe("system");
     expect(reloadData.config.maxTraversalDepth).toBe(64);
   });
+
+  it("returns identity JSON on GET /status while GET /ping returns pong", async () => {
+    const pingRes = await fetch(`http://127.0.0.1:${testPort}/ping`);
+    expect(pingRes.status).toBe(200);
+    expect(await pingRes.text()).toBe("pong");
+
+    const statusRes = await fetch(`http://127.0.0.1:${testPort}/status`);
+    expect(statusRes.status).toBe(200);
+    const statusData = await statusRes.json();
+    expect(statusData).toEqual({
+      ok: true,
+      pid: process.pid,
+      port: 0,
+      projectRoot: normalizeProjectPath(tempDir),
+      debugPort: 9222,
+    });
+  });
+
+  it("rejects out-of-range ports with 400 and clears ports.dev via null", async () => {
+    const badRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { ports: { companion: 70000, proxy: 0 } },
+      }),
+    });
+    expect(badRes.status).toBe(400);
+    const badData = await badRes.json();
+    expect(badData.error).toBeTruthy();
+
+    const setRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { ports: { dev: 5173, companionConflict: "takeover" } },
+      }),
+    });
+    expect(setRes.status).toBe(200);
+    const setData = await setRes.json();
+    expect(setData.config.ports.dev).toBe(5173);
+    expect(setData.config.ports.companionConflict).toBe("takeover");
+
+    const clearRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { ports: { dev: null } },
+      }),
+    });
+    expect(clearRes.status).toBe(200);
+    const clearData = await clearRes.json();
+    expect(clearData.config.ports.dev).toBeUndefined();
+  });
+
+  it("serves dashboard HTML containing all 5 port control IDs", async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/dashboard`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('id="companion-port-input"');
+    expect(html).toContain('id="debug-port-input"');
+    expect(html).toContain('id="proxy-port-input"');
+    expect(html).toContain('id="dev-port-input"');
+    expect(html).toContain('id="companion-conflict-select"');
+  });
 });

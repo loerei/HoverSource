@@ -14,6 +14,7 @@ import { restoreLeftoverPatches, recordPatchState, removePatchState } from "./ut
 import { setupConsoleMonkeypatch } from "./utils/logger.js";
 import { parseCliArgs } from "./args.js";
 import { runDashboardCommand } from "./commands/dashboard.js";
+import { runConfigCommand } from "./commands/config.js";
 import {
   findFreePort,
   getPidUsingPort,
@@ -753,7 +754,7 @@ function parsePortFlag(raw: string | boolean | undefined, flagName: string): num
 }
 
 async function main() {
-  const { args, subcommand } = parseCliArgs(process.argv.slice(2));
+  const { args, subcommand, positionals } = parseCliArgs(process.argv.slice(2));
   setupConsoleMonkeypatch({
     stderrOnly: Boolean(args.json),
     noColor: Boolean(args["no-color"] || args.json),
@@ -774,6 +775,17 @@ async function main() {
 
   const targetArg = (args.target || args.t) as string | undefined;
   const execArg = (args.exec || args.e || subcommand) as string | undefined;
+
+  if (subcommand === "config") {
+    const code = await runConfigCommand({
+      positionals,
+      args,
+      projectRoot,
+      requestedPort,
+    });
+    process.exitCode = code;
+    return;
+  }
 
   if (subcommand === "dashboard" || (!targetArg && !execArg && Boolean(args.dashboard || args.d))) {
     const result = await runDashboardCommand({
@@ -832,6 +844,7 @@ Subcommands:
   start                  Start the companion server only.
   restart                Restart the running companion server.
   dashboard              Open the HoverSource Dashboard (reuses running server or starts one).
+  config <action>        Inspect or modify settings: list|show|get|set|reset|delete
   dev, start, etc.       Any package.json script name to execute with HoverSource overlay.
 
 Options:
@@ -841,6 +854,11 @@ Options:
   -r, --root=<path>       Project root directory (default: current directory)
   -d, --dashboard         Open the HoverSource Dashboard (standalone or with a running command)
   --no-open               Do not automatically open the browser when running dashboard
+  --global                Target global ~/.hoversourcerc (for hs config)
+  --local                 Target project .hoversourcerc (for hs config)
+  --merged                Read merged effective config (for hs config list|show|get)
+  --dry-run               Preview config changes without writing disk (for hs config)
+  -y, --yes               Confirm destructive config actions non-interactively
   --json                  Emit machine-readable JSON output to stdout
   -h, --help              Show this help message
   --debug-port=<port>     CDP Remote debugging port for Electron (default: 9222)

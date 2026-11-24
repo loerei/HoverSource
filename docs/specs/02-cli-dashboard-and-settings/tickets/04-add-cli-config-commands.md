@@ -16,7 +16,7 @@ ready-for-agent
 
 Add `hs config` CLI subcommands (`list`, `show`, `get`, `set`, `reset`, `delete`) backed by `@hoversource/companion-server/config`, supporting `ports.*` settings, POSIX exit codes, `--json`, `--dry-run`, `--yes` non-TTY safety, and automatic `POST /reload-config` broadcast on the resolved companion port when running.
 
-- [ ] 1. **CLI config inspection and mutation command handler**:
+- [x] 1. **CLI config inspection and mutation command handler**:
   - **Files:** **[NEW]** [config.ts](file:///d:/Projects/HoverSource/packages/cli/src/commands/config.ts)
   - Export `runConfigCommand(opts: ConfigCommandOptions): Promise<number>`:
     - Determine scope from flags (`--global`, `--local`, `--merged`):
@@ -29,11 +29,11 @@ Add `hs config` CLI subcommands (`list`, `show`, `get`, `set`, `reset`, `delete`
       - `reset`: Reset `--local` or `--global` config via `resetConfigTarget` (respecting `--dry-run`). Require `--yes` when `!stdinIsTTY || process.env.CI === "true"` (exit `2` with `--yes` remediation message); in interactive TTY, prompt `(y/N)`. Trigger `notifyCompanionReload`.
       - `delete`: Delete `<project>/.hoversourcerc` via `deleteConfigTarget` (reject `--global` with exit `2`; enforce `--yes` / TTY prompt and `--dry-run`). Trigger `notifyCompanionReload`.
       - Unknown sub-action: print usage hint to `stderr` and return `2`.
-- [ ] 2. **Wire `hs config` and config-backed reload port in `cli.ts`**:
+- [x] 2. **Wire `hs config` and config-backed reload port in `cli.ts`**:
   - **Files:** **[MODIFY]** [cli.ts](file:///d:/Projects/HoverSource/packages/cli/src/cli.ts)
   - Route `subcommand === "config"` to `runConfigCommand(...)` (defaulting `requestedPort` to `CLI flag > loadMergedConfig(projectRoot).ports?.companion ?? 7300`) and set `process.exitCode = code` (avoiding dangling open handles).
   - Update `showHelp()` with `hs config <list|get|set|reset|delete>` usage and flags (`--global`, `--local`, `--merged`, `--json`, `--dry-run`, `--yes`).
-- [ ] 3. **Unit & integration tests for `hs config`**:
+- [x] 3. **Unit & integration tests for `hs config`**:
   - **Files:** **[NEW]** [config.test.ts](file:///d:/Projects/HoverSource/packages/cli/src/__tests__/config.test.ts)
   - Use isolated `os.tmpdir()` `globalConfigPath` + `projectRoot` cleaned up in `afterEach`:
     - Test `list` / `show` (`--merged`, `--global`, `--local`) and `--json` stdout purity.
@@ -43,11 +43,11 @@ Add `hs config` CLI subcommands (`list`, `show`, `get`, `set`, `reset`, `delete`
     - Test live `notifyCompanionReload`: spin up an HTTP companion server on an ephemeral port and assert `hs config set` triggers `POST /reload-config`.
 
 ## Acceptance Criteria
-- [ ] `hs config list|get|set|reset|delete` accurately reads, validates, and atomically writes global or local `.hoversourcerc` files including `ports.*`.
-- [ ] Invalid keys, out-of-range values, `--global` deletion, and non-TTY destructive calls without `--yes` deterministically return exit code `2` with actionable error text on `stderr`.
-- [ ] `--json` outputs strictly valid JSON to `stdout` with zero log contamination.
-- [ ] When a companion server responds `"pong"` on `--port` (or configured `ports.companion`), `hs config set|reset|delete` calls `POST /reload-config`.
-- [ ] Execute automated verification command: `pnpm build && pnpm test`.
+- [x] `hs config list|get|set|reset|delete` accurately reads, validates, and atomically writes global or local `.hoversourcerc` files including `ports.*`.
+- [x] Invalid keys, out-of-range values, `--global` deletion, and non-TTY destructive calls without `--yes` deterministically return exit code `2` with actionable error text on `stderr`.
+- [x] `--json` outputs strictly valid JSON to `stdout` with zero log contamination.
+- [x] When a companion server responds `"pong"` on `--port` (or configured `ports.companion`), `hs config set|reset|delete` calls `POST /reload-config`.
+- [x] Execute automated verification command: `pnpm build && pnpm test`.
 
 ## Verification Command
 ```bash

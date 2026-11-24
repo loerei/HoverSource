@@ -1,106 +1,6 @@
 "use strict";
 (() => {
-  // src/vanillaPatch.ts
-  function setupVanillaMonkeyPatch() {
-    if (typeof document === "undefined")
-      return;
-    if (globalThis.__HOVERSOURCE_VANILLA_PATCHED__)
-      return;
-    globalThis.__HOVERSOURCE_VANILLA_PATCHED__ = true;
-    const originalCreateElement = document.createElement;
-    document.createElement = function(tagName, options) {
-      const el = originalCreateElement.call(this, tagName, options);
-      const source = captureSourceLocation();
-      if (source && el.dataset) {
-        el.dataset.hsSource = source;
-      }
-      return el;
-    };
-    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-    if (descriptor?.set) {
-      const originalSet = descriptor.set;
-      descriptor.set = function(html) {
-        originalSet.call(this, html);
-        const source = captureSourceLocation();
-        if (source) {
-          if (this.dataset) {
-            this.dataset.hsSource = source;
-          }
-          if (this.children) {
-            for (const child of this.children) {
-              if (child.dataset) {
-                child.dataset.hsSource = source;
-              }
-            }
-          }
-        }
-      };
-      Object.defineProperty(Element.prototype, "innerHTML", descriptor);
-    }
-  }
-  function isOverlayFrame(line) {
-    return line.includes("hoversource-overlay.js") || line.includes("overlay.bundle.js") || line.includes("captureSourceLocation") || line.includes("setupVanillaMonkeyPatch") || line.includes("createElement") || line.includes("innerHTML");
-  }
-  function parseStackLine(line) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("at "))
-      return null;
-    const cleanLine = trimmed.endsWith(")") ? trimmed.slice(0, -1) : trimmed;
-    const parts = cleanLine.split(":");
-    if (parts.length < 3)
-      return null;
-    const colStr = parts.at(-1);
-    const lnStr = parts.at(-2);
-    if (colStr === void 0 || lnStr === void 0)
-      return null;
-    const col = Number.parseInt(colStr, 10);
-    const ln = Number.parseInt(lnStr, 10);
-    if (Number.isNaN(col) || Number.isNaN(ln))
-      return null;
-    const pathParts = parts.slice(0, -2);
-    const fullPath = pathParts.join(":");
-    let urlStr = fullPath.slice(3).trim();
-    const openParenIdx = urlStr.indexOf("(");
-    if (openParenIdx !== -1) {
-      urlStr = urlStr.slice(openParenIdx + 1).trim();
-    }
-    try {
-      let filePath = "";
-      if (urlStr.startsWith("file://")) {
-        filePath = urlStr.replace(/^file:\/\/\/?/, "");
-        if (!/^[a-zA-Z]:/.test(filePath) && !filePath.startsWith("/")) {
-          filePath = "/" + filePath;
-        }
-      } else if (urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
-        const url = new URL(urlStr);
-        filePath = url.pathname;
-      } else {
-        filePath = urlStr;
-      }
-      return `${filePath}:${ln}:${col}`;
-    } catch {
-      return null;
-    }
-  }
-  function captureSourceLocation() {
-    const err = new Error();
-    const stack = err.stack;
-    if (!stack)
-      return null;
-    const lines = stack.split("\n");
-    for (const line of lines) {
-      if (!line.includes("at "))
-        continue;
-      if (isOverlayFrame(line))
-        continue;
-      const parsed = parseStackLine(line);
-      if (parsed)
-        return parsed;
-    }
-    return null;
-  }
-
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/utils.js
+  // ../source-resolver/dist/adapters/utils.js
   function getElementMetadata(element) {
     return {
       tagName: element.tagName.toLowerCase(),
@@ -143,7 +43,7 @@
     return null;
   }
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/ReactFiberAdapter.js
+  // ../source-resolver/dist/adapters/ReactFiberAdapter.js
   var ReactFiberAdapter = class {
     name = "react-fiber";
     getFiber(element) {
@@ -192,7 +92,7 @@
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/ReactInvasiveAdapter.js
+  // ../source-resolver/dist/adapters/ReactInvasiveAdapter.js
   var invasiveLocs = /* @__PURE__ */ new WeakMap();
   if (globalThis.window !== void 0 && globalThis.document !== void 0) {
     const observer = new MutationObserver((mutations) => {
@@ -276,7 +176,7 @@
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/VueAdapter.js
+  // ../source-resolver/dist/adapters/VueAdapter.js
   var VueAdapter = class {
     name = "vue";
     getVueInstance(element) {
@@ -354,7 +254,7 @@
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/SvelteAdapter.js
+  // ../source-resolver/dist/adapters/SvelteAdapter.js
   var SvelteAdapter = class {
     name = "svelte";
     canResolve(element) {
@@ -376,7 +276,7 @@
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/PreactAdapter.js
+  // ../source-resolver/dist/adapters/PreactAdapter.js
   var PreactAdapter = class {
     name = "preact";
     getVNode(element) {
@@ -420,7 +320,7 @@
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/SolidAdapter.js
+  // ../source-resolver/dist/adapters/SolidAdapter.js
   var SolidAdapter = class {
     name = "solid";
     canResolve(element) {
@@ -445,7 +345,7 @@
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/AstroAdapter.js
+  // ../source-resolver/dist/adapters/AstroAdapter.js
   var AstroAdapter = class {
     name = "astro";
     canResolve(element) {
@@ -480,7 +380,7 @@
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/AngularAdapter.js
+  // ../source-resolver/dist/adapters/AngularAdapter.js
   var AngularAdapter = class {
     name = "angular";
     getNgContext(element) {
@@ -536,31 +436,231 @@
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/adapters/VanillaAdapter.js
+  // ../source-resolver/dist/adapters/VanillaAdapter.js
+  function matchStaticHtmlMap(element) {
+    const map = globalThis.__HOVERSOURCE_STATIC_HTML_MAP__ || (typeof window !== "undefined" ? window.__HOVERSOURCE_STATIC_HTML_MAP__ : void 0);
+    if (!map || !Array.isArray(map) || map.length === 0)
+      return null;
+    const targetTag = element.tagName ? element.tagName.toLowerCase() : "";
+    if (!targetTag)
+      return null;
+    const targetId = element.id || void 0;
+    const targetClasses = element.classList ? Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-")) : [];
+    let bestMatch = null;
+    let bestScore = 0;
+    for (const entry of map) {
+      if (entry.tagName.toLowerCase() !== targetTag)
+        continue;
+      let score = 10;
+      if (targetId) {
+        if (entry.id === targetId) {
+          score += 1e3;
+        } else {
+          continue;
+        }
+      } else if (entry.id) {
+        continue;
+      }
+      if (targetClasses.length > 0 && entry.classList && entry.classList.length > 0) {
+        let matched = 0;
+        for (const cls of targetClasses) {
+          if (entry.classList.includes(cls))
+            matched++;
+        }
+        if (matched > 0) {
+          score += matched * 100;
+        }
+      }
+      if (element.attributes) {
+        for (let i = 0; i < element.attributes.length; i++) {
+          const attr = element.attributes[i];
+          if (attr.name !== "id" && attr.name !== "class" && !attr.name.startsWith("data-hs-")) {
+            if (entry.attributes && entry.attributes[attr.name] === attr.value) {
+              score += 200;
+            }
+          }
+        }
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = entry;
+      }
+    }
+    return bestMatch;
+  }
   var VanillaAdapter = class {
     name = "vanilla";
     canResolve(element) {
-      return typeof element.closest === "function" && !!element.closest("[data-hs-source]");
+      if (typeof element?.closest === "function" && !!element.closest("[data-hs-source]")) {
+        return true;
+      }
+      if (matchStaticHtmlMap(element)) {
+        return true;
+      }
+      return !!element?.tagName;
     }
     resolve(element) {
-      const target = element.closest("[data-hs-source]");
-      if (!target)
-        return null;
-      const sourceAttr = target.dataset.hsSource;
-      const parsed = parseColonLocation(sourceAttr);
-      if (!parsed)
-        return null;
+      const target = typeof element?.closest === "function" ? element.closest("[data-hs-source]") : null;
+      if (target) {
+        const sourceAttr = target.dataset.hsSource;
+        const parsed = parseColonLocation(sourceAttr);
+        if (parsed) {
+          return {
+            fileName: parsed.fileName,
+            lineNumber: parsed.lineNumber,
+            columnNumber: parsed.columnNumber,
+            framework: "Vanilla",
+            ...getElementMetadata(element)
+          };
+        }
+      }
+      const staticMatch = matchStaticHtmlMap(element);
+      if (staticMatch) {
+        return {
+          fileName: staticMatch.fileName,
+          lineNumber: staticMatch.lineNumber,
+          columnNumber: staticMatch.columnNumber,
+          framework: "Vanilla",
+          ...getElementMetadata(element)
+        };
+      }
       return {
-        fileName: parsed.fileName,
-        lineNumber: parsed.lineNumber,
-        columnNumber: parsed.columnNumber,
+        fileName: "",
+        lineNumber: 0,
+        columnNumber: 0,
         framework: "Vanilla",
         ...getElementMetadata(element)
       };
     }
   };
 
-  // ../../node_modules/.pnpm/@hoversource+source-resolver@1.0.0/node_modules/@hoversource/source-resolver/dist/index.js
+  // ../source-resolver/dist/adapters/stackFrame.js
+  function stripQueryAndHash(urlOrPath) {
+    const queryIdx = urlOrPath.indexOf("?");
+    const hashIdx = urlOrPath.indexOf("#");
+    let cutIdx = -1;
+    if (queryIdx !== -1 && hashIdx !== -1) {
+      cutIdx = Math.min(queryIdx, hashIdx);
+    } else if (queryIdx !== -1) {
+      cutIdx = queryIdx;
+    } else if (hashIdx !== -1) {
+      cutIdx = hashIdx;
+    }
+    return cutIdx === -1 ? urlOrPath : urlOrPath.slice(0, cutIdx);
+  }
+  function stripViteFsPrefix(pathname) {
+    const afterFs = pathname.slice("/@fs/".length);
+    if (/^[a-zA-Z]:/.test(afterFs) || afterFs.startsWith("/")) {
+      return afterFs;
+    }
+    return "/" + afterFs;
+  }
+  function normalizeFileUrl(rawUrl) {
+    const cleaned = stripQueryAndHash(rawUrl);
+    let filePath;
+    if (cleaned.startsWith("file://localhost/")) {
+      filePath = cleaned.slice("file://localhost".length);
+    } else {
+      filePath = cleaned.replace(/^file:\/\/\/?/, "");
+    }
+    if (/^\/[a-zA-Z]:/.test(filePath)) {
+      filePath = filePath.slice(1);
+    } else if (!/^[a-zA-Z]:/.test(filePath) && !filePath.startsWith("/")) {
+      filePath = "/" + filePath;
+    }
+    try {
+      return decodeURIComponent(filePath);
+    } catch {
+      return filePath;
+    }
+  }
+  function normalizeStackPath(rawTarget, options = {}) {
+    const trimmed = rawTarget.trim();
+    if (trimmed.startsWith("file://")) {
+      return {
+        fileName: normalizeFileUrl(trimmed),
+        isHttpUrl: false,
+        hadViteFsPrefix: false
+      };
+    }
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      try {
+        const url = new URL(trimmed);
+        const pathname = stripQueryAndHash(url.pathname);
+        const hadViteFsPrefix2 = pathname.startsWith("/@fs/");
+        let fileName;
+        if (hadViteFsPrefix2) {
+          fileName = stripViteFsPrefix(pathname);
+        } else if (options.preserveHttpOrigin) {
+          fileName = `${url.origin}${pathname}`;
+        } else {
+          fileName = pathname;
+        }
+        return {
+          fileName,
+          isHttpUrl: true,
+          hadViteFsPrefix: hadViteFsPrefix2
+        };
+      } catch {
+        return {
+          fileName: stripQueryAndHash(trimmed),
+          isHttpUrl: true,
+          hadViteFsPrefix: false
+        };
+      }
+    }
+    const cleaned = stripQueryAndHash(trimmed);
+    const hadViteFsPrefix = cleaned.startsWith("/@fs/");
+    return {
+      fileName: hadViteFsPrefix ? stripViteFsPrefix(cleaned) : cleaned,
+      isHttpUrl: false,
+      hadViteFsPrefix
+    };
+  }
+  function parseV8StackLine(line, options) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("at "))
+      return null;
+    const body = trimmed.slice(3).trim();
+    if (!body)
+      return null;
+    let functionName;
+    let rawLocation;
+    if (body.endsWith(")")) {
+      const sepIdx = body.indexOf(" (");
+      if (sepIdx !== -1) {
+        functionName = body.slice(0, sepIdx).trim() || void 0;
+        rawLocation = body.slice(sepIdx + 2, -1).trim();
+      } else if (body.startsWith("(")) {
+        rawLocation = body.slice(1, -1).trim();
+      } else {
+        rawLocation = body;
+      }
+    } else {
+      rawLocation = body;
+    }
+    const match = /^(.*):(\d+):(\d+)$/.exec(rawLocation);
+    if (!match)
+      return null;
+    const rawTarget = match[1].trim();
+    const lineNumber = Number.parseInt(match[2], 10);
+    const columnNumber = Number.parseInt(match[3], 10);
+    if (!rawTarget || !Number.isInteger(lineNumber) || !Number.isInteger(columnNumber) || lineNumber < 1 || columnNumber < 1) {
+      return null;
+    }
+    const { fileName } = normalizeStackPath(rawTarget, options);
+    if (!fileName)
+      return null;
+    return {
+      ...functionName ? { functionName } : {},
+      rawLocation,
+      fileName,
+      lineNumber,
+      columnNumber
+    };
+  }
+
+  // ../source-resolver/dist/index.js
   var SourceResolver = class {
     adapters = [];
     fiberAdapter;
@@ -663,6 +763,65 @@
       return `${tag}${id}${classes ? "." + classes : ""}`;
     }
   };
+
+  // src/vanillaPatch.ts
+  function setupVanillaMonkeyPatch() {
+    if (typeof document === "undefined")
+      return;
+    if (globalThis.__HOVERSOURCE_VANILLA_PATCHED__)
+      return;
+    globalThis.__HOVERSOURCE_VANILLA_PATCHED__ = true;
+    const originalCreateElement = document.createElement;
+    document.createElement = function(tagName, options) {
+      const el = originalCreateElement.call(this, tagName, options);
+      const source = captureSourceLocation();
+      if (source && el.dataset) {
+        el.dataset.hsSource = source;
+      }
+      return el;
+    };
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+    if (descriptor?.set) {
+      const originalSet = descriptor.set;
+      descriptor.set = function(html) {
+        originalSet.call(this, html);
+        const source = captureSourceLocation();
+        if (source) {
+          if (this.dataset) {
+            this.dataset.hsSource = source;
+          }
+          if (this.children) {
+            for (const child of this.children) {
+              if (child.dataset) {
+                child.dataset.hsSource = source;
+              }
+            }
+          }
+        }
+      };
+      Object.defineProperty(Element.prototype, "innerHTML", descriptor);
+    }
+  }
+  function isOverlayFrame(line) {
+    return line.includes("hoversource-overlay.js") || line.includes("overlay.bundle.js") || line.includes("captureSourceLocation") || line.includes("setupVanillaMonkeyPatch") || line.includes("createElement") || line.includes("innerHTML");
+  }
+  function captureSourceLocation() {
+    const err = new Error();
+    const stack = err.stack;
+    if (!stack)
+      return null;
+    const lines = stack.split("\n");
+    for (const line of lines) {
+      if (!line.includes("at "))
+        continue;
+      if (isOverlayFrame(line))
+        continue;
+      const parsed = parseV8StackLine(line);
+      if (parsed)
+        return `${parsed.fileName}:${parsed.lineNumber}:${parsed.columnNumber}`;
+    }
+    return null;
+  }
 
   // src/inspector.ts
   var contextCache = /* @__PURE__ */ new WeakMap();

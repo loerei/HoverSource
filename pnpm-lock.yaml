@@ -67,8 +67,8 @@ importers:
   packages/overlay-core:
     dependencies:
       '@hoversource/source-resolver':
-        specifier: '*'
-        version: 1.0.0
+        specifier: workspace:*
+        version: link:../source-resolver
     devDependencies:
       esbuild:
         specifier: ^0.20.0
@@ -302,9 +302,6 @@ packages:
     engines: {node: '>=12'}
     cpu: [x64]
     os: [win32]
-
-  '@hoversource/source-resolver@1.0.0':
-    resolution: {integrity: sha512-PQBy8H3RZgM1ALw5VROIRsYGAqfaTicU+/+gdXKroiow6yRNz1WMN6xR2xoXEX7GprRIUhHU5LSGcJA/Fo4jJQ==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -1087,8 +1084,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.20.2':
     optional: true
-
-  '@hoversource/source-resolver@1.0.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

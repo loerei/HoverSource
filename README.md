@@ -11,42 +11,27 @@
 
 ---
 
-You are a VibeCoder? Ever tried to describe a UI element with human language then see your agent **burn your quota just to figure out what on Earth you are talking about, then fix the wrong thing**?
+If you use AI coding agents to tweak frontend UI, you already know the pain. You try describing a button or a card with words, your agent burns half your token quota digging through the codebase, and then edits the wrong component anyway.
 
-You are a Senior who knows what `Ctrl + Shift + I` is to copy the right thing and give it to your Agent, **but you feel pathetic spending your life doing that**?
+Hover on what you want changed, press `Alt + C`, paste to your agent.
 
-I cured the curse. Hover on what you want the AI to change, press `Alt + C`, then `Ctrl + V`.
+## What It Does
 
-## Features
-
-- **Dual Interaction Modes**:
-  - **Inspector Mode**: Hover over components to view layout boundaries, selector paths, and file deep-links. Copies `HoverSource Component Metadata` with `Alt + C`.
-  - **Design Mode (`Alt + X` to toggle)**: Drag a targeting crosshair to snap against horizontal/vertical edges and measure pixel-perfect offsets. Copies `HoverSource Design Placement Metadata` with `Alt + C`.
-- **Copy AI-Ready Metadata (`Alt + C` / `Alt + Shift + C`)**: Copies a structured Markdown block to your clipboard — component name, exact file path with line/column, computed styles, parent visual effects with CSS source locations, layout constraints, JSDoc comments, and raw JSX attributes (or snapping offsets and absolute CSS anchors in Design Mode). Pressing **`Alt + Shift + C`** copies the metadata of all ancestor layers under the cursor plus a minified structural HTML skeleton of the target element, providing the AI with layout and nesting context.
-- **Freeze State (`Alt + P`)**: Locks dynamic elements (like tooltips, popovers, or dropdowns) in place so you can hover and capture them without them disappearing.
-- **Toggle Overlay (`Alt + H`)**: Show or hide the developer overlay bounding box and floating spec card.
-- **Deep-linking (Click filename)**: Instantly opens the file in your preferred editor (VS Code or Cursor) at the exact line number.
-- **Source Line Correction**: Silently checks and corrects compiler-shifted line numbers in the background.
-- **Layered Element Navigation (`Alt + Shift + Scroll`)**: Cycle through overlapping DOM elements under the cursor using a scroll combination, showing a clean 2D overlapping layer stack in the tooltip to easily target parent/child elements. Customize shortcuts in the dashboard.
-- **Element Selector & CSS Source Location**: Captures the exact HTML tag and classes of the hovered element, along with the specific line and file of their CSS definition. This includes support for CSS Preprocessors (Sass, SCSS, Less) with nested selectors, and CSS Modules (auto-resolving hashed class names back to their source definitions).
+- **Inspector & Design modes**: Hover over components to view file paths, component names, and CSS line numbers. Or press `Alt + X` to drag a targeting crosshair and get pixel-perfect CSS placement offsets.
+- **Copy AI-ready metadata (`Alt + C` / `Alt + Shift + C`)**: Copies the exact file, line, column, computed styles, CSS origins, and parent layout context to your clipboard. Pressing `Alt + Shift + C` copies the full ancestor layer stack and an HTML skeleton of the target element.
+- **Freeze state (`Alt + P`)**: Locks dropdowns, tooltips, and popovers in place so you can hover and inspect them without them vanishing.
 
 ## Benchmark: Human Language vs. HoverSource Metadata
 
-To measure the efficiency gains, we ran comprehensive benchmarks with an AI coding agent (Gemini 3.5 Flash) performing style modification tasks in a dry-run environment (logged using [chronicle-mcp](https://github.com/loerei/chronicle-mcp)). We compared three prompt variations:
-1. **Prompt A**: Pure Natural Language (simulating a user who does not know the codebase).
-2. **Prompt B**: File Path Only Context (manual file path and component naming).
-3. **Prompt C**: HoverSource Metadata (automatic clipboard metadata block).
+We tested an AI coding agent (Gemini 3.5 Flash) on style modification tasks across three prompt variations (logged with [chronicle-mcp](https://github.com/loerei/chronicle-mcp)):
+1. **Prompt A**: Natural language description only.
+2. **Prompt B**: Manual file path and component name.
+3. **Prompt C**: HoverSource clipboard metadata block.
 
-The benchmarks were performed on two public open-source projects of different scales:
-1. **[Cal.com (cal.diy)](https://github.com/calcom/cal.diy)**: Giant enterprise-level monorepo (~7,700 source files, multiple apps/packages).
-2. **[YumeShelf](https://github.com/loerei/YumeShelf)**: Medium-sized desktop Electron application (~200 source files).
+### Benchmark 1: Cal.com Monorepo (~7,700 source files - 10 Tasks)
+* Full report: [Cal.com Benchmark Report](benchmark-logs/calcom/calcom-benchmark.md)
 
----
-
-### Benchmark 1: Cal.com Monorepo (Giant Enterprise Codebase - 10 Tasks)
-* **Detailed Report & Logs**: [Cal.com Benchmark Report](benchmark-logs/calcom/calcom-benchmark.md)
-
-| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (C vs A) |
+| Metric | Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 60.0% (6/10) | 100.0% (10/10) | 100.0% (10/10) | **+66.7%** |
 | **Avg Agent Steps** | 65.6 | 18.0 | 17.1 | **-73.9%** |
@@ -57,12 +42,10 @@ The benchmarks were performed on two public open-source projects of different sc
 
 ![Cal.com Benchmark Chart](benchmark-logs/calcom/calcom-benchmark-chart.png)
 
----
+### Benchmark 2: YumeShelf Electron App (~200 source files - 5 Tasks)
+* Full report: [YumeShelf Benchmark Report](benchmark-logs/yumeshelf/yumeshelf-benchmark.md)
 
-### Benchmark 2: YumeShelf (Medium Codebase - 5 Tasks)
-* **Detailed Report & Logs**: [YumeShelf Benchmark Report](benchmark-logs/yumeshelf/yumeshelf-benchmark.md)
-
-| Metric | Pure Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (C vs A) |
+| Metric | Natural Language (A) | File Path Only (B) | HoverSource Metadata (C) | Delta (C vs A) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Task Achievement** | 100.0% (5/5) | 100.0% (5/5) | 100.0% (5/5) | - |
 | **Avg Agent Steps** | 34.4 | 22.0 | 26.0 | **-24.4%** |
@@ -73,181 +56,123 @@ The benchmarks were performed on two public open-source projects of different sc
 
 ![YumeShelf Benchmark Chart](benchmark-logs/yumeshelf/yumeshelf-benchmark-chart.png)
 
----
+## Modes
 
-### Why HoverSource scales with codebase complexity
-
-> **Monorepo Efficiency Takeaway:**
-> In a 7,700-file monorepo like Cal.com, simply providing the correct file path in the prompt (**File Path Only**) saves **68.9% of execution time** and **94.2% of tokens** your agent needs to digest. HoverSource provides all necessary DOM, CSS, and component metadata to push efficiency even further to **-88.5% execution time** and **-94.5% input tokens** — basically skipping the entire code-digging session and jumping straight to reasoning and execution. These savings scale linearly with codebase size.
-
-* **Zero Search & Exploration Overhead**: In YumeShelf, the natural language agent had to scan directories and run global searches (`grep`) to locate the card and CSS files. In Cal.com's monorepo, this overhead exploded. The agent had to list multiple directories, inspect packages, and evaluate ambiguous components across different packages (such as `packages/ui` vs `packages/coss-ui`) just to find the active Button code. Guided by HoverSource, the agent went straight to the exact target line in a single turn.
-* **Context Preservation**: By bypassing global searches and file listings, HoverSource keeps the agent's context window extremely clean, leading to a **98.6% reduction in token consumption** on Cal.com (from half a million tokens to just under 7k). This directly translates to lower API costs and faster responses.
-
-
-## Modes of Operation
-
-HoverSource runs in two distinct interaction modes depending on your task. You can toggle between them at any time by pressing **`Alt + X`**.
+Toggle modes at any time with `Alt + X`.
 
 ### 1. Inspector Mode (Default)
-Ideal for debugging, modifying, or refactoring existing elements.
-- Hovering elements highlights their layout bounding box and opens a floating card containing file paths, component names, CSS locations, and layout context.
-- Pressing **`Alt + C`** copies **Component Metadata** (see [Clipboard Output](#clipboard-output)).
+For debugging or modifying existing UI elements.
+- Hover over an element to see its bounding box, file path, component name, CSS origin lines, and layout constraints.
+- Press `Alt + C` to copy component metadata.
 
 ### 2. Design Mode
-Ideal for positioning new UI elements (cards, badges, modals, tooltips) relative to existing elements.
-- Activates a drag-and-drop targeting crosshair.
-- Snaps the crosshair horizontally or vertically against nearby element boundaries (edges or center axes) to measure precise offsets (`dX`, `dY`).
-- Pressing **`Alt + C`** copies **Design Placement Metadata** containing:
-  - Exact target and snap anchor selectors.
-  - Pixel-perfect offsets and boundaries.
-  - Pre-computed absolute position CSS block (`top`, `left`, `white-space`).
-  - Structural guidance for AI agents to decide on DOM insertion and flex/grid adjustments.
+For positioning new UI elements (badges, cards, popovers, tooltips) relative to existing elements.
+- Drag the crosshair to snap against nearby element edges and measure pixel offsets (`dX`, `dY`).
+- Press `Alt + C` to copy layout specs, anchor selectors, and ready-to-use CSS positioning blocks (`top`, `left`, `white-space`).
 
-## Framework Support Matrix
+## Framework Support
 
-HoverSource supports resolving metadata for multiple frontend frameworks at different levels of depth depending on what information is exposed by the framework's development mode:
-
-| Metadata Field | React (Non-Invasive / Invasive) | Vue (Non-Invasive / **Invasive**) | Svelte (Non-Invasive) | Angular (Non-Invasive / **Invasive**) | SolidJS (Non-Invasive) | Preact (Non-Invasive) | Astro (Non-Invasive) | Vanilla / Fallback |
+| Metadata Field | React | Vue | Svelte | Angular | SolidJS | Preact | Astro | Vanilla |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Component Name** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Fallback (DOM tag) |
-| **File Path** | Resolved | Resolved | Resolved | Unresolved / **Resolved**\* | Resolved | Resolved | Resolved | **Partially Resolved**\*\* |
-| **Line Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | **Resolved**\*\* |
-| **Column Number** | Resolved | None / **Resolved**\* | Resolved | None / **Resolved**\* | Resolved | Resolved | Resolved | **Resolved**\*\* |
+| **File Path** | Resolved | Resolved | Resolved | Unresolved / Resolved\* | Resolved | Resolved | Resolved | Resolved\*\* |
+| **Line Number** | Resolved | None / Resolved\* | Resolved | None / Resolved\* | Resolved | Resolved | Resolved | Resolved\*\* |
+| **Column Number** | Resolved | None / Resolved\* | Resolved | None / Resolved\* | Resolved | Resolved | Resolved | Resolved\*\* |
 | **Tag Name & Classes** | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved | Resolved |
 
-\* *Note: Vue and Angular require compile-time template tagging (Invasive mode via `hs install --vue` or `hs install --angular`) to expose line/column locations (and file path for Angular). Other frameworks resolve them out-of-the-box in development mode (Non-Invasive). For server-side environments (React Server Components / SSR in Next.js), React utilizes automatic, zero-config on-disk runtime patching during dev server execution.*
+\* *Vue and Angular require template tagging (`hs install --vue` or `hs install --angular`) for line and column numbers. Other frameworks resolve out of the box in development mode.*
 
-\*\* *Note: Vanilla JS/TS resolves source locations dynamically via runtime monkey patching of DOM creation APIs (`document.createElement` and `Element.prototype.innerHTML` setter). Static elements in `index.html` or elements created before the overlay is injected will remain unresolved (`Unknown`).*
+\*\* *Vanilla JS/TS resolves dynamic elements via V8 stack traces (`document.createElement`, `innerHTML`) and static template elements (`src/index.html`, `index.html`) via in-memory AST mapping.*
 
-### Next.js & React Server Components (RSC) Support
+### Next.js & React Server Components (RSC)
+For Next.js 14+ projects, HoverSource temporarily patches React development runtimes on disk to resolve source locations for SSR and RSC components. All patched files restore automatically on shutdown.
 
-For Next.js 14+ projects, HoverSource automatically resolves source code locations (file path, line, and column) for both server-rendered components (SSR) and React Server Components (RSC) when launched using `hs dev` or `hs start`.
+### Vanilla JS/TS
+1. **Dynamic DOM Elements**: Captures active V8 call stacks on `document.createElement` and `innerHTML` to map created elements back to their script files (e.g. `src/renderer/game-cards.ts:29:18`).
+2. **Static HTML Elements**: Scans template HTML files (`src/index.html`, `index.html`) on startup to match static tags, IDs, classes, and attributes with 0ms latency.
+3. **Zero-Network & CSP Immune**: Runs 100% in-memory without making network requests, working seamlessly in Electron apps with strict Content Security Policies.
 
-- **Mechanism**: HoverSource temporarily patches the standard React CJS development runtimes and Next.js's vendored app-page router runtimes on disk during development server execution. All patched files are restored to their original state upon process exit or CLI shutdown.
-- **Optimized SWC Integration**: For elements compiled with dev-mode source tracking (`__source`), HoverSource reads the source locations directly without performance overhead. For RSC elements where compiler-level source attributes are stripped, HoverSource resolves locations dynamically on the server.
+## Quickstart
 
----
+Install globally:
 
-### Vanilla JS/TS Source Resolution
+```bash
+npm install -g hoversource
+```
 
-For projects not using a component framework, HoverSource resolves source locations dynamically using a runtime monkey-patching approach:
-- Overrides `document.createElement` to capture the stack trace when an element is instantiated.
-- Overrides the `Element.prototype.innerHTML` setter to capture the stack trace and tag the element and its direct children.
-- Parses the V8 stack trace to extract the file path, line, and column, and stores them in the `data-hs-source` attribute.
+Or run directly with npx:
 
-#### Limitations of Vanilla Resolution
-- **Timing & CDP Injection Delay**: Only elements created or modified after the HoverSource overlay is loaded and the monkey patches are applied will have source metadata. In Electron or SPA applications, elements in the initial HTML payload or rendered immediately during application boot time will be painted before the CDP injector connects. These elements will initially show `Unknown`.
-  * **Workaround A (Interactive)**: Simply perform any UI action that triggers a re-render or re-creates the DOM elements (e.g., toggling a favorite state, applying a search query, switching tabs, or clicking a refresh list button) once the HoverSource overlay is loaded.
-  * **Workaround B (Pre-Injection)**: For 100% accurate startup resolution without manual interaction, manually add the HoverSource overlay script tag at the very top of your project's main HTML file's `<head>` during active development:
-    ```html
-    <script src="http://127.0.0.1:7300/hoversource-overlay.js"></script>
-    ```
-- **Bundling/Transpilation**: If the code is bundled or transpiled without source maps, the captured stack trace will point to the bundled output rather than the original source files.
+```bash
+npx hoversource start
+```
 
----
+Run inside your project root:
 
-## Proxy & Security Transport Matrix
+```bash
+hs start
+```
 
-When utilizing HoverSource in Web Application Proxy Mode (`hs --target=<url>`), the reverse proxy employs dedicated routing and headers interception layers to handle modern browser restrictions:
+HoverSource detects your project type from `package.json`, starts your dev server, and attaches the overlay. `hs start` runs `npm run start`, or you can pass any script name:
 
-| Feature / Capability | Supported | Details |
-| :--- | :---: | :--- |
-| **HTTP Upstream Proxying** | **Yes** | Standard port forwarding with dynamic script injection. |
-| **HTTPS Upstream Proxying** | **Yes** | Automatically switches transport agents and generates local self-signed SSL certificates when targeting secure (`https://`) dev servers. |
-| **CSP Headers Stripping** | **Yes** | Automatically strips `content-security-policy` and `content-security-policy-report-only` headers from upstream HTML and static assets. |
-| **Same-Origin Iframe Routing** | **Yes** | Redirects `/hoversource/*` client assets to the local companion server. Keeps script execution same-origin inside iframes to bypass isolation policies. |
-| **Dev Server Health Polling** | **Yes** | Actively polls target upstream servers before binding the proxy port, with graceful retry logic and CLI warning indicators. |
-| **Port Conflict Resolution** | **Yes** | Detects occupied debugging ports (`9222`) or companion ports (`7300`), prompts the user, or terminates conflicting processes automatically. |
-| **HTTP/2 or HTTP/3 Upgrading** | **No** | The reverse proxy runs on Node's standard HTTP/HTTPS (`HTTP/1.1`) stack. It automatically downgrades upstream connection protocols to `HTTP/1.1` and does not support multiplexing. |
-| **Subresource Integrity (SRI) Rewriting** | **Yes** | Strips `integrity` attributes from script and link tags in HTML responses to prevent browsers from blocking modified resources. |
-| **Preloaded HSTS Domains** | **Yes** | Generates a local Certificate Authority (CA) and registers it to the OS Trusted Root store dynamically, allowing secure HSTS domains to be proxied without browser blocks. |
-| **WebSocket Secure (WSS) Tunneling** | **Yes** | Tunnels WebSocket upgrade requests over the HTTP/HTTPS proxy to preserve dynamic Hot Module Replacement (HMR) connections. |
-| **Cookie Domain & Secure Rewriting** | **Yes** | Strips the `Domain` attribute in `Set-Cookie` response headers to scope cookies to `localhost`, and strips the `Secure` flag if the proxy is running over HTTP. |
-| **On-the-fly Decompression** | **Yes** | Decodes `gzip`, `deflate`, and `br` compressed HTML responses from upstream on-the-fly to allow script injection before returning the uncompressed response to the browser. |
+```bash
+hs dev     # runs npm run dev
+hs serve   # runs npm run serve
+```
 
----
+### Web app with existing server
 
-## Limitations & Workarounds
+If your dev server is already running, attach with a proxy:
 
-HoverSource relies on active development environment metadata and browser debug protocols. The following scenarios are unsupported out-of-the-box and require manual configuration or fallback mechanisms:
+```bash
+hs --target=http://localhost:5173
+```
 
-| Scenario / Environment | Supported | Details / Resolution |
-| :--- | :---: | :--- |
-| **Docker / Containerized Dev** | **No (Manual)** | Local loopback connections (`127.0.0.1`) are isolated inside containers. You must map container ports (proxy, companion) to the host and bind the host address to `0.0.0.0`. |
-| **Non-Electron WebView Apps** | **No (Manual)** | Frameworks like Tauri (Rust) or WebView2 (.NET) do not auto-expose debugging ports. You must build in debug mode, launch the app manually to open the CDP port, and connect HoverSource to it. |
-| **Production / Minified Builds** | **No** | Production bundles strip component fiber references, AST structures, and source maps. HoverSource will fall back to raw DOM element tagging without line/column resolution. |
+HoverSource opens your app in your default browser. Hover any element and press `Alt + C`.
+
+### Electron Apps
+
+For Electron apps, enable the remote debugging port in your main process before `app.whenReady()`:
+
+```typescript
+import { app } from 'electron';
+
+if (!app.isPackaged) {
+  let port = '9222';
+  const extraArgs = process.env.ELECTRON_EXTRA_LAUNCH_ARGS;
+  if (extraArgs) {
+    const match = extraArgs.match(/--remote-debugging-port=(\d+)/);
+    if (match) port = match[1];
+  }
+  if (!app.commandLine.hasSwitch('remote-debugging-port')) {
+    app.commandLine.appendSwitch('remote-debugging-port', port);
+  }
+}
+
+app.whenReady().then(() => {
+  // ...
+});
+```
+
+## Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--port=N` | auto | Companion server port |
+| `--proxy-port=N` | target port + 10000 | Proxy port in web mode |
+| `--debug-port=N` | `9222` | CDP debug port in Electron mode |
+| `--dashboard` / `-d` | off | Open config dashboard on start |
 
 ## Clipboard Output
 
-When you press `Alt + C` on any hovered element, HoverSource copies a Markdown block to your clipboard. All sections below the first five fields are conditional — they appear only when the relevant data exists.
+When you press `Alt + C`, HoverSource copies a Markdown block to your clipboard.
 
-### Always present
+### Single Element (`Alt + C`)
 
 ```markdown
 ### HoverSource Component Metadata
 * **Component**: `ChatThreadView`
 * **Element**: `button.persona-card__action-button` ➔ [Source: `workspace.css` (Line: 60, Column: 1)]
-* **File Path**: `D:/Projects/MyApp/src/features/chat/ChatThreadView.tsx` (Line: 659, Column: 5)
-* **Framework**: React
-* **Dimensions**: 1485x1044
-* **Key Styles**:
-  - Color: `rgb(255, 255, 255)`
-  - Background: `rgba(0, 0, 0, 0)`
-  - Box Shadow: `none`
-  - Margin: `0px` | Padding: `20px 44px 26px`
-  - Display: `flex` (direction: column)
-```
-
-### Parent Styles *(when ancestors carry visual effects)*
-
-HoverSource walks the ancestor chain of the hovered element and collects any of these properties from each ancestor:
-
-`mask-image` · `-webkit-mask-image` · `opacity` · `filter` · `backdrop-filter` · `overflow-x` · `overflow-y` · `position: sticky` · `position: fixed`
-
-When a class from an ancestor is found in the project's CSS/SCSS/Less files (including CSS Modules), the output includes a direct link to the source file and line:
-
-```markdown
-* **Parent Styles**:
-  - `div.chat-thread__body` ➔ `mask-image: linear-gradient(rgba(0,0,0,0) 0%, rgb(0,0,0) 10px)` ➔ [Source: `workspace.css` (Line: 793, Column: 3)]
-  - `div.chat-thread__body` ➔ `overflow-y: hidden`
-  - `section.chat-thread` ➔ `overflow-y: hidden`
-  - `main.home-stage` ➔ `overflow-y: hidden`
-```
-
-This lets an AI agent patch the exact CSS rule in one step, without grepping the codebase.
-
-### Layout Constraints *(when the element or its context has layout-affecting properties)*
-
-```markdown
-* **Layout Constraints**:
-  - `flex: 1 1 0%`
-  - `min-height: 0`
-  - `overflow: hidden`
-```
-
-### Source Comments *(when JSDoc or inline comments precede the element in source)*
-
-```markdown
-* **Source Comments**:
-  - `Renders the scrollable message list for the active chat thread.`
-  - `@param messages - ordered list of ChatMessage objects`
-```
-
-### Source Attributes *(when the element carries non-style JSX attributes)*
-
-```markdown
-* **Source Attributes**:
-  - `data-testid="chat-thread-body"`
-  - `aria-label="Message list"`
-  - `role="log"`
-```
-
-### Full example
-
-```markdown
-### HoverSource Component Metadata
-* **Component**: `ChatThreadView`
-* **File Path**: `D:/Projects/MyApp/src/features/chat/ChatThreadView.tsx` (Line: 659, Column: 5)
+* **File Path**: `src/features/chat/ChatThreadView.tsx` (Line: 659, Column: 5)
 * **Framework**: React
 * **Dimensions**: 1485x1044
 * **Key Styles**:
@@ -269,9 +194,7 @@ This lets an AI agent patch the exact CSS rule in one step, without grepping the
   - `data-testid="chat-thread-body"`
 ```
 
-### Multi-Layer Output (`Alt + Shift + C`)
-
-Pressing **`Alt + Shift + C`** generates a combined Markdown document listing all resolved component layers under the cursor (ordered from leaf to root), ending with a minified structural HTML tree of the target leaf element:
+### Multi-Layer Stack (`Alt + Shift + C`)
 
 ```markdown
 ### HoverSource Component Metadata
@@ -293,190 +216,63 @@ Found 3 layer(s), ordered from leaf (Layer 1) to root:
   - `position: relative`
   - `display: flex`
 
-#### Layer 2/3: `div` (div)
-...
-
-#### Layer 3/3: `div` (div)
-...
-
 ### Target Element HTML Structure (Layer 1)
 ```html
 <div class="game-card favorited">
   <div class="game-icon">
     <svg></svg>
   </div>
-  <div class="game-status">
-    ...
-  </div>
+  <div class="game-status"></div>
 </div>
 ```
 ```
 
-### Design Placement Metadata (Design Mode)
-
-When in Design Mode, pressing `Alt + C` copies a design layout specification block directing the AI on how to position a new element relative to existing elements:
+### Design Placement Metadata (`Alt + C` in Design Mode)
 
 ```markdown
 ### HoverSource Design Placement Metadata
 * **Component**: `Card`
 * **Element**: `div#login-card.card`
-* **File Path**: `packages/overlay-core/prototype/index.html` (Line: 122, Column: 5)
-* **Framework**: Vanilla
+* **File Path**: `src/components/LoginCard.tsx` (Line: 122, Column: 5)
+* **Framework**: React
 * **Horizontal Anchor**:
   - Selector: `div#login-card.card`
   - Boundary: `Right-Edge`
-  - Crosshair distance from boundary (NOT a CSS value): `+123px` (Free)
+  - Crosshair distance: `+123px`
 * **Vertical Anchor**:
   - Selector: `div#login-card.card`
   - Boundary: `Top-Edge`
-  - Crosshair distance from boundary (NOT a CSS value): `+40px` (Free)
+  - Crosshair distance: `+40px`
 
-#### Layout Context (auto-resolved at runtime)
-* **Positioned Ancestor**: none found within 8 levels — CSS rules may need `position: relative` added to a parent
+#### Layout Context
 * **Anchor Element**: `div#login-card.card` (display: block)
 * **Direct Parent of Anchor**: `div.sandbox-container` (display: flex)
-* **USE THIS CSS** (do not use the distance values above as CSS — use this block):
+* **USE THIS CSS**:
 ```css
 position: absolute;
-  left: calc(100% + 123px);
-  top: 40px;
-  white-space: nowrap;
+left: calc(100% + 123px);
+top: 40px;
+white-space: nowrap;
 ```
-* **Source Files to Examine**:
-- [index.html](file:///D:/Projects/HoverSource/packages/overlay-core/prototype/index.html#L122)
-
-#### For the AI Agent
-The CSS above assumes the new element will be a direct child of the Positioned Ancestor.
-You must determine the actual DOM insertion point by examining the source files above.
-The following is NOT resolved automatically and requires your judgment:
-- **DOM insertion point**: where in the JSX/template tree the new element belongs (sibling of anchor, child of a wrapper, inside a portal, etc.)
-- **Whether `position: absolute` is appropriate**: if the anchor or its parent is a flex/grid container, a flex/grid child approach may be more appropriate
-- **Whether the Positioned Ancestor has `position: relative` in source**: verify it is not conditionally applied
-
-Suggested layout insertion (heuristic only):
-* Target DOM Parent: `div#login-card.card` (same as anchor)
 ```
 
-## HoverSource in the wild
+## Screenshots
 
-### See how fast your Agents will understand
 <p align="center">
   <img src="assets/Screenshot%201.png" alt="HoverSource UI Metadata" width="48%">
   <img src="assets/Screenshot%204.png" alt="AI Agent Explaining Metadata" width="48%">
 </p>
 
-### Inspector Overlay & Tooltip
 <p align="center">
   <img src="assets/Screenshot%203.png" alt="HoverSource Inspector Tooltip" width="80%">
 </p>
 
-### Configuration Dashboard
 <p align="center">
   <img src="assets/Screenshot%202.png" alt="HoverSource Configuration Dashboard" width="80%">
 </p>
 
-
-
-## Install HoverSource
-
-You can install HoverSource globally from npm:
-
-```bash
-npm install -g hoversource
-```
-
-Or run it directly on-the-fly using `npx`:
-
-```bash
-npx hoversource start
-```
-
-The `hs` (and `hoversource`) command is now available anywhere in your terminal.
-
-## Run It With Your Project
-
-Open a terminal in the root of your project and run:
-
-```bash
-hs start
-```
-
-That's it. HoverSource reads your `package.json`, detects what kind of project you have, starts it, and attaches automatically. If a previous HoverSource session is still running, it shuts it down cleanly before taking over.
-
-`hs start` maps to `npm run start`. You can use any script name:
-
-```bash
-hs dev     # runs npm run dev
-hs serve   # runs npm run serve
-```
-
----
-
-### Web app — explicit mode (Vite, CRA, Next.js, ...)
-
-If your dev server is already running, attach HoverSource with a proxy:
-
-```bash
-hs --target=http://localhost:5173
-```
-
-HoverSource opens your app in your default browser automatically. Hover any element and press `Alt+C`.
-
----
-
-### Explicit exec
-
-```bash
-hs --exec="npm run start"
-```
-
-## Prerequisites for Electron Apps
-
-For `HoverSource` to inject the overlay into an Electron application, you **must** enable the Chrome DevTools Protocol (CDP) debugging interface in your application's main process.
-
-Add the following to your main process (e.g., `src/main.ts`) **before** the `app.whenReady()` or `app.on('ready')` event is fired. This implementation respects HoverSource's automatic port conflict resolution and ensures debugging is disabled in production:
-
-```typescript
-import { app } from 'electron';
-
-// Enable remote debugging port for HoverSource injection in development
-if (!app.isPackaged) {
-  let port = '9222';
-  const extraArgs = process.env.ELECTRON_EXTRA_LAUNCH_ARGS;
-  if (extraArgs) {
-    const match = extraArgs.match(/--remote-debugging-port=(\d+)/);
-    if (match) port = match[1];
-  }
-  if (!app.commandLine.hasSwitch('remote-debugging-port')) {
-    app.commandLine.appendSwitch('remote-debugging-port', port);
-  }
-}
-
-app.whenReady().then(() => {
-  // ... your app setup
-});
-```
-
-Ensure the port specified (`9222`) matches the `--debug-port` flag passed to `hs` if you override the default.
-
----
-
-### Optional flags
-
-| Flag | Default | Description |
-|---|---|---|
-| `--port=N` | auto | Companion server port |
-| `--proxy-port=N` | target port + 10000 | Proxy port (web mode) |
-| `--debug-port=N` | `9222` | CDP debug port (Electron mode) |
-| `--dashboard` / `-d` | off | Open config dashboard on start |
-
-## Troubleshooting: Overlay Disappears on Redirection
-
-If you navigate through your application (for example, clicking a "Login" or "Logout" button) and the HoverSource overlay suddenly disappears:
-1. **Check your browser's address bar**: The application might have performed a client-side navigation or redirect to the direct target port (e.g., `http://localhost:3000/...` instead of the proxy port `http://localhost:13000/...`).
-2. **The "+10000" Rule**: By default, HoverSource proxy runs on a port calculated as `target port + 10000` (so port `3000` maps to proxy port `13000`). Simply modify the URL in your browser to add `10000` to the port number (e.g., change `:3000` to `:13000`) and press Enter to restore HoverSource.
-3. **Recommended Fix**: To prevent this from happening, update your application's environment variables (such as `NEXT_PUBLIC_WEBAPP_URL` or `NEXTAUTH_URL`) to point to the HoverSource proxy URL (e.g., `http://localhost:13000`) during your development session.
-
 ## License
 
 MIT
+
+a star on GitHub would be nice if you find it useful.

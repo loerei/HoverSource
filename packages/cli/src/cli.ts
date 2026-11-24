@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { startCompanionServer } from "@hoversource/companion-server";
+import { startCompanionServer, loadMergedConfig } from "@hoversource/companion-server";
 import { injectOverlayScript } from "@hoversource/client-injector";
 import { startProxy } from "./proxy.js";
 import { exec } from "node:child_process";
@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { restoreLeftoverPatches, recordPatchState, removePatchState } from "./utils/patchState.js";
 import { setupConsoleMonkeypatch } from "./utils/logger.js";
 import { parseCliArgs } from "./args.js";
+import { runDashboardCommand } from "./commands/dashboard.js";
 import {
   findFreePort,
   getPidUsingPort,
@@ -735,6 +736,22 @@ async function handleTargetOrExec(
   }
 }
 
+function parsePortFlag(raw: string | boolean | undefined, flagName: string): number | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) {
+    console.error(`[HoverSource] Invalid ${flagName} value: "${String(raw)}". Expected an integer between 1 and 65535.`);
+    process.exit(2);
+  }
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (parsed < 1 || parsed > 65535) {
+    console.error(`[HoverSource] Invalid ${flagName} value: ${parsed}. Port must be between 1 and 65535.`);
+    process.exit(2);
+  }
+  return parsed;
+}
+
 async function main() {
   const { args, subcommand } = parseCliArgs(process.argv.slice(2));
   setupConsoleMonkeypatch({
@@ -749,8 +766,28 @@ async function main() {
   }
 
   const projectRoot = validateSafePath(path.resolve(String(args.root || args.r || ".")));
-  const requestedPort = Number.parseInt(String(args.port || args.p || 7300), 10);
-  const debugPort = Number.parseInt(String(args["debug-port"] || 9222), 10);
+  const mergedConfig = loadMergedConfig(projectRoot);
+  const cliPort = parsePortFlag(args.port ?? args.p, "--port");
+  const cliDebugPort = parsePortFlag(args["debug-port"], "--debug-port");
+  const requestedPort = cliPort ?? mergedConfig.ports?.companion ?? 7300;
+  const debugPort = cliDebugPort ?? mergedConfig.ports?.debug ?? 9222;
+
+  const targetArg = (args.target || args.t) as string | undefined;
+  const execArg = (args.exec || args.e || subcommand) as string | undefined;
+
+  if (subcommand === "dashboard" || (!targetArg && !execArg && Boolean(args.dashboard || args.d))) {
+    const result = await runDashboardCommand({
+      requestedPort,
+      projectRoot,
+      debugPort,
+      json: Boolean(args.json),
+      noOpen: Boolean(args["no-open"]),
+    });
+    if (!result.keepAlive) {
+      process.exit(result.exitCode);
+    }
+    return;
+  }
 
   // Check if start script exists in package.json to avoid conflict
   const hasStartScript = checkHasStartScript(projectRoot);
@@ -774,9 +811,6 @@ async function main() {
     return;
   }
 
-  const targetArg = (args.target || args.t) as string | undefined;
-  const execArg = (args.exec || args.e || subcommand) as string | undefined;
-
   if (!targetArg && !execArg) {
     showHelp();
     return;
@@ -797,6 +831,7 @@ Usage: hs [subcommand] [options]
 Subcommands:
   start                  Start the companion server only.
   restart                Restart the running companion server.
+  dashboard              Open the HoverSource Dashboard (reuses running server or starts one).
   dev, start, etc.       Any package.json script name to execute with HoverSource overlay.
 
 Options:
@@ -804,7 +839,9 @@ Options:
   -t, --target=<url>      Direct target dev server URL to proxy (e.g. http://localhost:3000)
   -e, --exec=<command>    Command to launch target app (e.g. "npm run dev", "electron .")
   -r, --root=<path>       Project root directory (default: current directory)
-  -d, --dashboard         Automatically open the HoverSource Dashboard in your browser
+  -d, --dashboard         Open the HoverSource Dashboard (standalone or with a running command)
+  --no-open               Do not automatically open the browser when running dashboard
+  --json                  Emit machine-readable JSON output to stdout
   -h, --help              Show this help message
   --debug-port=<port>     CDP Remote debugging port for Electron (default: 9222)
   --proxy-port=<port>     Explicit port to bind HoverSource reverse proxy server

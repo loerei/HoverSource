@@ -1,117 +1,38 @@
 ---
 name: write-a-skill
-description: Create new agent skills with proper structure, progressive disclosure, and bundled resources. Use when user wants to create, write, or build a new skill.
+description: Use when asked to create, write, or build a new skill.
 ---
 
-# Writing Skills
+# Write a Skill
 
-## Process
+Create and distribute agent skills across workspaces.
 
-1. **Gather requirements** - ask user about:
-   - What task/domain does the skill cover?
-   - What specific use cases should it handle?
-   - Does it need executable scripts or just instructions?
-   - Any reference materials to include?
+## Directives
 
-2. **Draft the skill** - create:
-   - SKILL.md with concise instructions
-   - Additional reference files if content exceeds 500 lines
-   - Utility scripts if deterministic operations needed
+1. **Prerequisite**: MUST read [write-for-ai/SKILL.md](../write-for-ai/SKILL.md) before drafting or editing any skill (rules on Occam compression, non-lossy invariants, Drop Test, and portable wording live there).
+2. **Description / Trigger Gate**: Frontmatter `description` MUST use format `Use when [specific triggers].` in 10-15 words. NEVER summarize internal features (What), explain benefits (Why), or include slash commands.
+3. **Mindset Over Micro-Format**: Directives MUST define thinking principles and decision criteria rather than rigid output layouts that get replayed verbatim.
+4. **Match Structure to Job**: Pick the lightest structure that fits the skill instead of forcing a uniform multi-section template. NEVER invent section headers for 1-2 sentences or inject unrelated meta-commands (such as `agents distribute`) into domain skills.
+5. **Progressive Disclosure**: Keep `SKILL.md` under 100 lines. Extract heavy tables, branch-bound checklists, and reference guides to subdocs (`REFERENCE.md`, `<DOMAIN>.md`) per [HEURISTICS.md](HEURISTICS.md) and [REFERENCE.md](REFERENCE.md).
+6. **Context-Independent Portability**: Instructions MUST stand on first principles. NEVER leak local repository paths, dataset names, or project jargon into shared skills.
 
-3. **Review with user** - present draft and ask:
-   - Does this cover your use cases?
-   - Anything missing or unclear?
-   - Should any section be more/less detailed?
-
-## Skill Structure
-
-```
-skill-name/
-├── SKILL.md           # Main instructions (required)
-├── REFERENCE.md       # Detailed docs (if needed)
-├── EXAMPLES.md        # Usage examples (if needed)
-└── scripts/           # Utility scripts (if needed)
-    └── helper.js
-```
-
-## SKILL.md Template
-
-```md
----
-name: skill-name
-description: Brief description of capability. Use when [specific triggers].
 ---
 
-# Skill Name
+## Skill Shapes (Frontmatter + Shape by Role)
 
-## Quick start
+All skills require valid YAML frontmatter (`name`, `description`, optional `disable-model-invocation: true` per [REFERENCE.md](REFERENCE.md)). Choose the body format by execution complexity:
 
-[Minimal working example]
+| Skill Role | Recommended Body Shape |
+| :--- | :--- |
+| **Micro-habit / constraint** | Frontmatter + 2-6 direct lines (+ optional minimal snippet/template). No `## Directives` / `## Workflow` boilerplate. |
+| **Workflow / orchestrator** | Frontmatter + core invariants (`MUST`/`NEVER`), sequential steps or Mermaid state machine, and explicit completion/recovery gates. |
+| **Audit / reviewer / tool guide** | Scope isolation, conditional subdoc routing (`When to Load`), concrete defect contrasts (`BAD`/`GOOD`) or 4-part tool doc, and exact verdict/output schema. |
 
-## Workflows
+---
 
-[Step-by-step processes with checklists for complex tasks]
+## Workflow
 
-## Advanced features
-
-[Link to separate files: See [REFERENCE.md](REFERENCE.md)]
-```
-
-## Description Requirements
-
-The description is **the only thing your agent sees** when deciding which skill to load. It's surfaced in the system prompt alongside all other installed skills. Your agent reads these descriptions and picks the relevant skill based on the user's request.
-
-**Goal**: Give your agent just enough info to know:
-
-1. What capability this skill provides
-2. When/why to trigger it (specific keywords, contexts, file types)
-
-**Format**:
-
-- Max 1024 chars
-- Write in third person
-- First sentence: what it does
-- Second sentence: "Use when [specific triggers]"
-
-**Good example**:
-
-```
-Extract text and tables from PDF files, fill forms, merge documents. Use when working with PDF files or when user mentions PDFs, forms, or document extraction.
-```
-
-**Bad example**:
-
-```
-Helps with documents.
-```
-
-The bad example gives your agent no way to distinguish this from other document skills.
-
-## When to Add Scripts
-
-Add utility scripts when:
-
-- Operation is deterministic (validation, formatting)
-- Same code would be generated repeatedly
-- Errors need explicit handling
-
-Scripts save tokens and improve reliability vs generated code.
-
-## When to Split Files
-
-Split into separate files when:
-
-- SKILL.md exceeds 100 lines
-- Content has distinct domains (finance vs sales schemas)
-- Advanced features are rarely needed
-
-## Review Checklist
-
-After drafting, verify:
-
-- [ ] Description includes triggers ("Use when...")
-- [ ] SKILL.md under 100 lines
-- [ ] No time-sensitive info
-- [ ] Consistent terminology
-- [ ] Concrete examples included
-- [ ] References one level deep
+1. Identify domain scope, target category, skill shape, and tool integrations; read [write-for-ai/SKILL.md](../write-for-ai/SKILL.md).
+2. Draft `SKILL.md` using the lightest matching shape and evaluate subdoc extraction per [HEURISTICS.md](HEURISTICS.md).
+3. Review draft with user and incorporate feedback.
+4. Write files under `<category>/<skill-name>/`, run `agents audit` to validate frontmatter/duplicates/policies, then run `agents distribute` to sync workspaces and IDEs.

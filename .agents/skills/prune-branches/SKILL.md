@@ -1,49 +1,29 @@
 ---
 name: prune-branches
-description: >
-  Find and safely delete stale, merged, or abandoned Git branches locally and on remotes. Use when the user asks to clean up repository branches, prune merged branches, or check for stale git branches.
+description: Use when auditing, reviewing, or deleting merged and stale Git branches.
 ---
 
-# Pruning Stale Git Branches
+# Prune Branches
 
-## Quick start
+Audit-first branch pruning. ALWAYS report branch classifications and obtain explicit user approval before deleting any branch.
 
-Find local branches already merged into `main`:
-```bash
-git branch --merged main
-```
+## Classification Heuristics
 
-Find remote branches already merged into `origin/main`:
-```bash
-git branch -r --merged origin/main
-```
+| Branch Condition | Action |
+| :--- | :--- |
+| **Directly Merged**: Listed by `git branch --merged <default>` or `git branch -r --merged origin/<default>` | Mark safe to delete |
+| **Squash-Merged**: `git diff origin/<default>...origin/<branch> --stat` is empty (`0 insertions, 0 deletions`) OR `git cherry` returns `-` | Mark safe to delete (squash-merged) |
+| **Unmerged Active**: `git cherry` returns `+` and tree diff has changes | Recommend: PR & merge, cherry-pick, or abandon |
 
-## Workflows
+## Workflow
 
-### 1. Identify Merged & Stale Branches
-
-- **Local fully-merged:** Run `git branch --merged main` (or the default branch name). These are 100% safe to delete.
-- **Remote fully-merged:** Run `git branch -r --merged origin/main`.
-- **Squash-merged or Rebased (Stale):**
-  If branches were squash-merged or rebased, they might not show up in `--merged`. To detect them:
-  1. For each suspect branch, check its commit history relative to main: `git log main..<branch> --oneline`.
-  2. If the unique commits on the branch already exist on `main` (possibly with a different SHA due to squashing/rebase), the branch is stale and safe to delete.
-  3. Validate by diffing: `git diff <branch> main --stat` (if main has all additions/revisions and no critical code is deleted, it is safe).
-
-### 2. Safely Delete Stale Branches
-
-Delete local branches:
-```bash
-git branch -d <branch_name>  # Safe delete (warns if not merged)
-git branch -D <branch_name>  # Force delete (use for squash-merged branches)
-```
-
-Delete remote branches:
-```bash
-git push origin --delete <branch_name>
-```
-
-Sync local tracking cache:
-```bash
-git fetch --all --prune
-```
+1. **Audit (Read-Only)**:
+   - Detect default branch: `git symbolic-ref refs/remotes/origin/HEAD` (fallback to `main`).
+   - Sync tracking refs: `git fetch --all --prune`.
+   - Classify all local and remote branches against the table above.
+   - Present the categorized audit report (Directly Merged, Squash-Merged, Active Unmerged), then **STOP** and await explicit user confirmation.
+2. **Prune (Post-Approval Only)**:
+   - If the active branch is slated for deletion, switch first: `git checkout <default>`.
+   - Delete local branches: `git branch -d <branch>` (use `-D` ONLY for confirmed squash-merged branches).
+   - Delete remote branches: `git push origin --delete <branch1> <branch2> ...`.
+   - Resync tracking refs: `git fetch --all --prune`.

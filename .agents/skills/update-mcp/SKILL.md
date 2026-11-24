@@ -1,49 +1,62 @@
 ---
 name: update-mcp
-description: Update Model Context Protocol (MCP) servers from their upstream source repositories, rebuild their packages, and resolve file-lock conflicts. Use when the user requests to update, upgrade, or pull changes for one or more MCP servers.
+description: Use when updating, upgrading, or pulling upstream changes for local MCP servers.
 ---
 
 # Update MCP
 
-Guide to updating local or standard Model Context Protocol (MCP) servers.
+## 1. Locate Target MCP Source
 
-## Quick Start
+Read the active IDE MCP config to extract the server's command, args, and working directory:
 
-1. Find the target MCP server in the config file.
-2. Locate its source directory and fetch/merge changes from its remote repository.
-3. Handle file-locks or process conflicts dynamically.
+| Environment | Configuration File Path | Target Key |
+| :--- | :--- | :--- |
+| **Antigravity** | `<appDataDir>/mcp_config.json` | `mcpServers.<name>` |
+| **Cursor** | Global Storage `storage.json` | `mcpServers.<name>` |
+| **VS Code** | User Settings `settings.json` | `mcp.servers.<name>` |
 
-## Workflows
+If the command invokes a package runner (`npx`, `uvx`, `pipx`) rather than a local git repository, upgrade or refresh via that runner instead of running Steps 2-3.
 
-### Phase 1: Locate & Inspect MCP
-- Read the active MCP configuration file depending on the current IDE or environment:
-  - **Antigravity**: `mcp_config.json` (typically under the application data path)
-  - **Cursor**: `storage.json` (under global storage folder)
-  - **VS Code**: `settings.json` (under user configurations folder)
-- Locate the entry matching the requested MCP name.
-- Extract the command or arguments to identify the server's repository source directory (e.g., `<projects-dir>/<mcp-folder-name>`).
+## 2. Fetch & Merge Upstream
 
-### Phase 2: Upstream Updates
-- Check the git remotes in the MCP directory using `git remote -v`.
-- Fetch and merge changes from the remote repository (prefer `upstream/<default-branch>` if configured as a fork, otherwise `origin/<default-branch>`):
-  ```powershell
-  git fetch upstream
-  git merge upstream/<default-branch>
-  ```
-  *(If there are uncommitted lock files or local edits, stash them using `git stash` first)*.
+Inside the target MCP repository directory (compatible with Windows PowerShell 5.1 and `pwsh`):
 
-### Phase 3: Rebuilding & Lock Resolution
-- Determine the package manager or build system from the repository structure:
-  - **Python (pyproject.toml/uv.lock)**: Run `uv sync`.
-  - **Node.js (package.json)**: Run `npm install && npm run build` (or the compile script defined in `package.json`).
-- **File Lock Resolution**: If the tool fails to build because the executable or module is currently in use, immediately construct a one-shot terminal command block for the user to run manually:
-  ```powershell
-  # Close your IDE/Antigravity completely, run this block in PowerShell, then reopen:
-  cd "<path-to-mcp-directory>"
-  <sync-or-build-command>
-  ```
-  Provide the command, request the user to close the app, run the command, and message back to resume.
+```powershell
+if (git status --porcelain) { git stash push -m "pre-mcp-update" }
+$remote = if ((git remote) -contains "upstream") { "upstream" } else { "origin" }
+git fetch $remote
+$headRef = git symbolic-ref --short "refs/remotes/$remote/HEAD" 2>$null
+$target = if ($headRef) { $headRef } else { "$remote/main" }
+git merge $target
+```
 
-### Phase 4: Verification & Changelog Brief
-- Once the update completes, query the repository's changelog files (e.g., `CHANGELOG.md`, `whatsnew.json`) or recent git commits (`git log -n 5 --oneline`) to summarize new features or fixes.
-- Prompt the user to reload the MCP servers and verify with a test tool call.
+Abort and report to the user if `git fetch` fails or `git merge` produces conflicts.
+
+## 3. Build & Handle File Locks
+
+Run the build command matching the repository root markers:
+
+| Project Marker | Build / Sync Command |
+| :--- | :--- |
+| `pyproject.toml` / `uv.lock` | `uv sync` |
+| `package.json` | `npm install && npm run build` (or `pnpm`/`bun` equivalent) |
+| `Cargo.toml` | `cargo build --release` |
+| `go.mod` | `go build ./...` |
+
+### File Lock Recovery (Process In-Use)
+
+If the build fails with locked binaries (`EPERM`, `EBUSY`, or access denied):
+1. Provide this terminal block for manual execution:
+   ```powershell
+   # 1. Stop the MCP server process (or close your IDE completely)
+   # 2. Run in an external PowerShell window:
+   cd "<path-to-mcp-directory>"
+   <build-command>
+   # 3. Reopen the IDE and message back to resume
+   ```
+2. Ask the user to close the locking process/IDE, run the block, and confirm when done.
+
+## 4. Verification & Changelog Brief
+
+1. Check `git log -n 5 --oneline` or `CHANGELOG.md` and summarize key fixes or features in 2-3 bullets.
+2. Prompt the user to reload the MCP server and verify with a lightweight tool call.

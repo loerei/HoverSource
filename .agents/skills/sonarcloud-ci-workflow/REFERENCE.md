@@ -8,14 +8,14 @@ Configure `sonar-project.properties` in the project root to define scope and exc
 > **UTF-8 Encoding without BOM**: You MUST save `sonar-project.properties` in UTF-8 format **without BOM**. Saving it with BOM (which is the default behavior of Windows PowerShell `Set-Content`) will cause the SonarScanner to fail to parse the first line, throwing an error: `You must define the following mandatory properties: sonar.organization`.
 
 ```properties
-sonar.organization=loerei
-sonar.projectKey=loerei_YumeShelf
-sonar.projectName=YumeShelf
+sonar.organization=<org>
+sonar.projectKey=<org>_<repo>
+sonar.projectName=<ProjectName>
 sonar.sources=src,native
 sonar.tests=tests
-sonar.test.inclusions=tests/**/*.test.ts,tests/**/*.spec.ts
-sonar.exclusions=node_modules/**,dist/**,build/**,build_output/**,tests/**,**/*.test.ts,**/*.spec.ts
-sonar.cpd.exclusions=tests/**,**/*.test.ts,**/*.spec.ts
+sonar.test.inclusions=src/**/*.test.ts,src/**/*.test.tsx,tests/**/*.test.js
+sonar.exclusions=node_modules/**,dist/**,build/**,build_output/**,tests/**,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx
+sonar.cpd.exclusions=tests/**,**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx
 sonar.javascript.lcov.reportPaths=coverage/lcov.info
 ```
 
@@ -42,8 +42,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # Disable shallow clone for accurate git history
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -79,8 +79,8 @@ jobs:
         run: npm run build
       - name: Run Tests & Coverage
         run: npm run test:coverage
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@master
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -95,17 +95,18 @@ You must disable SonarCloud's built-in Automatic Analysis to avoid duplicate ana
 1. Navigate to your project dashboard on [sonarcloud.io](https://sonarcloud.io/).
 2. Click **Administration** in the left menu.
 3. Select **Analysis Method**.
-4. Gạt nút **Toggle OFF** cho **Automatic Analysis**.
+4. Toggle **Automatic Analysis** **OFF**.
 
 ---
 
-## 4. Verification using GitHub CLI
+## 4. Verification using GitHub CLI & SonarQube CLI
 
 To verify Quality Gate checks on local PRs, prevent dummy token auth failures:
 
 ```powershell
 # Safe PR status check
 $env:GITHUB_TOKEN=$null; gh pr checks <pr_number>
+sonar quality-gate status --pull-request <pr_number> --format json
 ```
 
 ---

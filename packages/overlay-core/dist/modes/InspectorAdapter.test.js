@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { InspectorAdapter } from "./InspectorAdapter.js";
+import { inspectVisualContext } from "../inspector.js";
 beforeAll(() => {
     if (typeof globalThis.getComputedStyle === "undefined") {
         globalThis.getComputedStyle = vi.fn().mockImplementation((el) => {
@@ -146,5 +147,72 @@ describe("InspectorAdapter - Metadata Filtering", () => {
         expect(formatted).not.toContain("Element");
         expect(formatted).not.toContain("Framework");
         expect(formatted).not.toContain("Key Styles");
+    });
+    it("renders scroll/gutter layoutConstraints when enabled and hides them when layoutConstraints is false", () => {
+        const createMockController = (layoutConstraintsEnabled) => ({
+            getConfig: () => ({
+                metadataFilter: {
+                    filters: {
+                        component: {
+                            layoutConstraints: layoutConstraintsEnabled
+                        }
+                    }
+                }
+            }),
+            isUIVisible: () => true,
+            drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
+            drawTooltip: vi.fn(),
+            clear: vi.fn(),
+            setFreezeMode: vi.fn(),
+        });
+        const mockElement = {
+            tagName: "DIV",
+            classList: {
+                contains: () => false,
+                [Symbol.iterator]: function* () { }
+            },
+            className: "",
+            parentElement: null,
+            clientWidth: 747,
+            clientHeight: 579,
+            scrollWidth: 747,
+            scrollHeight: 2400,
+            offsetWidth: 757,
+            offsetHeight: 579,
+            _mockComputedStyle: {
+                overflowX: "visible",
+                overflowY: "auto",
+                scrollbarGutter: "stable"
+            }
+        };
+        const visualContext = inspectVisualContext(mockElement);
+        const mockInfo = {
+            componentName: "ScrollPanel",
+            tagName: "div",
+            framework: "React",
+            fileName: "src/ScrollPanel.tsx",
+            lineNumber: 12,
+            columnNumber: 4,
+            classList: [],
+            visualContext,
+            staticMetadata: null
+        };
+        const enabledAdapter = new InspectorAdapter();
+        enabledAdapter.activate(createMockController(true));
+        const enabledFormatted = enabledAdapter["formatElementMetadata"](mockElement, mockInfo);
+        expect(enabledFormatted).toContain("* **Layout Constraints**:");
+        expect(enabledFormatted).toContain("`overflow-y: auto`");
+        expect(enabledFormatted).toContain("`scrollbar-gutter: stable`");
+        expect(enabledFormatted).toContain("`client-size: 747x579`");
+        expect(enabledFormatted).toContain("`scroll-size: 747x2400`");
+        expect(enabledFormatted).toContain("`scrollbar-width: 10px`");
+        const disabledAdapter = new InspectorAdapter();
+        disabledAdapter.activate(createMockController(false));
+        const disabledFormatted = disabledAdapter["formatElementMetadata"](mockElement, mockInfo);
+        expect(disabledFormatted).not.toContain("* **Layout Constraints**:");
+        expect(disabledFormatted).not.toContain("overflow-y: auto");
+        expect(disabledFormatted).not.toContain("scrollbar-gutter: stable");
     });
 });

@@ -14,7 +14,7 @@ None — can start immediately
 
 Collect concise own-element scroll and gutter diagnostics inside `inspectLayoutConstraints` in [inspector.ts](file:///d:/Projects/HoverSource/packages/overlay-core/src/inspector.ts) so [InspectorAdapter.ts](file:///d:/Projects/HoverSource/packages/overlay-core/src/modes/InspectorAdapter.ts) surfaces them automatically in both tooltip `Layout:` and copied `Layout Constraints` without adding new config keys or noisy clipping heuristics.
 
-- [ ] 1. **[MODIFY]** [`inspector.ts`](file:///d:/Projects/HoverSource/packages/overlay-core/src/inspector.ts) — Populate conditional scroll/gutter entries in `inspectLayoutConstraints`
+- [x] 1. **[MODIFY]** [`inspector.ts`](file:///d:/Projects/HoverSource/packages/overlay-core/src/inspector.ts) — Populate conditional scroll/gutter entries in `inspectLayoutConstraints`
   - Keep all existing constraint keys (`position`, `flex-grow`, `align-self`, `grid-column`, `display`) untouched.
   - Read `computed.overflowX`, `computed.overflowY`, and `computed.scrollbarGutter`, plus safe finite numeric reads of `element.clientWidth`, `element.clientHeight`, `element.scrollWidth`, `element.scrollHeight`, `element.offsetWidth`, and `element.offsetHeight` (skipping scroll geometry gracefully when DOM size fields are undefined, as in lightweight unit-test mocks).
   - Detect scroll relevance using exact guard conditions:
@@ -27,7 +27,7 @@ Collect concise own-element scroll and gutter diagnostics inside `inspectLayoutC
     - `scrollbar-gutter`: when `computed.scrollbarGutter` is present and `!== "auto"`.
     - `client-size` and `scroll-size` (formatted `${w}x${h}`): ONLY when `hasGeometry` AND (`overflowX` is `auto`/`scroll` OR `overflowY` is `auto`/`scroll` OR `hasVerticalOverflow` OR `hasHorizontalOverflow`).
     - `scrollbar-width` (formatted `${vTrack}px` or `${vTrack}px x ${hTrack}px` when non-zero): ONLY when `hasGeometry` AND `overflowY`/`overflowX` allows scrollbars (`auto`/`scroll`) and `Math.max(0, offsetWidth - clientWidth)` or `Math.max(0, offsetHeight - clientHeight)` > `0` (accounting for border width if needed via `borderLeftWidth`/`borderRightWidth` or reporting raw track delta `offsetWidth - clientWidth - borderX` when positive; keep simple and safe: subtract parsed `borderLeftWidth + borderRightWidth` / `borderTopWidth + borderBottomWidth` so a `1px` border is never mistaken for a `2px` scrollbar).
-- [ ] 2. **[MODIFY]** [`inspector.test.ts`](file:///d:/Projects/HoverSource/packages/overlay-core/src/inspector.test.ts) and [`InspectorAdapter.test.ts`](file:///d:/Projects/HoverSource/packages/overlay-core/src/modes/InspectorAdapter.test.ts) — Verify scroll/gutter metrics and zero-noise default
+- [x] 2. **[MODIFY]** [`inspector.test.ts`](file:///d:/Projects/HoverSource/packages/overlay-core/src/inspector.test.ts) and [`InspectorAdapter.test.ts`](file:///d:/Projects/HoverSource/packages/overlay-core/src/modes/InspectorAdapter.test.ts) — Verify scroll/gutter metrics and zero-noise default
   - Keep all existing tests intact.
   - Add tests verifying:
     - Standard non-scrolling elements (`overflow-x: visible`, `overflow-y: visible`, `scrollbar-gutter: auto`, `scrollHeight === clientHeight`) produce zero scroll keys in `layoutConstraints`.
@@ -35,11 +35,11 @@ Collect concise own-element scroll and gutter diagnostics inside `inspectLayoutC
     - `InspectorAdapter.formatElementMetadata` renders these entries under `* **Layout Constraints**:` when `layoutConstraints` filter is enabled and hides them when `layoutConstraints: false`.
 
 ## Acceptance Criteria
-- [ ] Non-scrolling, non-overflowing elements emit zero new entries in `layoutConstraints`.
-- [ ] Elements with `overflow` (`auto`/`scroll`/`hidden`/`clip`), non-`auto` `scrollbar-gutter`, or `scrollSize > clientSize + 1` surface concise metrics inside `layoutConstraints`.
-- [ ] Element borders (`borderLeftWidth` + `borderRightWidth`) do not cause false-positive `scrollbar-width` entries.
-- [ ] Mock elements lacking `clientWidth`/`scrollWidth` (existing unit test mocks) do not throw or emit `NaNxNaN`.
-- [ ] Execute automated verification command: `pnpm --filter @hoversource/overlay-core build && pnpm test`.
+- [x] Non-scrolling, non-overflowing elements emit zero new entries in `layoutConstraints`.
+- [x] Elements with `overflow` (`auto`/`scroll`/`hidden`/`clip`), non-`auto` `scrollbar-gutter`, or `scrollSize > clientSize + 1` surface concise metrics inside `layoutConstraints`.
+- [x] Element borders (`borderLeftWidth` + `borderRightWidth`) do not cause false-positive `scrollbar-width` entries.
+- [x] Mock elements lacking `clientWidth`/`scrollWidth` (existing unit test mocks) do not throw or emit `NaNxNaN`.
+- [x] Execute automated verification command: `pnpm --filter @hoversource/overlay-core build && pnpm test`.
 
 ## Verification Command
 ```bash

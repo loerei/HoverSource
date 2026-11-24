@@ -1,8 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { resolveFilePath, verifyAndCorrectSourceLocation } from "../sourceLocation.js";
+import {
+  resolveFilePath,
+  validateSourceLocation,
+  verifyAndCorrectSourceLocation,
+} from "../sourceLocation.js";
 
 describe("resolveFilePath", () => {
   let tempRoot: string;
@@ -97,6 +101,28 @@ describe("resolveFilePath", () => {
       appTarget
     );
   });
+
+  it("strips ?query/#hash and normalizes Vite /@fs/ prefixes on Windows and POSIX paths", () => {
+    const target = path.join(tempRoot, "src", "SaveEditorContent.tsx");
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, "export function SaveEditorContent() {}", "utf-8");
+
+    expect(
+      resolveFilePath("http://localhost:5173/src/SaveEditorContent.tsx?t=170000#body", tempRoot)
+    ).toBe(target);
+    expect(resolveFilePath("/@fs/D:/Projects/App.tsx?v=abc123", tempRoot)).toBe(
+      "D:/Projects/App.tsx"
+    );
+    expect(resolveFilePath("http://localhost:5173/@fs/D:/Projects/App.tsx?t=123", tempRoot)).toBe(
+      "D:/Projects/App.tsx"
+    );
+    expect(resolveFilePath("/@fs/Users/dev/App.tsx?t=123", tempRoot)).toBe(
+      "/Users/dev/App.tsx"
+    );
+    expect(resolveFilePath("http://localhost:5173/@fs/Users/dev/App.tsx?v=99", tempRoot)).toBe(
+      "/Users/dev/App.tsx"
+    );
+  });
 });
 
 describe("verifyAndCorrectSourceLocation", () => {
@@ -175,5 +201,100 @@ describe("verifyAndCorrectSourceLocation", () => {
     expect(
       verifyAndCorrectSourceLocation(missingFile, 12, 4, "div", ["foo"])
     ).toEqual({ line: 12, column: 4 });
+  });
+});
+
+describe("validateSourceLocation", () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hoversource-validate-loc-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it("uses sourcemap coordinates when available for loopback HTTP URLs", async () => {
+    const target = path.join(tempRoot, "src", "SaveEditor.tsx");
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(
+      target,
+      [
+        "export function SaveEditor() {",
+        "  return (",
+        '    <div className="editor-root">',
+        "      <button>Save</button>",
+        "    </div>",
+        "  );",
+        "}",
+      ].join("\n"),
+      "utf-8"
+    );
+
+    // Line 12 col 1 -> original line 4 col 7 (AAGM = [0, 0, +3 (line 4), +6 (col 7)])
+    const rawMap = {
+      version: 3,
+      sources: ["SaveEditor.tsx"],
+      mappings: ";;;;;;;;;;;AAGM",
+    };
+    const b64 = Buffer.from(JSON.stringify(rawMap), "utf-8").toString("base64");
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        `${"\n".repeat(11)}    jsx("button", {});\n//# sourceMappingURL=data:application/json;base64,${b64}`,
+        { status: 200 }
+      )
+    );
+
+    const result = await validateSourceLocation(
+      "http://localhost:5173/src/SaveEditor.tsx?t=999",
+      tempRoot,
+      12,
+      1,
+      "button",
+      [],
+      { fetchImpl: fetchMock }
+    );
+
+    expect(result).toEqual({
+      line: 4,
+      column: 7,
+      correctedFile: target,
+    });
+  });
+
+  it("falls back to verifyAndCorrectSourceLocation when dev server is unreachable or unmapped", async () => {
+    const target = path.join(tempRoot, "src", "Panel.tsx");
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(
+      target,
+      [
+        "export function Panel() {",
+        '  return <section className="panel-body">Hello</section>;',
+        "}",
+      ].join("\n"),
+      "utf-8"
+    );
+
+    const failingFetch = vi.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    });
+
+    const result = await validateSourceLocation(
+      "http://localhost:5173/src/Panel.tsx?t=1",
+      tempRoot,
+      10,
+      1,
+      "section",
+      ["panel-body"],
+      { fetchImpl: failingFetch }
+    );
+
+    const expectedCol = '  return <section className="panel-body">Hello</section>;'.indexOf("panel-body") + 1;
+    expect(result).toEqual({
+      line: 2,
+      column: expectedCol,
+      correctedFile: target,
+    });
   });
 });

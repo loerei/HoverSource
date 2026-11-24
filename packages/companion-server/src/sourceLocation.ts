@@ -1,5 +1,37 @@
 import path from "node:path";
 import fs from "node:fs";
+import { isLoopbackHttpUrl, resolveSourceMapFromDevUrl } from "./sourceMap.js";
+
+function stripQueryAndHash(value: string): string {
+  const queryIdx = value.indexOf("?");
+  const hashIdx = value.indexOf("#");
+
+  let cutIdx = -1;
+  if (queryIdx !== -1 && hashIdx !== -1) {
+    cutIdx = Math.min(queryIdx, hashIdx);
+  } else if (queryIdx !== -1) {
+    cutIdx = queryIdx;
+  } else if (hashIdx !== -1) {
+    cutIdx = hashIdx;
+  }
+
+  return cutIdx === -1 ? value : value.slice(0, cutIdx);
+}
+
+function stripViteFsPrefix(pathname: string): string {
+  let afterFs = pathname.slice("/@fs/".length);
+  try {
+    afterFs = decodeURIComponent(afterFs);
+  } catch {}
+
+  if (/^\/[a-zA-Z]:/.test(afterFs)) {
+    return afterFs.slice(1);
+  }
+  if (/^[a-zA-Z]:/.test(afterFs) || afterFs.startsWith("/")) {
+    return afterFs;
+  }
+  return "/" + afterFs;
+}
 
 // Escape special regex characters to prevent ReDoS
 function escapeRegExp(str: string): string {
@@ -84,9 +116,48 @@ function tryMonorepoPath(projectRoot: string, cleanFile: string): string | undef
 
 // Resolve a file param (possibly relative) to an absolute path
 export function resolveFilePath(fileParam: string, projectRoot: string): string {
-  if (path.isAbsolute(fileParam)) return fileParam;
+  const cleanedInput = stripQueryAndHash(fileParam.trim());
 
-  let cleanFile = fileParam;
+  if (/^https?:\/\//i.test(cleanedInput)) {
+    try {
+      const parsed = new URL(cleanedInput);
+      let pathname = stripQueryAndHash(parsed.pathname);
+      try {
+        pathname = decodeURIComponent(pathname);
+      } catch {}
+
+      if (pathname.startsWith("/@fs/")) {
+        const fsPath = stripViteFsPrefix(pathname);
+        if (path.isAbsolute(fsPath) || /^[a-zA-Z]:[\\/]/.test(fsPath)) {
+          return fsPath;
+        }
+      }
+
+      const relFromUrl = pathname.replace(/^\/+/, "");
+      return (
+        tryDirectPath(projectRoot, relFromUrl) ??
+        trySrcPath(projectRoot, relFromUrl) ??
+        trySymlinkPath(projectRoot, relFromUrl) ??
+        tryMonorepoPath(projectRoot, relFromUrl) ??
+        path.resolve(projectRoot, relFromUrl)
+      );
+    } catch {
+      // Fall through to relative path normalization if URL parsing fails
+    }
+  }
+
+  if (cleanedInput.startsWith("/@fs/")) {
+    const fsPath = stripViteFsPrefix(cleanedInput);
+    if (path.isAbsolute(fsPath) || /^[a-zA-Z]:[\\/]/.test(fsPath)) {
+      return fsPath;
+    }
+  }
+
+  if (path.isAbsolute(cleanedInput) || /^[a-zA-Z]:[\\/]/.test(cleanedInput)) {
+    return cleanedInput;
+  }
+
+  let cleanFile = cleanedInput;
   if (cleanFile.startsWith("[project]/")) {
     cleanFile = cleanFile.substring("[project]/".length);
   }
@@ -213,4 +284,81 @@ export function verifyAndCorrectSourceLocation(
   }
 
   return { line, column: col };
+}
+
+function isSameBasename(sourcePath: string, targetPath: string): boolean {
+  const cleanSource = stripQueryAndHash(sourcePath).replaceAll("\\", "/");
+  const cleanTarget = targetPath.replaceAll("\\", "/");
+  const srcBase = path.posix.basename(cleanSource);
+  const tgtBase = path.posix.basename(cleanTarget);
+  if (!srcBase || !tgtBase) {
+    return false;
+  }
+  return process.platform === "win32"
+    ? srcBase.toLowerCase() === tgtBase.toLowerCase()
+    : srcBase === tgtBase;
+}
+
+export interface ValidateSourceLocationOptions {
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+}
+
+export async function validateSourceLocation(
+  fileParam: string,
+  projectRoot: string,
+  line: number,
+  col: number,
+  tagName?: string,
+  classes?: string[],
+  options?: ValidateSourceLocationOptions
+): Promise<{ line: number; column: number; correctedFile: string }> {
+  const absolutePath = resolveFilePath(fileParam, projectRoot);
+
+  if (isLoopbackHttpUrl(fileParam)) {
+    const mapped = await resolveSourceMapFromDevUrl(fileParam, line, col, options);
+    if (mapped && mapped.line >= 1) {
+      if (!mapped.source || isSameBasename(mapped.source, absolutePath)) {
+        return {
+          line: mapped.line,
+          column: mapped.column,
+          correctedFile: absolutePath,
+        };
+      }
+
+      const candidateFromRoot = resolveFilePath(mapped.source, projectRoot);
+      if (fs.existsSync(candidateFromRoot)) {
+        return {
+          line: mapped.line,
+          column: mapped.column,
+          correctedFile: candidateFromRoot,
+        };
+      }
+
+      const candidateRelative = path.resolve(
+        path.dirname(absolutePath),
+        stripQueryAndHash(mapped.source)
+      );
+      if (fs.existsSync(candidateRelative)) {
+        return {
+          line: mapped.line,
+          column: mapped.column,
+          correctedFile: candidateRelative,
+        };
+      }
+    }
+  }
+
+  const corrected = verifyAndCorrectSourceLocation(
+    absolutePath,
+    line,
+    col,
+    tagName,
+    classes
+  );
+  return {
+    line: corrected.line,
+    column: corrected.column,
+    correctedFile: absolutePath,
+  };
 }

@@ -1,4 +1,8 @@
-import { parseV8StackLine } from "@hoversource/source-resolver";
+import {
+  isBundlerOrRuntimeFrame,
+  parseV8StackLine,
+  stripQueryAndHash,
+} from "@hoversource/source-resolver";
 
 export function setupVanillaMonkeyPatch() {
   if (typeof document === "undefined") return;
@@ -64,11 +68,21 @@ function captureSourceLocation(): string | null {
   for (const line of lines) {
     if (!line.includes("at ")) continue;
 
-    // Skip our own overlay/patch frames
-    if (isOverlayFrame(line)) continue;
+    // Skip our own overlay/patch frames and bundler/runtime internals
+    if (isOverlayFrame(line) || isBundlerOrRuntimeFrame(line)) continue;
 
     const parsed = parseV8StackLine(line);
-    if (parsed) return `${parsed.fileName}:${parsed.lineNumber}:${parsed.columnNumber}`;
+    if (parsed) {
+      const cleanFile = stripQueryAndHash(parsed.fileName);
+      if (
+        !cleanFile ||
+        cleanFile === "<anonymous>" ||
+        isBundlerOrRuntimeFrame(cleanFile)
+      ) {
+        continue;
+      }
+      return `${cleanFile}:${parsed.lineNumber}:${parsed.columnNumber}`;
+    }
   }
   return null;
 }

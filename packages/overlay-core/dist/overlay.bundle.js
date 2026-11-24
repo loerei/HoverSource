@@ -43,7 +43,181 @@
     return null;
   }
 
+  // ../source-resolver/dist/adapters/stackFrame.js
+  var BUNDLER_OR_RUNTIME_FRAME_PATTERNS = [
+    "hoversource-overlay.js",
+    "overlay.bundle.js",
+    "captureSourceLocation",
+    "setupVanillaMonkeyPatch",
+    "node_modules/",
+    ".vite/deps/",
+    "react-dom",
+    "react_jsx-dev-runtime",
+    "react-jsx-dev-runtime",
+    "react_stack_bottom_frame",
+    "node:internal"
+  ];
+  function stripQueryAndHash(urlOrPath) {
+    const queryIdx = urlOrPath.indexOf("?");
+    const hashIdx = urlOrPath.indexOf("#");
+    let cutIdx = -1;
+    if (queryIdx !== -1 && hashIdx !== -1) {
+      cutIdx = Math.min(queryIdx, hashIdx);
+    } else if (queryIdx !== -1) {
+      cutIdx = queryIdx;
+    } else if (hashIdx !== -1) {
+      cutIdx = hashIdx;
+    }
+    return cutIdx === -1 ? urlOrPath : urlOrPath.slice(0, cutIdx);
+  }
+  function stripViteFsPrefix(pathname) {
+    const afterFs = pathname.slice("/@fs/".length);
+    if (/^[a-zA-Z]:/.test(afterFs) || afterFs.startsWith("/")) {
+      return afterFs;
+    }
+    return "/" + afterFs;
+  }
+  function normalizeFileUrl(rawUrl) {
+    const cleaned = stripQueryAndHash(rawUrl);
+    let filePath;
+    if (cleaned.startsWith("file://localhost/")) {
+      filePath = cleaned.slice("file://localhost".length);
+    } else {
+      filePath = cleaned.replace(/^file:\/\/\/?/, "");
+    }
+    if (/^\/[a-zA-Z]:/.test(filePath)) {
+      filePath = filePath.slice(1);
+    } else if (!/^[a-zA-Z]:/.test(filePath) && !filePath.startsWith("/")) {
+      filePath = "/" + filePath;
+    }
+    try {
+      return decodeURIComponent(filePath);
+    } catch {
+      return filePath;
+    }
+  }
+  function normalizeStackPath(rawTarget, options = {}) {
+    const trimmed = rawTarget.trim();
+    if (trimmed.startsWith("file://")) {
+      return {
+        fileName: normalizeFileUrl(trimmed),
+        isHttpUrl: false,
+        hadViteFsPrefix: false
+      };
+    }
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      try {
+        const url = new URL(trimmed);
+        const pathname = stripQueryAndHash(url.pathname);
+        const hadViteFsPrefix2 = pathname.startsWith("/@fs/");
+        let fileName;
+        if (hadViteFsPrefix2) {
+          fileName = stripViteFsPrefix(pathname);
+        } else if (options.preserveHttpOrigin) {
+          fileName = `${url.origin}${pathname}`;
+        } else {
+          fileName = pathname;
+        }
+        return {
+          fileName,
+          isHttpUrl: true,
+          hadViteFsPrefix: hadViteFsPrefix2
+        };
+      } catch {
+        return {
+          fileName: stripQueryAndHash(trimmed),
+          isHttpUrl: true,
+          hadViteFsPrefix: false
+        };
+      }
+    }
+    const cleaned = stripQueryAndHash(trimmed);
+    const hadViteFsPrefix = cleaned.startsWith("/@fs/");
+    return {
+      fileName: hadViteFsPrefix ? stripViteFsPrefix(cleaned) : cleaned,
+      isHttpUrl: false,
+      hadViteFsPrefix
+    };
+  }
+  function parseV8StackLine(line, options) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("at "))
+      return null;
+    const body = trimmed.slice(3).trim();
+    if (!body)
+      return null;
+    let functionName;
+    let rawLocation;
+    if (body.endsWith(")")) {
+      const sepIdx = body.indexOf(" (");
+      if (sepIdx !== -1) {
+        functionName = body.slice(0, sepIdx).trim() || void 0;
+        rawLocation = body.slice(sepIdx + 2, -1).trim();
+      } else if (body.startsWith("(")) {
+        rawLocation = body.slice(1, -1).trim();
+      } else {
+        rawLocation = body;
+      }
+    } else {
+      rawLocation = body;
+    }
+    const match = /^(.*):(\d+):(\d+)$/.exec(rawLocation);
+    if (!match)
+      return null;
+    const rawTarget = match[1].trim();
+    const lineNumber = Number.parseInt(match[2], 10);
+    const columnNumber = Number.parseInt(match[3], 10);
+    if (!rawTarget || !Number.isInteger(lineNumber) || !Number.isInteger(columnNumber) || lineNumber < 1 || columnNumber < 1) {
+      return null;
+    }
+    const { fileName } = normalizeStackPath(rawTarget, options);
+    if (!fileName)
+      return null;
+    return {
+      ...functionName ? { functionName } : {},
+      rawLocation,
+      fileName,
+      lineNumber,
+      columnNumber
+    };
+  }
+  function isBundlerOrRuntimeFrame(locationOrLine) {
+    const normalized = locationOrLine.replaceAll("\\", "/");
+    return BUNDLER_OR_RUNTIME_FRAME_PATTERNS.some((pattern) => normalized.includes(pattern));
+  }
+
   // ../source-resolver/dist/adapters/ReactFiberAdapter.js
+  function extractComponentNameFromType(type, depth = 0) {
+    if (!type || depth > 5)
+      return void 0;
+    if (typeof type === "function") {
+      return type.displayName || type.name || void 0;
+    }
+    if (typeof type === "object") {
+      if (typeof type.displayName === "string" && type.displayName) {
+        return type.displayName;
+      }
+      if (type.render) {
+        return extractComponentNameFromType(type.render, depth + 1);
+      }
+      if (type.type) {
+        return extractComponentNameFromType(type.type, depth + 1);
+      }
+      if (typeof type.name === "string" && type.name) {
+        return type.name;
+      }
+    }
+    return void 0;
+  }
+  function sanitizeStackFunctionName(functionName) {
+    if (!functionName)
+      return void 0;
+    const trimmed = functionName.trim();
+    if (!trimmed || trimmed === "Object" || trimmed === "<anonymous>" || trimmed.endsWith(".<anonymous>")) {
+      return void 0;
+    }
+    return trimmed;
+  }
   var ReactFiberAdapter = class {
     name = "react-fiber";
     getFiber(element) {
@@ -57,23 +231,64 @@
       return !!this.getFiber(element);
     }
     findComponentNameFromFiber(fiber) {
-      let owner = fiber._debugOwner;
-      while (owner) {
-        if (owner.type && typeof owner.type === "function") {
-          return owner.type.name || owner.type.displayName;
-        } else if (owner.type && typeof owner.type === "string") {
-          owner = owner._debugOwner;
-        } else if (owner.type && typeof owner.type === "object" && owner.type.render) {
-          return owner.type.render.name || owner.type.displayName;
+      let owner = fiber?._debugOwner;
+      const visitedOwners = /* @__PURE__ */ new Set();
+      while (owner && !visitedOwners.has(owner)) {
+        visitedOwners.add(owner);
+        if (typeof owner.tag === "number" || owner.type !== void 0) {
+          const name = extractComponentNameFromType(owner.type);
+          if (name)
+            return name;
+          owner = owner._debugOwner ?? owner.owner;
+        } else if (typeof owner.name === "string") {
+          if (owner.name)
+            return owner.name;
+          owner = owner.owner ?? owner._debugOwner;
         } else {
-          owner = owner._debugOwner;
+          owner = owner._debugOwner ?? owner.owner;
         }
+      }
+      const ownName = extractComponentNameFromType(fiber?.type);
+      if (ownName)
+        return ownName;
+      let current = fiber?.return;
+      const visitedFibers = /* @__PURE__ */ new Set();
+      while (current && !visitedFibers.has(current)) {
+        visitedFibers.add(current);
+        const name = extractComponentNameFromType(current.type);
+        if (name)
+          return name;
+        current = current.return;
       }
       return void 0;
     }
+    extractDebugStackLocation(debugStack) {
+      const stack = debugStack?.stack;
+      if (typeof stack !== "string")
+        return null;
+      for (const line of stack.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("Error:") || !trimmed.startsWith("at ")) {
+          continue;
+        }
+        if (isBundlerOrRuntimeFrame(trimmed)) {
+          continue;
+        }
+        const parsed = parseV8StackLine(trimmed, { preserveHttpOrigin: true });
+        if (parsed && parsed.fileName !== "<anonymous>") {
+          return parsed;
+        }
+      }
+      return null;
+    }
     resolve(element) {
-      let fiber = this.getFiber(element);
-      while (fiber) {
+      const startFiber = this.getFiber(element);
+      if (!startFiber)
+        return null;
+      let fiber = startFiber;
+      const visited = /* @__PURE__ */ new Set();
+      while (fiber && !visited.has(fiber)) {
+        visited.add(fiber);
         const source = fiber._debugSource;
         if (source) {
           const componentName = this.findComponentNameFromFiber(fiber);
@@ -81,12 +296,35 @@
             fileName: source.fileName,
             lineNumber: source.lineNumber,
             columnNumber: source.columnNumber,
-            componentName: componentName || (typeof fiber.type === "function" ? fiber.type.name : void 0),
+            componentName,
+            framework: "React",
+            ...getElementMetadata(element)
+          };
+        }
+        const stackFrame = this.extractDebugStackLocation(fiber._debugStack);
+        if (stackFrame) {
+          const componentName = this.findComponentNameFromFiber(fiber) || sanitizeStackFunctionName(stackFrame.functionName);
+          return {
+            fileName: stackFrame.fileName,
+            lineNumber: stackFrame.lineNumber,
+            columnNumber: stackFrame.columnNumber,
+            componentName,
             framework: "React",
             ...getElementMetadata(element)
           };
         }
         fiber = fiber.return;
+      }
+      const fallbackComponentName = this.findComponentNameFromFiber(startFiber);
+      if (fallbackComponentName) {
+        return {
+          fileName: "",
+          lineNumber: 0,
+          columnNumber: 0,
+          componentName: fallbackComponentName,
+          framework: "React",
+          ...getElementMetadata(element)
+        };
       }
       return null;
     }
@@ -534,132 +772,6 @@
     }
   };
 
-  // ../source-resolver/dist/adapters/stackFrame.js
-  function stripQueryAndHash(urlOrPath) {
-    const queryIdx = urlOrPath.indexOf("?");
-    const hashIdx = urlOrPath.indexOf("#");
-    let cutIdx = -1;
-    if (queryIdx !== -1 && hashIdx !== -1) {
-      cutIdx = Math.min(queryIdx, hashIdx);
-    } else if (queryIdx !== -1) {
-      cutIdx = queryIdx;
-    } else if (hashIdx !== -1) {
-      cutIdx = hashIdx;
-    }
-    return cutIdx === -1 ? urlOrPath : urlOrPath.slice(0, cutIdx);
-  }
-  function stripViteFsPrefix(pathname) {
-    const afterFs = pathname.slice("/@fs/".length);
-    if (/^[a-zA-Z]:/.test(afterFs) || afterFs.startsWith("/")) {
-      return afterFs;
-    }
-    return "/" + afterFs;
-  }
-  function normalizeFileUrl(rawUrl) {
-    const cleaned = stripQueryAndHash(rawUrl);
-    let filePath;
-    if (cleaned.startsWith("file://localhost/")) {
-      filePath = cleaned.slice("file://localhost".length);
-    } else {
-      filePath = cleaned.replace(/^file:\/\/\/?/, "");
-    }
-    if (/^\/[a-zA-Z]:/.test(filePath)) {
-      filePath = filePath.slice(1);
-    } else if (!/^[a-zA-Z]:/.test(filePath) && !filePath.startsWith("/")) {
-      filePath = "/" + filePath;
-    }
-    try {
-      return decodeURIComponent(filePath);
-    } catch {
-      return filePath;
-    }
-  }
-  function normalizeStackPath(rawTarget, options = {}) {
-    const trimmed = rawTarget.trim();
-    if (trimmed.startsWith("file://")) {
-      return {
-        fileName: normalizeFileUrl(trimmed),
-        isHttpUrl: false,
-        hadViteFsPrefix: false
-      };
-    }
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-      try {
-        const url = new URL(trimmed);
-        const pathname = stripQueryAndHash(url.pathname);
-        const hadViteFsPrefix2 = pathname.startsWith("/@fs/");
-        let fileName;
-        if (hadViteFsPrefix2) {
-          fileName = stripViteFsPrefix(pathname);
-        } else if (options.preserveHttpOrigin) {
-          fileName = `${url.origin}${pathname}`;
-        } else {
-          fileName = pathname;
-        }
-        return {
-          fileName,
-          isHttpUrl: true,
-          hadViteFsPrefix: hadViteFsPrefix2
-        };
-      } catch {
-        return {
-          fileName: stripQueryAndHash(trimmed),
-          isHttpUrl: true,
-          hadViteFsPrefix: false
-        };
-      }
-    }
-    const cleaned = stripQueryAndHash(trimmed);
-    const hadViteFsPrefix = cleaned.startsWith("/@fs/");
-    return {
-      fileName: hadViteFsPrefix ? stripViteFsPrefix(cleaned) : cleaned,
-      isHttpUrl: false,
-      hadViteFsPrefix
-    };
-  }
-  function parseV8StackLine(line, options) {
-    const trimmed = line.trim();
-    if (!trimmed.startsWith("at "))
-      return null;
-    const body = trimmed.slice(3).trim();
-    if (!body)
-      return null;
-    let functionName;
-    let rawLocation;
-    if (body.endsWith(")")) {
-      const sepIdx = body.indexOf(" (");
-      if (sepIdx !== -1) {
-        functionName = body.slice(0, sepIdx).trim() || void 0;
-        rawLocation = body.slice(sepIdx + 2, -1).trim();
-      } else if (body.startsWith("(")) {
-        rawLocation = body.slice(1, -1).trim();
-      } else {
-        rawLocation = body;
-      }
-    } else {
-      rawLocation = body;
-    }
-    const match = /^(.*):(\d+):(\d+)$/.exec(rawLocation);
-    if (!match)
-      return null;
-    const rawTarget = match[1].trim();
-    const lineNumber = Number.parseInt(match[2], 10);
-    const columnNumber = Number.parseInt(match[3], 10);
-    if (!rawTarget || !Number.isInteger(lineNumber) || !Number.isInteger(columnNumber) || lineNumber < 1 || columnNumber < 1) {
-      return null;
-    }
-    const { fileName } = normalizeStackPath(rawTarget, options);
-    if (!fileName)
-      return null;
-    return {
-      ...functionName ? { functionName } : {},
-      rawLocation,
-      fileName,
-      lineNumber,
-      columnNumber
-    };
-  }
-
   // ../source-resolver/dist/index.js
   var SourceResolver = class {
     adapters = [];
@@ -814,11 +926,16 @@
     for (const line of lines) {
       if (!line.includes("at "))
         continue;
-      if (isOverlayFrame(line))
+      if (isOverlayFrame(line) || isBundlerOrRuntimeFrame(line))
         continue;
       const parsed = parseV8StackLine(line);
-      if (parsed)
-        return `${parsed.fileName}:${parsed.lineNumber}:${parsed.columnNumber}`;
+      if (parsed) {
+        const cleanFile = stripQueryAndHash(parsed.fileName);
+        if (!cleanFile || cleanFile === "<anonymous>" || isBundlerOrRuntimeFrame(cleanFile)) {
+          continue;
+        }
+        return `${cleanFile}:${parsed.lineNumber}:${parsed.columnNumber}`;
+      }
     }
     return null;
   }

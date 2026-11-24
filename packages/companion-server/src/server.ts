@@ -7,7 +7,11 @@ import { fileURLToPath } from "node:url";
 import { broadcastToTargets } from "@hoversource/client-injector";
 import { StaticContextResolver, StaticHtmlEntry } from "./staticResolver.js";
 export { StaticContextResolver, StaticHtmlEntry } from "./staticResolver.js";
-import { resolveFilePath, verifyAndCorrectSourceLocation } from "./sourceLocation.js";
+import {
+  resolveFilePath,
+  validateSourceLocation,
+  verifyAndCorrectSourceLocation,
+} from "./sourceLocation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -554,7 +558,12 @@ function parseLocationParams(url: URL, projectRoot: string): RequestLocationPara
   };
 }
 
-function handleValidateLine(req: http.IncomingMessage, res: http.ServerResponse, url: URL, config: ServerConfig) {
+async function handleValidateLine(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  config: ServerConfig
+): Promise<void> {
   const params = parseLocationParams(url, config.projectRoot);
   if (!params) {
     res.writeHead(400, { "Content-Type": "application/json" });
@@ -562,16 +571,21 @@ function handleValidateLine(req: http.IncomingMessage, res: http.ServerResponse,
     return;
   }
 
-  const { absolutePath, lineVal, colVal, tagNameParam, classList } = params;
-  const corrected = verifyAndCorrectSourceLocation(absolutePath, lineVal, colVal, tagNameParam, classList);
-
-  let displayPath = absolutePath;
+  const { fileParam, lineVal, colVal, tagNameParam, classList } = params;
+  const result = await validateSourceLocation(
+    fileParam,
+    config.projectRoot,
+    lineVal,
+    colVal,
+    tagNameParam,
+    classList
+  );
 
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({
     original: { line: lineVal, column: colVal },
-    corrected: { line: corrected.line, column: corrected.column },
-    correctedFile: displayPath
+    corrected: { line: result.line, column: result.column },
+    correctedFile: result.correctedFile
   }));
 }
 
@@ -745,7 +759,16 @@ function routeRequest(
     return;
   }
   if (path === "/validate-line" && method === "GET") {
-    handleValidateLine(req, res, url, config);
+    handleValidateLine(req, res, url, config).catch((err: any) => {
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: `Line validation failed: ${err?.message || String(err)}`,
+          })
+        );
+      }
+    });
     return;
   }
   if (path === "/resolve-html-element" && method === "GET") {

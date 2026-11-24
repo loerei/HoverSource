@@ -207,3 +207,84 @@ describe("Companion Server /validate-line route", () => {
     expect(fallbackData.correctedFile).toBe(fallbackFile);
   });
 });
+
+describe("Companion Server /config and /reload-config routes", () => {
+  let tempDir: string;
+  let server: http.Server;
+  let testPort: number;
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hoversource-cfg-srv-"));
+    server = startCompanionServer({
+      port: 0,
+      projectRoot: tempDir,
+      debugPort: 9222,
+    });
+    await new Promise<void>((resolve) => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once("listening", resolve);
+      }
+    });
+    testPort = (server.address() as { port: number }).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch {}
+        resolve();
+      });
+    });
+  });
+
+  it("returns 400 JSON when POST /config receives invalid config fields or bounds", async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { theme: "invalid-theme", maxTraversalDepth: 5 },
+      }),
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBeTruthy();
+    expect(fs.existsSync(path.join(tempDir, ".hoversourcerc"))).toBe(false);
+  });
+
+  it("persists valid local config delta via POST /config and reloads on POST /reload-config", async () => {
+    const postRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { theme: "light", maxTraversalDepth: 40 },
+      }),
+    });
+    expect(postRes.status).toBe(200);
+    const postData = await postRes.json();
+    expect(postData.success).toBe(true);
+    expect(postData.config.theme).toBe("light");
+    expect(postData.config.maxTraversalDepth).toBe(40);
+
+    // Externally update local config on disk, then trigger POST /reload-config
+    fs.writeFileSync(
+      path.join(tempDir, ".hoversourcerc"),
+      JSON.stringify({ theme: "system", maxTraversalDepth: 64 }),
+      "utf-8"
+    );
+
+    const reloadRes = await fetch(`http://127.0.0.1:${testPort}/reload-config`, {
+      method: "POST",
+    });
+    expect(reloadRes.status).toBe(200);
+    const reloadData = await reloadRes.json();
+    expect(reloadData.success).toBe(true);
+    expect(reloadData.config.theme).toBe("system");
+    expect(reloadData.config.maxTraversalDepth).toBe(64);
+  });
+});

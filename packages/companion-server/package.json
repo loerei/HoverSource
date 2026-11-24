@@ -4,6 +4,12 @@
   "type": "module",
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
+    }
+  },
   "publishConfig": {
     "access": "public"
   },

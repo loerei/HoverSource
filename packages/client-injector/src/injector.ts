@@ -44,6 +44,14 @@ function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
 
       ws.send(JSON.stringify({
         id: 2,
+        method: "Page.setBypassCSP",
+        params: {
+          enabled: true
+        }
+      }));
+
+      ws.send(JSON.stringify({
+        id: 3,
         method: "Page.addScriptToEvaluateOnNewDocument",
         params: {
           source: scriptContent
@@ -51,7 +59,7 @@ function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
       }));
 
       ws.send(JSON.stringify({
-        id: 3,
+        id: 4,
         method: "Runtime.evaluate",
         params: {
           expression: scriptContent,
@@ -71,7 +79,7 @@ function injectIntoTarget(wsUrl: string, scriptContent: string): Promise<void> {
           return;
         }
 
-        if (msg.id === 3) {
+        if (msg.id === 4) {
           resolve();
           ws.close();
         }

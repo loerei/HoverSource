@@ -18,8 +18,8 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "@hoversource/companion-server": "*",
-    "@hoversource/client-injector": "*"
+    "@hoversource/companion-server": "workspace:*",
+    "@hoversource/client-injector": "workspace:*"
   },
   "devDependencies": {
     "vitest": "^4.1.8"

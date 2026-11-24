@@ -11,8 +11,13 @@ interface TooltipLabels {
   modeLabel: string;
 }
 
-function getCompanionPort(): number {
-  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
+function getCompanionBaseUrl(): string {
+  const isProxy = (globalThis as any).__HOVERSOURCE_PROXY__ === true;
+  if (isProxy) {
+    return "/hoversource";
+  }
+  const port = (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
+  return `http://127.0.0.1:${port}`;
 }
 
 export class InspectorAdapter implements InteractionMode {
@@ -231,7 +236,7 @@ export class InspectorAdapter implements InteractionMode {
     const info = this.resolver.resolve(target) || {
       componentName: target.tagName.toLowerCase(),
       tagName: target.tagName.toLowerCase(),
-      framework: "Unknown",
+      framework: "Vanilla",
       fileName: "",
       lineNumber: 0,
       columnNumber: 0,
@@ -248,11 +253,13 @@ export class InspectorAdapter implements InteractionMode {
 
     if (info.fileName) {
       this.fetchBackgroundValidation(info, target, event);
+    } else {
+      this.fetchStaticHtmlResolution(info, target, event);
     }
   }
 
   private fetchBackgroundValidation(info: any, target: HTMLElement, e: PointerEvent) {
-    const validateUrl = `http://127.0.0.1:${getCompanionPort()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
+    const validateUrl = `${getCompanionBaseUrl()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
     
     fetch(validateUrl)
       .then(res => res.json())
@@ -283,7 +290,7 @@ export class InspectorAdapter implements InteractionMode {
           }
           const classListParam = Array.from(classesToResolve).join(",");
 
-          const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+          const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
           
           fetch(staticContextUrl)
             .then(res => res.json())
@@ -300,6 +307,73 @@ export class InspectorAdapter implements InteractionMode {
         }
       })
       .catch(err => console.warn("[HoverSource] Background line validation failed:", err));
+  }
+
+  private fetchStaticHtmlResolution(info: any, target: HTMLElement, e: PointerEvent) {
+    const tagName = info.tagName || target.tagName.toLowerCase();
+    const id = target.id || "";
+    const classList = (info.classList || []).join(",");
+
+    const attrs: Record<string, string> = {};
+    if (target.attributes) {
+      for (let i = 0; i < target.attributes.length; i++) {
+        const attr = target.attributes[i];
+        if (attr.name !== "id" && attr.name !== "class" && !attr.name.startsWith("data-hs-")) {
+          attrs[attr.name] = attr.value;
+        }
+      }
+    }
+
+    const queryParams = new URLSearchParams({
+      tagName,
+      id,
+      classList,
+      attributes: JSON.stringify(attrs)
+    });
+
+    const resolveUrl = `${getCompanionBaseUrl()}/resolve-html-element?${queryParams.toString()}`;
+
+    fetch(resolveUrl)
+      .then(res => res.json())
+      .then(data => {
+        if (this.currentElement === target && data?.success && data?.fileName) {
+          info.fileName = data.fileName;
+          info.lineNumber = data.lineNumber;
+          info.columnNumber = data.columnNumber;
+          info.framework = data.framework || "Vanilla";
+
+          if (this.controller.isUIVisible()) {
+            this.renderTooltip(e);
+          }
+
+          const classesToResolve = new Set<string>();
+          if (info.visualContext) {
+            info.visualContext.parentEffects.forEach((fx: ParentVisualEffect) => {
+              fx.classList.forEach(cls => classesToResolve.add(cls));
+            });
+          }
+          if (info.classList) {
+            info.classList.forEach((cls: string) => classesToResolve.add(cls));
+          }
+          const classListParam = Array.from(classesToResolve).join(",");
+
+          const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber}&column=${info.columnNumber}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+
+          fetch(staticContextUrl)
+            .then(res => res.json())
+            .then(staticData => {
+              if (staticData && this.currentElement === target) {
+                info.staticMetadata = staticData;
+                this.currentSourceInfo = info;
+                if (this.controller.isUIVisible()) {
+                  this.renderTooltip(e);
+                }
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
   }
 
   private getShortcutLabel(shortcut: any): string {

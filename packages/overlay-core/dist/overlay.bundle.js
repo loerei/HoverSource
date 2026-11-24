@@ -806,8 +806,13 @@
   }
 
   // src/modes/InspectorAdapter.ts
-  function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
+  function getCompanionBaseUrl() {
+    const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
+    if (isProxy) {
+      return "/hoversource";
+    }
+    const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
+    return `http://127.0.0.1:${port}`;
   }
   var InspectorAdapter = class {
     id = "inspector";
@@ -1000,7 +1005,7 @@
       const info = this.resolver.resolve(target) || {
         componentName: target.tagName.toLowerCase(),
         tagName: target.tagName.toLowerCase(),
-        framework: "Unknown",
+        framework: "Vanilla",
         fileName: "",
         lineNumber: 0,
         columnNumber: 0,
@@ -1015,10 +1020,12 @@
       }
       if (info.fileName) {
         this.fetchBackgroundValidation(info, target, event);
+      } else {
+        this.fetchStaticHtmlResolution(info, target, event);
       }
     }
     fetchBackgroundValidation(info, target, e) {
-      const validateUrl = `http://127.0.0.1:${getCompanionPort()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
+      const validateUrl = `${getCompanionBaseUrl()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
       fetch(validateUrl).then((res) => res.json()).then((data) => {
         if (this.currentElement === target) {
           let line = info.lineNumber || 1;
@@ -1042,7 +1049,7 @@
             info.classList.forEach((cls) => classesToResolve.add(cls));
           }
           const classListParam = Array.from(classesToResolve).join(",");
-          const staticContextUrl = `http://127.0.0.1:${getCompanionPort()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+          const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
           fetch(staticContextUrl).then((res) => res.json()).then((staticData) => {
             if (staticData && this.currentElement === target) {
               info.staticMetadata = staticData;
@@ -1054,6 +1061,60 @@
           }).catch((err) => console.warn("[HoverSource] Static context fetch failed:", err));
         }
       }).catch((err) => console.warn("[HoverSource] Background line validation failed:", err));
+    }
+    fetchStaticHtmlResolution(info, target, e) {
+      const tagName = info.tagName || target.tagName.toLowerCase();
+      const id = target.id || "";
+      const classList = (info.classList || []).join(",");
+      const attrs = {};
+      if (target.attributes) {
+        for (let i = 0; i < target.attributes.length; i++) {
+          const attr = target.attributes[i];
+          if (attr.name !== "id" && attr.name !== "class" && !attr.name.startsWith("data-hs-")) {
+            attrs[attr.name] = attr.value;
+          }
+        }
+      }
+      const queryParams = new URLSearchParams({
+        tagName,
+        id,
+        classList,
+        attributes: JSON.stringify(attrs)
+      });
+      const resolveUrl = `${getCompanionBaseUrl()}/resolve-html-element?${queryParams.toString()}`;
+      fetch(resolveUrl).then((res) => res.json()).then((data) => {
+        if (this.currentElement === target && data?.success && data?.fileName) {
+          info.fileName = data.fileName;
+          info.lineNumber = data.lineNumber;
+          info.columnNumber = data.columnNumber;
+          info.framework = data.framework || "Vanilla";
+          if (this.controller.isUIVisible()) {
+            this.renderTooltip(e);
+          }
+          const classesToResolve = /* @__PURE__ */ new Set();
+          if (info.visualContext) {
+            info.visualContext.parentEffects.forEach((fx) => {
+              fx.classList.forEach((cls) => classesToResolve.add(cls));
+            });
+          }
+          if (info.classList) {
+            info.classList.forEach((cls) => classesToResolve.add(cls));
+          }
+          const classListParam = Array.from(classesToResolve).join(",");
+          const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber}&column=${info.columnNumber}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+          fetch(staticContextUrl).then((res) => res.json()).then((staticData) => {
+            if (staticData && this.currentElement === target) {
+              info.staticMetadata = staticData;
+              this.currentSourceInfo = info;
+              if (this.controller.isUIVisible()) {
+                this.renderTooltip(e);
+              }
+            }
+          }).catch(() => {
+          });
+        }
+      }).catch(() => {
+      });
     }
     getShortcutLabel(shortcut) {
       if (!shortcut)
@@ -2606,7 +2667,7 @@ The following is NOT resolved automatically and requires your judgment:
 
   // src/overlay.ts
   setupVanillaMonkeyPatch();
-  function getCompanionBaseUrl() {
+  function getCompanionBaseUrl2() {
     const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
     if (isProxy) {
       return "/hoversource";
@@ -2662,7 +2723,7 @@ The following is NOT resolved automatically and requires your judgment:
     }
     async loadConfig() {
       try {
-        const res = await fetch(`${getCompanionBaseUrl()}/config`);
+        const res = await fetch(`${getCompanionBaseUrl2()}/config`);
         const data = await res.json();
         this.config = data.config;
         console.log("[HoverSource] Configuration loaded from companion server:", this.config);
@@ -3315,7 +3376,7 @@ The following is NOT resolved automatically and requires your judgment:
       this.activeMode.activate(this);
     }
     openDashboardInBrowser() {
-      fetch(`${getCompanionBaseUrl()}/open-dashboard`).then((r) => r.json()).then((data) => {
+      fetch(`${getCompanionBaseUrl2()}/open-dashboard`).then((r) => r.json()).then((data) => {
         if (data.success) {
           console.log("[HoverSource] Triggered dashboard browser open.");
         } else {
@@ -3549,7 +3610,7 @@ The following is NOT resolved automatically and requires your judgment:
     }
     async saveConfig(newConfig) {
       try {
-        const res = await fetch(`${getCompanionBaseUrl()}/config`, {
+        const res = await fetch(`${getCompanionBaseUrl2()}/config`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -3607,7 +3668,7 @@ The following is NOT resolved automatically and requires your judgment:
     }
   };
   globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
-    let url = `${getCompanionBaseUrl()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
+    let url = `${getCompanionBaseUrl2()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
       url += `&tagName=${encodeURIComponent(tagName)}`;
     if (classList)

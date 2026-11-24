@@ -34,11 +34,11 @@ importers:
   packages/cli:
     dependencies:
       '@hoversource/client-injector':
-        specifier: '*'
-        version: 1.0.0
+        specifier: workspace:*
+        version: link:../client-injector
       '@hoversource/companion-server':
-        specifier: '*'
-        version: 1.0.0
+        specifier: workspace:*
+        version: link:../companion-server
     devDependencies:
       vitest:
         specifier: ^4.1.8
@@ -302,12 +302,6 @@ packages:
     engines: {node: '>=12'}
     cpu: [x64]
     os: [win32]
-
-  '@hoversource/client-injector@1.0.0':
-    resolution: {integrity: sha512-ALujlcDUG/GPNRi/bN6Xi2OJAmKXMwfgKUD5VHw954X/IoopxFc1YBfAd0CiFzZvA4ncfcYwDLuY+Vl9FKZhZg==}
-
-  '@hoversource/companion-server@1.0.0':
-    resolution: {integrity: sha512-B/fMQz4ZR+JpJiLmF/9M4f9j8ZW85Z6FQ4J5lZ/5YfRtY/xnWWBYrjQECA7+g3IpCrVT2fKPc2ZFG4cO8dmLfA==}
 
   '@hoversource/source-resolver@1.0.0':
     resolution: {integrity: sha512-PQBy8H3RZgM1ALw5VROIRsYGAqfaTicU+/+gdXKroiow6yRNz1WMN6xR2xoXEX7GprRIUhHU5LSGcJA/Fo4jJQ==}
@@ -1093,15 +1087,6 @@ snapshots:
 
   '@esbuild/win32-x64@0.20.2':
     optional: true
-
-  '@hoversource/client-injector@1.0.0':
-    dependencies:
-      ws: 8.21.1
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@hoversource/companion-server@1.0.0': {}
 
   '@hoversource/source-resolver@1.0.0': {}
 

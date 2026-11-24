@@ -22,6 +22,36 @@ export interface StaticMetadata {
   classOrigins: Record<string, { file: string; line: number; column: number }>;
 }
 
+export interface StaticHtmlQuery {
+  tagName: string;
+  id?: string;
+  classList?: string[];
+  attributes?: Record<string, string>;
+  textContent?: string;
+}
+
+export interface StaticHtmlEntry {
+  tagName: string;
+  id?: string;
+  classList: string[];
+  attributes: Record<string, string>;
+  fileName: string;
+  lineNumber: number;
+  columnNumber: number;
+}
+
+export interface StaticHtmlLocation {
+  fileName: string;
+  absolutePath: string;
+  lineNumber: number;
+  columnNumber: number;
+  framework: string;
+}
+
+function escapeRegex(s: string): string {
+  return s.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function getAllCssFiles(dir: string, fileList: string[] = []): string[] {
   if (!fs.existsSync(dir)) return fileList;
   try {
@@ -611,4 +641,217 @@ export class StaticContextResolver {
 
     return result;
   }
+
+  public resolveStaticHtmlLocation(
+    projectRoot: string,
+    query: StaticHtmlQuery
+  ): StaticHtmlLocation | null {
+    const htmlFiles = sortHtmlFiles(getAllHtmlFiles(projectRoot), projectRoot);
+    if (htmlFiles.length === 0) return null;
+
+    const normalizedTag = (query.tagName || "").toLowerCase();
+    if (!normalizedTag) return null;
+
+    let bestMatch: {
+      file: string;
+      line: number;
+      column: number;
+      score: number;
+    } | null = null;
+
+    for (const htmlFile of htmlFiles) {
+      try {
+        const content = fs.readFileSync(htmlFile, "utf-8");
+        const lines = content.split(/\r?\n/);
+
+        for (let i = 0; i < lines.length; i++) {
+          const lineText = lines[i];
+          const tagRegex = new RegExp(String.raw`<(${normalizedTag})\b([^>]*)`, "gi");
+          let match: RegExpExecArray | null;
+
+          while ((match = tagRegex.exec(lineText)) !== null) {
+            const col = match.index + 1;
+            const fullTagAttrs = match[2] || "";
+            let score = 10;
+
+            // 1. Match ID if provided
+            if (query.id) {
+              const idRegex = new RegExp(String.raw`\bid\s*=\s*["']${escapeRegex(query.id)}["']`, "i");
+              if (idRegex.test(fullTagAttrs)) {
+                score += 1000;
+              } else {
+                continue;
+              }
+            }
+
+            // 2. Match ClassList if provided
+            if (query.classList && query.classList.length > 0) {
+              const classMatch = /\bclass\s*=\s*["']([^"']*)["']/i.exec(fullTagAttrs);
+              if (classMatch) {
+                const tagClasses = classMatch[1].split(/\s+/).filter(Boolean);
+                let matchingClasses = 0;
+                for (const cls of query.classList) {
+                  if (tagClasses.includes(cls)) {
+                    matchingClasses++;
+                  }
+                }
+                if (matchingClasses > 0) {
+                  score += matchingClasses * 100;
+                }
+              }
+            }
+
+            // 3. Match Attributes if provided
+            if (query.attributes) {
+              for (const [attrKey, attrVal] of Object.entries(query.attributes)) {
+                if (!attrKey || attrKey.startsWith("_")) continue;
+                const attrRegex = new RegExp(String.raw`\b${escapeRegex(attrKey)}\s*=\s*["']${escapeRegex(String(attrVal))}["']`, "i");
+                if (attrRegex.test(fullTagAttrs)) {
+                  score += 200;
+                }
+              }
+            }
+
+            const relPath = path.relative(projectRoot, htmlFile).replaceAll("\\", "/");
+            if (relPath.includes("index.html")) score += 20;
+            if (relPath.startsWith("src/")) score += 10;
+
+            if (!bestMatch || score > bestMatch.score) {
+              bestMatch = {
+                file: htmlFile,
+                line: i + 1,
+                column: col,
+                score
+              };
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (!bestMatch || (bestMatch.score < 50 && !query.id)) {
+      if (!bestMatch || bestMatch.score < 20) return null;
+    }
+
+    const relPath = path.relative(projectRoot, bestMatch.file).replaceAll("\\", "/");
+    return {
+      fileName: relPath,
+      absolutePath: bestMatch.file.replaceAll("\\", "/"),
+      lineNumber: bestMatch.line,
+      columnNumber: bestMatch.column,
+      framework: "Vanilla"
+    };
+  }
+
+  public generateStaticHtmlMap(projectRoot: string): StaticHtmlEntry[] {
+    const htmlFiles = sortHtmlFiles(getAllHtmlFiles(projectRoot), projectRoot);
+    const map: StaticHtmlEntry[] = [];
+
+    for (const htmlFile of htmlFiles) {
+      try {
+        const content = fs.readFileSync(htmlFile, "utf-8");
+        const lines = content.split(/\r?\n/);
+        const relFile = path.relative(projectRoot, htmlFile).replaceAll("\\", "/");
+
+        for (let i = 0; i < lines.length; i++) {
+          const lineText = lines[i];
+          const tagRegex = /<([a-zA-Z0-9-]+)\b([^>]*)>/g;
+          let match: RegExpExecArray | null;
+
+          while ((match = tagRegex.exec(lineText)) !== null) {
+            const tagName = match[1].toLowerCase();
+            if (["html", "head", "meta", "link", "title", "script", "style", "body"].includes(tagName)) continue;
+
+            const attrsStr = match[2] || "";
+            const col = match.index + 1;
+
+            let id: string | undefined = undefined;
+            const idMatch = /\bid=["']([^"']+)["']/i.exec(attrsStr);
+            if (idMatch) id = idMatch[1];
+
+            let classList: string[] = [];
+            const classMatch = /\bclass=["']([^"']+)["']/i.exec(attrsStr);
+            if (classMatch) {
+              classList = classMatch[1].split(/\s+/).filter(Boolean);
+            }
+
+            const attributes: Record<string, string> = {};
+            const attrRegex = /([a-zA-Z0-9-:]+)=["']([^"']*)["']/g;
+            let aMatch: RegExpExecArray | null;
+            while ((aMatch = attrRegex.exec(attrsStr)) !== null) {
+              if (aMatch[1] !== "id" && aMatch[1] !== "class") {
+                attributes[aMatch[1]] = aMatch[2];
+              }
+            }
+
+            map.push({
+              tagName,
+              id,
+              classList,
+              attributes,
+              fileName: relFile,
+              lineNumber: i + 1,
+              columnNumber: col
+            });
+          }
+        }
+      } catch {}
+    }
+
+    return map;
+  }
+}
+
+function getAllHtmlFiles(dir: string, fileList: string[] = []): string[] {
+  if (!fs.existsSync(dir)) return fileList;
+  try {
+    const files = fs.readdirSync(dir);
+    for (const file of files) {
+      const filePath = path.join(dir, file);
+      const stat = fs.statSync(filePath);
+      if (stat.isDirectory()) {
+        const base = path.basename(filePath);
+        if (
+          base !== "node_modules" &&
+          base !== ".git" &&
+          base !== "dist" &&
+          base !== "build" &&
+          base !== "out" &&
+          base !== ".gemini" &&
+          base !== ".agents" &&
+          base !== "build_output" &&
+          base !== ".scratch" &&
+          base !== ".devutil" &&
+          base !== "coverage"
+        ) {
+          getAllHtmlFiles(filePath, fileList);
+        }
+      } else {
+        const ext = path.extname(file).toLowerCase();
+        if (ext === ".html" || ext === ".htm") {
+          fileList.push(filePath);
+        }
+      }
+    }
+  } catch {}
+  return fileList;
+}
+
+function sortHtmlFiles(htmlFiles: string[], projectRoot: string): string[] {
+  return [...htmlFiles].sort((a, b) => {
+    const relA = path.relative(projectRoot, a).replaceAll("\\", "/").toLowerCase();
+    const relB = path.relative(projectRoot, b).replaceAll("\\", "/").toLowerCase();
+    
+    const isIndexA = relA === "index.html" || relA === "src/index.html" || relA.endsWith("/index.html");
+    const isIndexB = relB === "index.html" || relB === "src/index.html" || relB.endsWith("/index.html");
+    if (isIndexA && !isIndexB) return -1;
+    if (!isIndexA && isIndexB) return 1;
+
+    const inSrcA = relA.startsWith("src/");
+    const inSrcB = relB.startsWith("src/");
+    if (inSrcA && !inSrcB) return -1;
+    if (!inSrcA && inSrcB) return 1;
+
+    return relA.localeCompare(relB);
+  });
 }

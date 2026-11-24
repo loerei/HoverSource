@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { spawn } from "node:child_process";
 import { AppLauncher, LaunchConfig } from "./types.js";
+import { StaticContextResolver } from "@hoversource/companion-server";
 import {
   parseCommand,
   resolveWindowsCommand,
@@ -65,7 +66,13 @@ export class ElectronCdpLauncher implements AppLauncher {
       const scriptPath = findScriptPath(projectRoot);
       const scriptContent = fs.readFileSync(validateSafePath(scriptPath), "utf-8");
       const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
-      const scriptWithPort = portBootstrap + scriptContent;
+      let htmlBootstrap = "";
+      try {
+        const staticResolver = new StaticContextResolver();
+        const htmlMap = staticResolver.generateStaticHtmlMap(projectRoot);
+        htmlBootstrap = `globalThis.__HOVERSOURCE_STATIC_HTML_MAP__ = ${JSON.stringify(htmlMap)};\n`;
+      } catch {}
+      const scriptWithPort = portBootstrap + htmlBootstrap + scriptContent;
       
       startCdpInjectionWatch(portToUse, scriptWithPort);
 

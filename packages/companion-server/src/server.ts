@@ -5,7 +5,8 @@ import fs from "node:fs";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { broadcastToTargets } from "@hoversource/client-injector";
-import { StaticContextResolver } from "./staticResolver.js";
+import { StaticContextResolver, StaticHtmlEntry } from "./staticResolver.js";
+export { StaticContextResolver, StaticHtmlEntry } from "./staticResolver.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -460,7 +461,12 @@ function handleShutdown(req: http.IncomingMessage, res: http.ServerResponse) {
   setTimeout(() => process.exit(0), 100);
 }
 
-function handleOverlayScript(req: http.IncomingMessage, res: http.ServerResponse, config: ServerConfig) {
+function handleOverlayScript(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  staticResolver: StaticContextResolver
+) {
   const bundlePathsToTry = [
     path.resolve(__dirname, "../../overlay-core/dist/overlay.bundle.js"),
     path.resolve(__dirname, "../node_modules/@hoversource/overlay-core/dist/overlay.bundle.js"),
@@ -475,6 +481,11 @@ function handleOverlayScript(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
   const bundleContent = fs.readFileSync(bundlePath, "utf-8");
+  let htmlBootstrap = "";
+  try {
+    const htmlMap = staticResolver.generateStaticHtmlMap(config.projectRoot);
+    htmlBootstrap = `window.__HOVERSOURCE_STATIC_HTML_MAP__ = ${JSON.stringify(htmlMap)};\n`;
+  } catch {}
   const portBootstrap = `window.__HOVERSOURCE_PORT__ = ${config.port};\n`;
   res.writeHead(200, {
     "Content-Type": "application/javascript",
@@ -482,7 +493,7 @@ function handleOverlayScript(req: http.IncomingMessage, res: http.ServerResponse
     "Pragma": "no-cache",
     "Expires": "0"
   });
-  res.end(portBootstrap + bundleContent);
+  res.end(portBootstrap + htmlBootstrap + bundleContent);
 }
 
 // Dashboard router mapping: can serve from packages or local companion static assets
@@ -803,6 +814,53 @@ function handleStaticContext(
     });
 }
 
+function handleResolveHtmlElement(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  config: ServerConfig,
+  staticResolver: StaticContextResolver
+) {
+  const tagName = url.searchParams.get("tagName") || "";
+  const id = url.searchParams.get("id") || undefined;
+  const classListParam = url.searchParams.get("classList") || "";
+  const classList = classListParam ? classListParam.split(",").filter(Boolean) : [];
+  
+  let attributes: Record<string, string> | undefined = undefined;
+  const attrParam = url.searchParams.get("attributes");
+  if (attrParam) {
+    try {
+      attributes = JSON.parse(attrParam);
+    } catch {}
+  }
+
+  if (!tagName) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Missing 'tagName' parameter" }));
+    return;
+  }
+
+  try {
+    const location = staticResolver.resolveStaticHtmlLocation(config.projectRoot, {
+      tagName,
+      id,
+      classList,
+      attributes
+    });
+
+    if (location) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: true, ...location }));
+    } else {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ success: false, error: "Static HTML location not found" }));
+    }
+  } catch (e: any) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: `HTML resolution failed: ${e.message}` }));
+  }
+}
+
 function handleOpenInIde(req: http.IncomingMessage, res: http.ServerResponse, url: URL, config: ServerConfig) {
   const fileParam = url.searchParams.get("file");
   const lineParam = url.searchParams.get("line") || "1";
@@ -877,7 +935,7 @@ function routeRequest(
     return;
   }
   if (path === "/hoversource-overlay.js") {
-    handleOverlayScript(req, res, config);
+    handleOverlayScript(req, res, config, staticResolver);
     return;
   }
   if (path === "/dashboard") {
@@ -900,6 +958,10 @@ function routeRequest(
   }
   if (path === "/validate-line" && method === "GET") {
     handleValidateLine(req, res, url, config);
+    return;
+  }
+  if (path === "/resolve-html-element" && method === "GET") {
+    handleResolveHtmlElement(req, res, url, config, staticResolver);
     return;
   }
   if (path === "/static-context" && method === "GET") {

@@ -467,6 +467,32 @@ describe("SourceResolver", () => {
     expect(vanillaResult?.fileName).toBe("VanillaFile.ts");
     expect(vanillaResult?.lineNumber).toBe(30);
     expect(vanillaResult?.columnNumber).toBe(10);
+
+    // Test static HTML map matching
+    (globalThis as any).__HOVERSOURCE_STATIC_HTML_MAP__ = [
+      {
+        tagName: "h1",
+        id: "ui-title",
+        classList: [],
+        attributes: { "data-i18n": "title" },
+        fileName: "src/index.html",
+        lineNumber: 42,
+        columnNumber: 9
+      }
+    ];
+
+    const mockStaticH1 = {
+      tagName: "H1",
+      id: "ui-title",
+      classList: [],
+      attributes: [{ name: "data-i18n", value: "title" }]
+    } as any;
+
+    const staticResult = resolver.resolve(mockStaticH1);
+    expect(staticResult?.framework).toBe("Vanilla");
+    expect(staticResult?.fileName).toBe("src/index.html");
+    expect(staticResult?.lineNumber).toBe(42);
+    expect(staticResult?.columnNumber).toBe(9);
   });
 
   it("should resolve ancestors layout and framework metadata", () => {

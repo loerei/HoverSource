@@ -178,3 +178,79 @@ export function App() {
     expect(result.classOrigins["less-child"].line).toBe(4);
   });
 });
+
+describe("StaticContextResolver HTML element resolving", () => {
+  let tempDir: string;
+  let htmlPath: string;
+  let resolver: StaticContextResolver;
+
+  beforeAll(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hoversource-html-test-"));
+    resolver = new StaticContextResolver();
+
+    const srcDir = path.join(tempDir, "src");
+    fs.mkdirSync(srcDir, { recursive: true });
+
+    htmlPath = path.join(srcDir, "index.html");
+    fs.writeFileSync(
+      htmlPath,
+      `<!DOCTYPE html>
+<html>
+<head><title>Test App</title></head>
+<body>
+  <div class="header">
+    <h1 id="ui-title" data-i18n="title">YumeShelf</h1>
+    <button class="header-icon-btn refresh-library-btn" id="refresh-library-btn" aria-label="Refresh"></button>
+  </div>
+  <div id="game-grid-wrapper">
+    <div class="game-grid drop-zone" id="fav-grid"></div>
+  </div>
+</body>
+</html>`.trim(),
+      "utf-8"
+    );
+  });
+
+  afterAll(() => {
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch {}
+  });
+
+  it("should resolve static element by id", () => {
+    const location = resolver.resolveStaticHtmlLocation(tempDir, {
+      tagName: "h1",
+      id: "ui-title",
+      attributes: { "data-i18n": "title" }
+    });
+
+    expect(location).not.toBeNull();
+    expect(location?.fileName).toBe("src/index.html");
+    expect(location?.lineNumber).toBe(6);
+    expect(location?.framework).toBe("Vanilla");
+  });
+
+  it("should resolve static element by classList and attributes", () => {
+    const location = resolver.resolveStaticHtmlLocation(tempDir, {
+      tagName: "button",
+      classList: ["header-icon-btn", "refresh-library-btn"],
+      attributes: { "aria-label": "Refresh" }
+    });
+
+    expect(location).not.toBeNull();
+    expect(location?.fileName).toBe("src/index.html");
+    expect(location?.lineNumber).toBe(7);
+    expect(location?.framework).toBe("Vanilla");
+  });
+
+  it("should resolve container element by class and id", () => {
+    const location = resolver.resolveStaticHtmlLocation(tempDir, {
+      tagName: "div",
+      id: "game-grid-wrapper"
+    });
+
+    expect(location).not.toBeNull();
+    expect(location?.fileName).toBe("src/index.html");
+    expect(location?.lineNumber).toBe(9);
+  });
+});

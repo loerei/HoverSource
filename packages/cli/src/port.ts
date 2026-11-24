@@ -14,6 +14,7 @@ import path from "node:path";
 import fs from "node:fs";
 import os from "node:os";
 import readline from "node:readline";
+import type { CompanionConflictPolicy, HoverSourceConfig } from "@hoversource/companion-server/config";
 
 // ---------------------------------------------------------------------------
 //  Types
@@ -39,6 +40,40 @@ export interface PortPlan {
   devServerExtraArgs: string[];
 }
 
+export class CliUsageError extends Error {
+  public readonly exitCode = 2;
+  constructor(message: string) {
+    super(message);
+    this.name = "CliUsageError";
+  }
+}
+
+export interface PortPrecedenceResult {
+  companionPort: number;
+  debugPort: number;
+  proxyPort: number | undefined;
+  devPort: number | undefined;
+  companionConflict: CompanionConflictPolicy;
+  autoResolve: boolean;
+}
+
+export interface CompanionStatusInfo {
+  isHoverSource: true;
+  legacy: boolean;
+  pid?: number;
+  port?: number;
+  projectRoot?: string;
+  debugPort?: number;
+}
+
+export interface ResolveCompanionPortOptions {
+  requestedPort: number;
+  projectRoot?: string;
+  excludePorts?: number[];
+  conflictPolicy?: CompanionConflictPolicy;
+  probeStatusFn?: (port: number, timeoutMs?: number) => Promise<CompanionStatusInfo | null>;
+}
+
 // ---------------------------------------------------------------------------
 //  Low-level primitives (moved from cli.ts)
 // ---------------------------------------------------------------------------
@@ -47,8 +82,8 @@ export function probeHostPort(port: number, host: string): Promise<boolean> {
   return new Promise((resolve) => {
     const server = net.createServer();
     server.unref();
-    server.on("error", (err: any) => {
-      if (err.code === "EADDRINUSE") {
+    server.on("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE" || err.code === "EACCES") {
         resolve(false);
       } else {
         // Other errors (e.g. EADDRNOTAVAIL for IPv6 on some systems) do not mean the port is in use
@@ -56,8 +91,7 @@ export function probeHostPort(port: number, host: string): Promise<boolean> {
       }
     });
     server.listen(port, host, () => {
-      server.close();
-      resolve(true);
+      server.close(() => resolve(true));
     });
   });
 }
@@ -94,33 +128,49 @@ export async function findFreePort(startPort: number, excludePorts?: number | nu
   );
 }
 
+export function parseNetstatListeningPid(stdout: string, port: number): number | undefined {
+  const lines = stdout.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split(/\s+/);
+    if (parts.length < 5) continue;
+    if (parts[3]?.toUpperCase() !== "LISTENING") continue;
+
+    const localAddr = parts[1];
+    const lastColon = localAddr.lastIndexOf(":");
+    if (lastColon === -1) continue;
+    const portToken = localAddr.slice(lastColon + 1);
+    if (!/^\d+$/.test(portToken) || Number(portToken) !== port) continue;
+
+    const pidStr = parts[4];
+    const pid = Number.parseInt(pidStr, 10);
+    if (!Number.isNaN(pid) && pid > 0) {
+      return pid;
+    }
+  }
+  return undefined;
+}
+
 export function getPidUsingPort(port: number): Promise<number | undefined> {
   return new Promise((resolve) => {
     if (process.platform === "win32") {
-      exec(`netstat -ano | findstr :${port}`, (err, stdout) => {
+      exec("netstat -ano", { maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
         if (err || !stdout) return resolve(undefined);
-        const lines = stdout.split("\n");
-        for (const line of lines) {
-          if (line.includes("LISTENING")) {
-            const parts = line.trim().split(/\s+/);
-            const pidStr = parts[parts.length - 1];
-            const pid = Number.parseInt(pidStr, 10);
-            if (!Number.isNaN(pid) && pid > 0) {
-              return resolve(pid);
-            }
+        resolve(parseNetstatListeningPid(stdout, port));
+      });
+    } else {
+      exec(`lsof -nP -iTCP:${port} -sTCP:LISTEN -t`, (err, stdout) => {
+        if (err || !stdout) return resolve(undefined);
+        for (const line of stdout.trim().split(/\r?\n/)) {
+          const trimmed = line.trim();
+          if (!/^\d+$/.test(trimmed)) continue;
+          const pid = Number.parseInt(trimmed, 10);
+          if (!Number.isNaN(pid) && pid > 0) {
+            return resolve(pid);
           }
         }
         resolve(undefined);
-      });
-    } else {
-      exec(`lsof -t -i:${port}`, (err, stdout) => {
-        if (err || !stdout) return resolve(undefined);
-        const pid = Number.parseInt(stdout.trim(), 10);
-        if (!Number.isNaN(pid) && pid > 0) {
-          resolve(pid);
-        } else {
-          resolve(undefined);
-        }
       });
     }
   });
@@ -281,65 +331,253 @@ export function isZombieOfProject(pid: number, projectRoot: string): Promise<boo
 }
 
 // ---------------------------------------------------------------------------
+//  Port precedence & validation
+// ---------------------------------------------------------------------------
+
+function parseStrictPortFlag(raw: string | boolean | undefined, flagName: string): number | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) {
+    throw new CliUsageError(
+      `[HoverSource] Invalid ${flagName} value: "${String(raw)}". Expected an integer between 1 and 65535.`
+    );
+  }
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (parsed < 1 || parsed > 65535) {
+    throw new CliUsageError(
+      `[HoverSource] Invalid ${flagName} value: ${parsed}. Port must be between 1 and 65535.`
+    );
+  }
+  return parsed;
+}
+
+export function resolvePortPrecedence(
+  args: Record<string, string | boolean | undefined>,
+  mergedConfig: Partial<HoverSourceConfig> = {}
+): PortPrecedenceResult {
+  const cliCompanion = parseStrictPortFlag(args.port ?? args.p, "--port");
+  const cliDebug = parseStrictPortFlag(args["debug-port"], "--debug-port");
+  const cliProxy = parseStrictPortFlag(args["proxy-port"], "--proxy-port");
+  const cliDev = parseStrictPortFlag(args["dev-port"], "--dev-port");
+
+  const ports = mergedConfig.ports;
+  const companionPort = cliCompanion ?? ports?.companion ?? 7300;
+  const debugPort = cliDebug ?? ports?.debug ?? 9222;
+  const proxyPort = cliProxy ?? ports?.proxy ?? undefined;
+  const devPort = cliDev ?? ports?.dev ?? undefined;
+  const companionConflict: CompanionConflictPolicy = ports?.companionConflict ?? "shift";
+
+  let autoResolve = mergedConfig.autoResolvePortConflicts === true;
+  if (args["auto-resolve"] !== undefined) {
+    autoResolve = args["auto-resolve"] === true || args["auto-resolve"] === "true";
+  }
+
+  return {
+    companionPort,
+    debugPort,
+    proxyPort,
+    devPort,
+    companionConflict,
+    autoResolve,
+  };
+}
+
+// ---------------------------------------------------------------------------
 //  Companion port resolution (moved from cli.ts)
 // ---------------------------------------------------------------------------
 
-/**
- * If the requested port is occupied by another HoverSource instance, tell it
- * to shut down and wait for the port to free up so we can reuse it.
- * Returns the port we should actually bind to.
- */
-export async function resolveCompanionPort(requestedPort: number, targetPort?: number): Promise<number> {
-  // If requestedPort collides with targetPort, shift it to next free port starting from 7300 upwards (excluding targetPort)
-  if (targetPort !== undefined && requestedPort === targetPort) {
-    console.log(`[HoverSource] Requested companion port ${requestedPort} conflicts with target application port ${targetPort}. Shifting...`);
-    return findFreePort(7300, targetPort);
-  }
-
-  // Try to bind immediately — port is free
-  const free = await isPortFree(requestedPort);
-  if (free) return requestedPort;
-
-  // Port taken — check if it's an HS companion
-  const isHs = await new Promise<boolean>((resolve) => {
-    const req = http.get(`http://127.0.0.1:${requestedPort}/ping`, (res) => {
+function httpGetText(url: string, timeoutMs: number): Promise<{ statusCode: number; body: string } | null> {
+  return new Promise((resolve) => {
+    const req = http.get(url, (res) => {
       let body = "";
-      res.on("data", (c: Buffer) => (body += c.toString()));
-      res.on("end", () => resolve(body.trim() === "pong"));
-    });
-    req.setTimeout(1500, () => {
-      req.destroy();
-      resolve(false);
-    });
-    req.on("error", () => resolve(false));
-  });
-
-  if (isHs) {
-    console.log(`[HoverSource] Previous instance found on port ${requestedPort}. Taking over...`);
-    await new Promise<void>((resolve) => {
-      const req = http.get(`http://127.0.0.1:${requestedPort}/shutdown`, () => resolve());
-      req.setTimeout(1500, () => {
-        req.destroy();
-        resolve();
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
       });
-      req.on("error", () => resolve());
+      res.on("end", () => {
+        resolve({ statusCode: res.statusCode ?? 0, body });
+      });
     });
-    // Wait for the port to free up
-    await new Promise((r) => setTimeout(r, 700));
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.on("error", () => resolve(null));
+  });
+}
 
-    // Double check if the port was successfully freed
-    const isNowFree = await isPortFree(requestedPort);
-
-    if (isNowFree) {
-      return requestedPort;
-    } else {
-      console.log(`[HoverSource] Previous instance on port ${requestedPort} could not be terminated (ghost port).`);
+export async function probeCompanionStatus(port: number, timeoutMs = 1500): Promise<CompanionStatusInfo | null> {
+  const statusRes = await httpGetText(`http://127.0.0.1:${port}/status`, timeoutMs);
+  if (statusRes && statusRes.statusCode >= 200 && statusRes.statusCode < 300) {
+    try {
+      const parsed = JSON.parse(statusRes.body);
+      if (parsed && parsed.ok === true) {
+        return {
+          isHoverSource: true,
+          legacy: false,
+          pid: typeof parsed.pid === "number" ? parsed.pid : undefined,
+          port: typeof parsed.port === "number" ? parsed.port : undefined,
+          projectRoot: typeof parsed.projectRoot === "string" ? parsed.projectRoot : undefined,
+          debugPort: typeof parsed.debugPort === "number" ? parsed.debugPort : undefined,
+        };
+      }
+    } catch {
+      // Fall back to /ping when /status returns non-JSON
     }
   }
 
-  // Something else owns this port — find the next free one
-  console.log(`[HoverSource] Port ${requestedPort} in use by another process, using next free port.`);
-  return findFreePort(requestedPort + 1, targetPort);
+  const pingRes = await httpGetText(`http://127.0.0.1:${port}/ping`, timeoutMs);
+  if (pingRes && pingRes.statusCode >= 200 && pingRes.statusCode < 300 && pingRes.body.trim() === "pong") {
+    return {
+      isHoverSource: true,
+      legacy: true,
+    };
+  }
+
+  return null;
+}
+
+async function shutdownAndWaitForFree(port: number, maxWaitMs = 3000): Promise<boolean> {
+  await httpGetText(`http://127.0.0.1:${port}/shutdown`, 1500);
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
+    if (await isPortFree(port)) {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return isPortFree(port);
+}
+
+function normalizeForCompare(p: string): string {
+  const normalized = path.normalize(path.resolve(p));
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+function formatCompanionOwner(status: CompanionStatusInfo): string {
+  const projPart = status.projectRoot ? `project "${status.projectRoot}"` : "another HoverSource instance";
+  const pidPart = status.pid !== undefined ? ` (PID: ${status.pid})` : "";
+  return `${projPart}${pidPart}`;
+}
+
+/**
+ * If the requested port is occupied by another HoverSource instance, handle it
+ * according to project identity and `conflictPolicy` (`"shift"` | `"takeover"` | `"fail"`).
+ * Returns the port we should actually bind to.
+ */
+export async function resolveCompanionPort(requestedPort: number, targetPort?: number): Promise<number>;
+export async function resolveCompanionPort(opts: ResolveCompanionPortOptions): Promise<number>;
+export async function resolveCompanionPort(
+  portOrOpts: number | ResolveCompanionPortOptions,
+  legacyTargetPort?: number
+): Promise<number> {
+  const isLegacyCall = typeof portOrOpts === "number";
+  const requestedPort = isLegacyCall ? portOrOpts : portOrOpts.requestedPort;
+  const projectRoot = isLegacyCall ? undefined : portOrOpts.projectRoot;
+  const excludePorts = isLegacyCall
+    ? (legacyTargetPort !== undefined ? [legacyTargetPort] : [])
+    : (portOrOpts.excludePorts ?? []);
+  const conflictPolicy: CompanionConflictPolicy = isLegacyCall
+    ? "takeover"
+    : (portOrOpts.conflictPolicy ?? "shift");
+  const probeStatusFn = isLegacyCall
+    ? probeCompanionStatus
+    : (portOrOpts.probeStatusFn ?? probeCompanionStatus);
+
+  if (excludePorts.includes(requestedPort)) {
+    if (isLegacyCall) {
+      console.log(`[HoverSource] Requested companion port ${requestedPort} conflicts with target application port ${legacyTargetPort}. Shifting...`);
+      return findFreePort(7300, legacyTargetPort);
+    }
+    console.log(`[HoverSource] Requested companion port ${requestedPort} conflicts with reserved port(s). Shifting...`);
+    return findFreePort(requestedPort + 1, excludePorts);
+  }
+
+  const free = await isPortFree(requestedPort);
+  if (free) return requestedPort;
+
+  const status = await probeStatusFn(requestedPort);
+  if (status) {
+    const isSameProject =
+      !status.legacy &&
+      Boolean(projectRoot && status.projectRoot) &&
+      normalizeForCompare(status.projectRoot!) === normalizeForCompare(projectRoot!);
+
+    if (isSameProject) {
+      console.log(`[HoverSource] Previous instance for this project found on port ${requestedPort}. Replacing...`);
+      if (await shutdownAndWaitForFree(requestedPort)) {
+        return requestedPort;
+      }
+      console.log(`[HoverSource] Previous instance on port ${requestedPort} could not be terminated (ghost port). Shifting...`);
+      return findFreePort(requestedPort + 1, excludePorts);
+    }
+
+    const ownerDesc = formatCompanionOwner(status);
+    if (conflictPolicy === "fail") {
+      throw new Error(
+        `[HoverSource] Companion port ${requestedPort} is already in use by ${ownerDesc}. ` +
+        `Use --port=<free-port> or set ports.companionConflict to "shift" or "takeover".`
+      );
+    }
+
+    if (conflictPolicy === "takeover") {
+      console.log(`[HoverSource] Companion port ${requestedPort} is in use by ${ownerDesc}. Taking over...`);
+      if (await shutdownAndWaitForFree(requestedPort)) {
+        return requestedPort;
+      }
+      console.log(`[HoverSource] Previous instance on port ${requestedPort} could not be terminated (ghost port). Shifting...`);
+      return findFreePort(requestedPort + 1, excludePorts);
+    }
+
+    // Default: "shift"
+    console.log(`[HoverSource] Companion port ${requestedPort} is in use by ${ownerDesc}. Shifting to next free port...`);
+    return findFreePort(requestedPort + 1, excludePorts);
+  }
+
+  const pid = await getPidUsingPort(requestedPort);
+  const procName = pid ? await getProcessName(pid) : undefined;
+  const ownerDesc = `${procName || "another process"}${pid !== undefined ? ` (PID: ${pid})` : ""}`;
+
+  if (conflictPolicy === "fail") {
+    throw new Error(
+      `[HoverSource] Companion port ${requestedPort} is occupied by ${ownerDesc}. ` +
+      `Use --port=<free-port> or close the process.`
+    );
+  }
+
+  console.log(`[HoverSource] Port ${requestedPort} in use by ${ownerDesc}, using next free port.`);
+  return findFreePort(requestedPort + 1, excludePorts);
+}
+
+export async function bindServerWithRetry<T>(
+  bindFn: (port: number) => Promise<T>,
+  opts: {
+    initialPort: number;
+    excludePorts?: number[];
+    maxAttempts?: number;
+  }
+): Promise<{ port: number; result: T }> {
+  const maxAttempts = opts.maxAttempts ?? 5;
+  const triedPorts = new Set<number>(opts.excludePorts ?? []);
+  let currentPort = opts.initialPort;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const result = await bindFn(currentPort);
+      return { port: currentPort, result };
+    } catch (err: any) {
+      const code = err?.code;
+      const isRetryable = code === "EADDRINUSE" || code === "EACCES";
+      if (!isRetryable || attempt >= maxAttempts - 1) {
+        throw err;
+      }
+      triedPorts.add(currentPort);
+      currentPort = await findFreePort(currentPort + 1, Array.from(triedPorts));
+    }
+  }
+
+  throw new Error(`[HoverSource] Failed to bind server after ${maxAttempts} attempts.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -442,6 +680,33 @@ function buildPortInjection(framework: Framework, port: number): { env: Record<s
 //  Dev server port conflict resolution
 // ---------------------------------------------------------------------------
 
+export async function resolveDebugPort(opts: {
+  debugPort: number;
+  projectRoot: string;
+  excludePorts?: number[];
+}): Promise<number> {
+  const { debugPort, projectRoot, excludePorts = [] } = opts;
+  const isExcluded = excludePorts.includes(debugPort);
+  if (!isExcluded && (await isPortFree(debugPort))) {
+    return debugPort;
+  }
+
+  const pid = isExcluded ? undefined : await getPidUsingPort(debugPort);
+  if (pid && (await isZombieOfProject(pid, projectRoot))) {
+    console.log(`[HoverSource] Detected zombie process from this project occupying debug port ${debugPort} (PID: ${pid}). Terminating...`);
+    const killed = await killProcess(pid, debugPort);
+    if (killed && (await isPortFree(debugPort))) {
+      return debugPort;
+    }
+  }
+
+  const procName = pid ? await getProcessName(pid) : undefined;
+  const nextPort = await findFreePort(debugPort + 1, [...excludePorts, debugPort]);
+  const ownerInfo = procName || pid ? ` by ${procName || "Unknown"}${pid ? ` (PID: ${pid})` : ""}` : "";
+  console.log(`[HoverSource] Debug port ${debugPort} in use${ownerInfo}; using ${nextPort}.`);
+  return nextPort;
+}
+
 async function handleElectronBlocker(
   pid: number,
   procName: string | undefined,
@@ -449,38 +714,25 @@ async function handleElectronBlocker(
   autoResolve: boolean,
   framework: Framework
 ): Promise<DevServerPortResult> {
-  console.warn(`\n\x1b[33m[HoverSource] ⚠️  Dev server port ${expectedPort} is occupied by: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
-  console.warn(`\x1b[33m[HoverSource] Electron projects require the original port — port shifting is not possible.\x1b[0m`);
-
-  let shouldKill = autoResolve;
-  if (shouldKill) {
-    console.log(`[HoverSource] --auto-resolve: Automatically terminating blocker on port ${expectedPort}...`);
-  } else {
-    const isInteractive = process.stdout.isTTY && process.stdin.isTTY;
-    if (isInteractive) {
-      const answer = await askQuestion(`\x1b[36m[HoverSource] Terminate this process to free port ${expectedPort}? (Y/n): \x1b[0m`);
-      shouldKill = answer.trim().toLowerCase() !== "n";
-    } else {
-      shouldKill = true;
-      console.log(`[HoverSource] Non-interactive mode. Automatically terminating blocker on port ${expectedPort}...`);
-    }
+  const ownerDesc = `${procName || "Unknown"} (PID: ${pid})`;
+  if (!autoResolve) {
+    throw new Error(
+      `[HoverSource] Dev server port ${expectedPort} is occupied by ${ownerDesc}. ` +
+      `Electron projects require this port and cannot shift. ` +
+      `Close the process, pass --auto-resolve, or run: hs config set autoResolvePortConflicts true`
+    );
   }
 
-  if (shouldKill) {
-    console.log(`[HoverSource] Terminating process ${pid}...`);
-    const success = await killProcess(pid, expectedPort);
-    if (success) {
-      console.log(`[HoverSource] Port ${expectedPort} is now free.`);
-      await new Promise((r) => setTimeout(r, 700));
-      const injection = buildPortInjection(framework, expectedPort);
-      return { port: expectedPort, ...injection };
-    }
-    console.error(`\x1b[31m[HoverSource] Failed to free port ${expectedPort}. The dev server will likely fail.\x1b[0m`);
-    console.error(`[HoverSource] Please close the process manually or run as administrator.`);
-  } else {
-    console.warn(`\x1b[33m[HoverSource] Proceeding without freeing port ${expectedPort}. The dev server will likely fail.\x1b[0m`);
+  console.log(`[HoverSource] Auto-resolving Electron dev port ${expectedPort} conflict: terminating ${ownerDesc}...`);
+  const success = await killProcess(pid, expectedPort);
+  if (!success) {
+    throw new Error(
+      `[HoverSource] Failed to terminate ${ownerDesc} on Electron dev port ${expectedPort}. ` +
+      `Please close the process manually or run as administrator.`
+    );
   }
 
+  console.log(`[HoverSource] Port ${expectedPort} is now free.`);
   const injection = buildPortInjection(framework, expectedPort);
   return { port: expectedPort, ...injection };
 }
@@ -541,6 +793,12 @@ export async function resolveDevServerPort(opts: {
     if (mode === "electron") {
       return handleElectronBlocker(pid, procName, expectedPort, autoResolve, framework);
     }
+  } else if (mode === "electron") {
+    throw new Error(
+      `[HoverSource] Dev server port ${expectedPort} is unavailable. ` +
+      `Electron projects require this port and cannot shift. ` +
+      `Free the port, pass --auto-resolve, or run: hs config set autoResolvePortConflicts true`
+    );
   }
 
   // 3. Web mode: shift to next free port (non-destructive resolution)

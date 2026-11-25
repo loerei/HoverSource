@@ -712,5 +712,15 @@ describe("runConfigCommand", () => {
         globalConfigPath,
       })
     ).toBe(2);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "include", '["src"]'],
+        args: { global: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
   });
 });

@@ -1006,12 +1006,22 @@ function stripNullPortOverrides(container: Record<string, unknown>): void {
   }
 }
 
-function stripNonRuntimeKeys(raw: Record<string, unknown>): Record<string, unknown> {
+const LOCAL_ONLY_SCAN_KEYS = ["include", "ignore", "respectGitignore"] as const;
+
+function stripNonRuntimeKeys(
+  raw: Record<string, unknown>,
+  isGlobal = false
+): Record<string, unknown> {
   const sanitized = { ...raw };
   delete sanitized.recentProjects;
   delete sanitized.presets;
   delete sanitized.activePreset;
   delete sanitized.preset;
+  if (isGlobal) {
+    for (const key of LOCAL_ONLY_SCAN_KEYS) {
+      delete sanitized[key];
+    }
+  }
   return sanitized;
 }
 
@@ -1085,7 +1095,7 @@ export function loadMergedConfig(projectRoot: string, globalConfigPath?: string)
   const globalPath = getGlobalConfigPath(globalConfigPath);
   const globalConfig = readConfigFromFile(globalPath);
   if (globalConfig) {
-    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(globalConfig));
+    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(globalConfig, true));
   }
 
   const localPath = getLocalConfigPath(projectRoot);
@@ -1103,7 +1113,7 @@ export function loadMergedConfig(projectRoot: string, globalConfigPath?: string)
   }
 
   if (localConfig) {
-    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(localConfig));
+    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(localConfig, false));
   }
 
   stripNullPortOverrides(config as unknown as Record<string, unknown>);
@@ -1121,7 +1131,7 @@ export function getConfigForTarget(
     const globalPath = getGlobalConfigPath(globalConfigPath);
     const raw = readConfigFromFile(globalPath);
     if (raw) {
-      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
+      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw, true));
     }
   } else if (queryTarget === "local") {
     const localPath = getLocalConfigPath(defaultRoot);

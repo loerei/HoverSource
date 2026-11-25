@@ -550,5 +550,22 @@ describe("configStore", () => {
     expect((snap.preset as Record<string, unknown>).include).toBeUndefined();
     expect((snap.preset as Record<string, unknown>).ignore).toBeUndefined();
     expect((snap.preset as Record<string, unknown>).respectGitignore).toBeUndefined();
+
+    // Global scan-scope keys must not leak into unrelated repos
+    fs.writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        theme: "light",
+        include: ["only-global-dir"],
+        ignore: ["secret/**"],
+        respectGitignore: false,
+      }),
+      "utf-8"
+    );
+    const unrelatedMerged = loadMergedConfig(customDir, globalConfigPath);
+    expect(unrelatedMerged.theme).toBe("light");
+    expect(unrelatedMerged.include).toBeUndefined();
+    expect(unrelatedMerged.ignore).toEqual([]);
+    expect(unrelatedMerged.respectGitignore).toBe(true);
   });
 });

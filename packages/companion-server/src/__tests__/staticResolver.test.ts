@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -419,5 +419,47 @@ describe("StaticContextResolver scan scoping and CSS proximity sorting", () => {
     expect(metaDotInclude.classOrigins["story-frame"]?.file.replaceAll("\\", "/")).toBe(
       path.join(rootDir, ".storybook", "preview.css").replaceAll("\\", "/")
     );
+
+    const metaWildcardDot = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["story-frame"],
+      { include: ["**/.storybook"] }
+    );
+    expect(metaWildcardDot.classOrigins["story-frame"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, ".storybook", "preview.css").replaceAll("\\", "/")
+    );
+  });
+
+  it("supports bracket character classes, collapses repeated **/, and fails closed on non-array include", async () => {
+    const compFile = path.join(rootDir, "src", "renderer", "components", "SearchBar.tsx");
+    const bracketMeta = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["search-input"],
+      { include: ["src/**/**/**/st[xy]les/**"] }
+    );
+    expect(bracketMeta.classOrigins["search-input"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, "src", "styles", "header-search.css").replaceAll("\\", "/")
+    );
+
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const malformedMeta = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["search-input"],
+      { include: "src" as unknown as string[] }
+    );
+    expect(malformedMeta.classOrigins["search-input"]).toBeUndefined();
+    vi.restoreAllMocks();
   });
 });

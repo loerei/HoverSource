@@ -879,7 +879,13 @@ describe("Companion Server static resolution with .hoversourcerc include/ignore"
       debugPort: 9222,
       globalConfigPath,
     });
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise<void>((resolve) => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once("listening", () => resolve());
+      }
+    });
   });
 
   afterAll(async () => {

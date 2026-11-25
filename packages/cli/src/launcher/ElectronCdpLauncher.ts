@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { spawn } from "node:child_process";
 import { closeAllCdpSessions } from "@hoversource/client-injector";
 import { AppLauncher, LaunchConfig } from "./types.js";
-import { StaticContextResolver } from "@hoversource/companion-server";
+import { StaticContextResolver, loadMergedConfig } from "@hoversource/companion-server";
 import {
   parseCommand,
   resolveWindowsCommand,
@@ -99,7 +99,12 @@ export class ElectronCdpLauncher implements AppLauncher {
     let htmlBootstrap = "";
     try {
       const staticResolver = new StaticContextResolver();
-      const htmlMap = staticResolver.generateStaticHtmlMap(projectRoot);
+      const mergedConfig = loadMergedConfig(projectRoot);
+      const htmlMap = staticResolver.generateStaticHtmlMap(projectRoot, {
+        include: mergedConfig.include,
+        ignore: mergedConfig.ignore,
+        respectGitignore: mergedConfig.respectGitignore,
+      });
       htmlBootstrap = `globalThis.__HOVERSOURCE_STATIC_HTML_MAP__ = ${JSON.stringify(htmlMap)};\n`;
     } catch (err) {
       if (process.env.DEBUG) {

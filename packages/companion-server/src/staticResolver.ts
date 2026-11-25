@@ -90,28 +90,88 @@ function toPosix(p: string): string {
   return p.replaceAll("\\", "/");
 }
 
+const MAX_GITIGNORE_BYTES = 256 * 1024;
+const MAX_PATTERN_LENGTH = 512;
+
+function parseBracketClass(pattern: string, startIdx: number): { regexPart: string; nextIdx: number } | null {
+  let j = startIdx + 1;
+  if (j >= pattern.length) return null;
+
+  let body = "";
+  if (pattern[j] === "!" || pattern[j] === "^") {
+    body += "^";
+    j++;
+  }
+  if (j < pattern.length && pattern[j] === "]") {
+    body += "\\]";
+    j++;
+  }
+  while (j < pattern.length && pattern[j] !== "]") {
+    const ch = pattern[j];
+    if (ch === "/") {
+      return null;
+    }
+    if (ch === "\\" && j + 1 < pattern.length) {
+      body += `\\${pattern[j + 1]}`;
+      j += 2;
+      continue;
+    }
+    body += ch;
+    j++;
+  }
+  if (j >= pattern.length || pattern[j] !== "]" || body === "" || body === "^") {
+    return null;
+  }
+  return { regexPart: `[${body}]`, nextIdx: j + 1 };
+}
+
 function globSegmentToRegex(segment: string): string {
+  const bounded = segment.slice(0, MAX_PATTERN_LENGTH);
   let out = "";
-  for (let i = 0; i < segment.length; i++) {
-    const ch = segment[i];
+  let i = 0;
+  while (i < bounded.length) {
+    const ch = bounded[i];
     if (ch === "*") {
       out += "[^/]*";
+      i++;
     } else if (ch === "?") {
       out += "[^/]";
+      i++;
+    } else if (ch === "[") {
+      const bracket = parseBracketClass(bounded, i);
+      if (bracket) {
+        out += bracket.regexPart;
+        i = bracket.nextIdx;
+      } else {
+        out += "\\[";
+        i++;
+      }
+    } else if (ch === "\\" && i + 1 < bounded.length) {
+      out += escapeRegex(bounded[i + 1]);
+      i += 2;
     } else {
       out += escapeRegex(ch);
+      i++;
     }
   }
   return out;
 }
 
+function normalizeGlobPattern(pattern: string): string {
+  return pattern
+    .slice(0, MAX_PATTERN_LENGTH)
+    .replace(/\*{3,}/g, "**")
+    .replace(/(?:\*\*\/){2,}/g, "**/");
+}
+
 function globToRegexSource(pattern: string): string {
+  const normalized = normalizeGlobPattern(pattern);
   let out = "";
   let i = 0;
-  while (i < pattern.length) {
-    if (pattern[i] === "*" && pattern[i + 1] === "*") {
-      if (pattern[i + 2] === "/") {
-        out += "(?:.*/)?";
+  while (i < normalized.length) {
+    if (normalized[i] === "*" && normalized[i + 1] === "*") {
+      if (normalized[i + 2] === "/") {
+        out += "(?:[^/]+/)*";
         i += 3;
       } else {
         out += ".*";
@@ -119,22 +179,33 @@ function globToRegexSource(pattern: string): string {
       }
       continue;
     }
-    if (pattern[i] === "*") {
+    if (normalized[i] === "*") {
       out += "[^/]*";
       i++;
       continue;
     }
-    if (pattern[i] === "?") {
+    if (normalized[i] === "?") {
       out += "[^/]";
       i++;
       continue;
     }
-    if (pattern[i] === "\\" && i + 1 < pattern.length) {
-      out += escapeRegex(pattern[i + 1]);
+    if (normalized[i] === "[") {
+      const bracket = parseBracketClass(normalized, i);
+      if (bracket) {
+        out += bracket.regexPart;
+        i = bracket.nextIdx;
+        continue;
+      }
+      out += "\\[";
+      i++;
+      continue;
+    }
+    if (normalized[i] === "\\" && i + 1 < normalized.length) {
+      out += escapeRegex(normalized[i + 1]);
       i += 2;
       continue;
     }
-    out += escapeRegex(pattern[i]);
+    out += escapeRegex(normalized[i]);
     i++;
   }
   return out;
@@ -192,11 +263,31 @@ function compileGitignoreRule(rawLine: string, baseRelDir: string): GitignoreRul
 
 function readGitignoreRules(dirPath: string, baseRelDir: string): GitignoreRule[] {
   const gitignorePath = path.join(dirPath, ".gitignore");
-  if (!fs.existsSync(gitignorePath)) {
+  let stat: fs.Stats;
+  try {
+    stat = fs.lstatSync(gitignorePath);
+  } catch (err: any) {
+    if (err?.code !== "ENOENT") {
+      console.warn(`[HoverSource] Unable to inspect ${gitignorePath}:`, err);
+    }
     return [];
   }
+
+  if (!stat.isFile()) {
+    console.warn(`[HoverSource] Skipping non-regular .gitignore at ${gitignorePath}`);
+    return [];
+  }
+
+  let fd: number | undefined;
   try {
-    const content = fs.readFileSync(gitignorePath, "utf-8");
+    fd = fs.openSync(gitignorePath, "r");
+    const toRead = Math.min(stat.size, MAX_GITIGNORE_BYTES);
+    if (stat.size > MAX_GITIGNORE_BYTES) {
+      console.warn(`[HoverSource] Truncating oversized .gitignore (> ${MAX_GITIGNORE_BYTES} bytes) at ${gitignorePath}`);
+    }
+    const buf = Buffer.allocUnsafe(toRead);
+    const bytesRead = toRead > 0 ? fs.readSync(fd, buf, 0, toRead, 0) : 0;
+    const content = buf.subarray(0, bytesRead).toString("utf-8");
     const rules: GitignoreRule[] = [];
     for (const line of content.split(/\r?\n/)) {
       const compiled = compileGitignoreRule(line, baseRelDir);
@@ -205,8 +296,15 @@ function readGitignoreRules(dirPath: string, baseRelDir: string): GitignoreRule[
       }
     }
     return rules;
-  } catch {
+  } catch (err) {
+    console.warn(`[HoverSource] Failed to read ${gitignorePath}:`, err);
     return [];
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {}
+    }
   }
 }
 
@@ -246,8 +344,9 @@ function compileIncludeRule(rawPattern: string): IncludeRule | null {
       wildcardPrefix: true,
     };
   }
+  normalized = normalizeGlobPattern(normalized);
   const segments = normalized.split("/").filter(Boolean);
-  const isGlob = /[*?]/.test(normalized);
+  const isGlob = /[*?[]/.test(normalized);
   const globSrc = globToRegexSource(normalized);
   return {
     raw: normalized,
@@ -264,6 +363,7 @@ function compileIncludeRules(include?: string[]): IncludeRule[] {
   }
   const rules: IncludeRule[] = [];
   for (const item of include) {
+    if (typeof item !== "string") continue;
     const compiled = compileIncludeRule(item);
     if (compiled) {
       rules.push(compiled);
@@ -319,13 +419,25 @@ function matchesIncludeFile(relFile: string, includeRules: IncludeRule[]): boole
 function isDotEntryAllowedByInclude(relDir: string, includeRules: IncludeRule[]): boolean {
   if (includeRules.length === 0) return false;
   const dirSegs = relDir.split("/").filter(Boolean);
+  const leafSeg = dirSegs[dirSegs.length - 1];
   for (const rule of includeRules) {
+    if (!matchSegmentsPrefix(dirSegs, rule.segments)) {
+      continue;
+    }
     const segIdx = dirSegs.length - 1;
     if (segIdx < rule.segments.length && rule.segments[segIdx].startsWith(".")) {
       const segRegex = new RegExp(`^${globSegmentToRegex(rule.segments[segIdx])}$`);
-      if (segRegex.test(dirSegs[segIdx])) {
+      if (segRegex.test(leafSeg)) {
         return true;
       }
+    }
+    if (
+      rule.wildcardPrefix &&
+      rule.segments.some(
+        (seg) => seg.startsWith(".") && new RegExp(`^${globSegmentToRegex(seg)}$`).test(leafSeg)
+      )
+    ) {
+      return true;
     }
   }
   return false;
@@ -338,8 +450,17 @@ function collectFilesByExtension(
 ): string[] {
   if (!fs.existsSync(projectRoot)) return [];
 
+  if (scanOptions?.include !== undefined && !Array.isArray(scanOptions.include)) {
+    console.warn("[HoverSource] Invalid 'include' scan option (expected string[]); skipping scan.");
+    return [];
+  }
+
   const respectGitignore = scanOptions?.respectGitignore !== false;
   const includeRules = compileIncludeRules(scanOptions?.include);
+  if (Array.isArray(scanOptions?.include) && scanOptions.include.length > 0 && includeRules.length === 0) {
+    console.warn("[HoverSource] Configured 'include' contains no valid patterns; skipping scan.");
+    return [];
+  }
   const customIgnoreRules: GitignoreRule[] = [];
   if (Array.isArray(scanOptions?.ignore)) {
     for (const pattern of scanOptions.ignore) {

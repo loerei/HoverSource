@@ -892,13 +892,14 @@ describe("client-injector persistent CDP session & Runtime.addBinding bridge", (
 
   it("settles broadcastToTargets deterministically with WebSocket.CLOSED on all ephemeral sockets", async () => {
     const clientSockets = new Set<WebSocket>();
+    let activePort: number | undefined;
     const origEmit = WebSocket.prototype.emit;
     vi.spyOn(WebSocket.prototype, "emit").mockImplementation(function (
       this: WebSocket,
       event: string | symbol,
       ...args: unknown[]
     ) {
-      if (this.url && this.url.startsWith("ws://127.0.0.1:")) {
+      if (activePort !== undefined && this.url?.startsWith(`ws://127.0.0.1:${activePort}/`)) {
         clientSockets.add(this);
       }
       return origEmit.call(this, event, ...args);
@@ -907,6 +908,7 @@ describe("client-injector persistent CDP session & Runtime.addBinding bridge", (
     // 1. Normal ack-initiated close
     const cdpNormal = await createMockCdpServer();
     cleanups.push(() => cdpNormal.close());
+    activePort = cdpNormal.port;
     await broadcastToTargets(cdpNormal.port, "globalThis.__PING__ = 1;", {
       ephemeralCloseTimeoutMs: 25,
     });
@@ -919,6 +921,7 @@ describe("client-injector persistent CDP session & Runtime.addBinding bridge", (
     // 2. Unresponsive OPEN timeout (server never acks Runtime.evaluate)
     const cdpUnresponsive = await createMockCdpServer({ ignoreBroadcastAck: true });
     cleanups.push(() => cdpUnresponsive.close());
+    activePort = cdpUnresponsive.port;
     await broadcastToTargets(cdpUnresponsive.port, "globalThis.__PING__ = 1;", {
       ephemeralCloseTimeoutMs: 25,
     });
@@ -927,6 +930,7 @@ describe("client-injector persistent CDP session & Runtime.addBinding bridge", (
       expect(ws.readyState).toBe(WebSocket.CLOSED);
     }
     clientSockets.clear();
+    activePort = undefined;
 
     // 3. Stalled CONNECTING timeout (raw TCP server accepts connection and never completes WS handshake)
     const stalledSockets: net.Socket[] = [];

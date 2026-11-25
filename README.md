@@ -5,6 +5,7 @@
   
   <p><b>From pixel to source file in one keystroke.</b></p>
 
+  [![CI](https://github.com/loerei/HoverSource/actions/workflows/ci.yml/badge.svg)](https://github.com/loerei/HoverSource/actions/workflows/ci.yml)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/loerei/HoverSource/pulls)
 </div>
@@ -20,6 +21,7 @@ Hover on what you want changed, press `Alt + C`, paste to your agent.
 - **Inspector & Design modes**: Hover over components to view file paths, component names, and CSS line numbers. Or press `Alt + X` to drag a targeting crosshair and get pixel-perfect CSS placement offsets.
 - **Copy AI-ready metadata (`Alt + C` / `Alt + Shift + C`)**: Copies the exact file, line, column, computed styles, CSS origins, and parent layout context to your clipboard. Pressing `Alt + Shift + C` copies the full ancestor layer stack and an HTML skeleton of the target element.
 - **Freeze state (`Alt + P`)**: Locks dropdowns, tooltips, and popovers in place so you can hover and inspect them without them vanishing.
+- **CSP, Shadow DOM & Trusted Types**: Renders overlay UI inside an isolated `#hoversource-host` Shadow DOM without `innerHTML` or inline event attributes, tunnels Electron companion RPCs over persistent CDP `Runtime.addBinding` sessions, and strips `<meta>` CSP tags in the web reverse proxy. Supports Windows, macOS, and Linux.
 
 ## Benchmark: Human Language vs. HoverSource Metadata
 
@@ -153,14 +155,28 @@ app.whenReady().then(() => {
 });
 ```
 
-## Flags
+## Commands & Flags
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `hs start` / `hs dev` / `hs serve` | Start project dev server and attach HoverSource (web proxy or Electron CDP) |
+| `hs dashboard` / `hs -d` | Open the companion configuration dashboard directly |
+| `hs config [inspect\|set\|reset\|delete]` | Inspect or update `.hoversourcerc` (`--global`, `--json`, `--dry-run`) |
+| `hs install [--vue\|--angular\|--solid]` | Install framework template tagging plugins |
+
+### Flags
 
 | Flag | Default | Description |
 |---|---|---|
-| `--port=N` | auto | Companion server port |
+| `--port=N` / `-p N` | auto (`7300+`) | Companion server port |
 | `--proxy-port=N` | target port + 10000 | Proxy port in web mode |
-| `--debug-port=N` | `9222` | CDP debug port in Electron mode |
-| `--dashboard` / `-d` | off | Open config dashboard on start |
+| `--dev-port=N` | auto | Override detected dev server port |
+| `--debug-port=N` | `9222+` | CDP debug port in Electron mode |
+| `--auto-resolve` | `false` | Terminate non-zombie processes occupying Electron dev port |
+| `--https` | `false` | Serve web proxy over local HTTPS using HoverSource Root CA |
+| `--dashboard` / `-d` | off | Open config dashboard on start (or standalone) |
 
 ## Clipboard Output
 

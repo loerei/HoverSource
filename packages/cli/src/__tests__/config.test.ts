@@ -656,4 +656,61 @@ describe("runConfigCommand", () => {
       })
     ).toBe(2);
   });
+
+  it("supports hs config set/get for include, ignore, and respectGitignore", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "include", '["src","index.html"]'],
+        args: { local: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "ignore", "legacy, *.generated.css"],
+        args: { local: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "respectGitignore", "false"],
+        args: { local: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+
+    const stdout = captureStdout();
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "get", "include"],
+        args: { json: true, merged: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    expect(JSON.parse(stdout.join("").trim()).value).toEqual(["src", "index.html"]);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "include", "[broken"],
+        args: { local: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+  });
 });

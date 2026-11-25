@@ -830,3 +830,82 @@ describe("Companion Server /presets* routes", () => {
     expect(invalidConfig.status).toBe(400);
   });
 });
+
+describe("Companion Server static resolution with .hoversourcerc include/ignore", () => {
+  let tempDir: string;
+  let globalConfigPath: string;
+  let server: http.Server;
+  let testPort: number;
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hoversource-srv-scope-"));
+    globalConfigPath = path.join(tempDir, "global.hoversourcerc");
+    fs.writeFileSync(
+      path.join(tempDir, ".hoversourcerc"),
+      JSON.stringify({ include: ["src"] }),
+      "utf-8"
+    );
+
+    const srcDir = path.join(tempDir, "src");
+    const extraDir = path.join(tempDir, "fixtures");
+    fs.mkdirSync(srcDir, { recursive: true });
+    fs.mkdirSync(extraDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(srcDir, "Button.tsx"),
+      'export function Button() { return <button className="btn-primary">Go</button>; }\n',
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(srcDir, "button.css"),
+      ".btn-primary { color: blue; }\n",
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(extraDir, "button.css"),
+      ".fixture-only { color: red; }\n",
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(extraDir, "index.html"),
+      '<html><body><div id="fixture-root"></div></body></html>',
+      "utf-8"
+    );
+
+    testPort = 59870 + Math.floor(Math.random() * 1000);
+    server = startCompanionServer({
+      port: testPort,
+      projectRoot: tempDir,
+      debugPort: 9222,
+      globalConfigPath,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch {}
+        resolve();
+      });
+    });
+  });
+
+  it("applies merged .hoversourcerc include/ignore across /static-context and /resolve-html-element", async () => {
+    const fileParam = encodeURIComponent(path.join(tempDir, "src", "Button.tsx"));
+    const staticRes = await fetch(
+      `http://127.0.0.1:${testPort}/static-context?file=${fileParam}&line=1&column=35&tagName=button&classList=btn-primary,fixture-only`
+    );
+    expect(staticRes.status).toBe(200);
+    const staticData = await staticRes.json();
+    expect(staticData.classOrigins["btn-primary"]).toBeDefined();
+    expect(staticData.classOrigins["fixture-only"]).toBeUndefined();
+
+    const htmlRes = await fetch(
+      `http://127.0.0.1:${testPort}/resolve-html-element?tagName=div&id=fixture-root`
+    );
+    expect(htmlRes.status).toBe(404);
+  });
+});

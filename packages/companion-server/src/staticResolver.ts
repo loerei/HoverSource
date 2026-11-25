@@ -52,64 +52,434 @@ function escapeRegex(s: string): string {
   return s.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function getAllCssFiles(dir: string, fileList: string[] = []): string[] {
-  if (!fs.existsSync(dir)) return fileList;
-  try {
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      const filePath = path.join(dir, file);
-      const stat = fs.statSync(filePath);
-      if (stat.isDirectory()) {
-        const base = path.basename(filePath);
-        if (
-          base !== "node_modules" &&
-          base !== ".git" &&
-          base !== "dist" &&
-          base !== "build" &&
-          base !== "out" &&
-          base !== ".gemini" &&
-          base !== ".agents"
-        ) {
-          getAllCssFiles(filePath, fileList);
-        }
-      } else {
-        const ext = path.extname(file).toLowerCase();
-        if (ext === ".css" || ext === ".scss" || ext === ".sass" || ext === ".less") {
-          fileList.push(filePath);
-        }
-      }
-    }
-  } catch {}
-  return fileList;
+export interface StaticScanOptions {
+  include?: string[];
+  ignore?: string[];
+  respectGitignore?: boolean;
 }
 
-function sortCssFiles(cssFiles: string[], componentFilePath?: string): string[] {
-  if (!componentFilePath) return cssFiles;
-  const componentDir = path.dirname(componentFilePath);
+const DEFAULT_HARD_IGNORE_DIRS = new Set<string>([
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  "build_output",
+]);
+const CSS_EXTENSIONS = new Set<string>([".css", ".scss", ".sass", ".less"]);
+const HTML_EXTENSIONS = new Set<string>([".html", ".htm"]);
+
+interface GitignoreRule {
+  negated: boolean;
+  dirOnly: boolean;
+  baseRelDir: string;
+  regex: RegExp;
+  descendantRegex: RegExp;
+}
+
+interface IncludeRule {
+  raw: string;
+  segments: string[];
+  exactRegex: RegExp;
+  isGlob: boolean;
+  wildcardPrefix: boolean;
+}
+
+function toPosix(p: string): string {
+  return p.replaceAll("\\", "/");
+}
+
+function globSegmentToRegex(segment: string): string {
+  let out = "";
+  for (let i = 0; i < segment.length; i++) {
+    const ch = segment[i];
+    if (ch === "*") {
+      out += "[^/]*";
+    } else if (ch === "?") {
+      out += "[^/]";
+    } else {
+      out += escapeRegex(ch);
+    }
+  }
+  return out;
+}
+
+function globToRegexSource(pattern: string): string {
+  let out = "";
+  let i = 0;
+  while (i < pattern.length) {
+    if (pattern[i] === "*" && pattern[i + 1] === "*") {
+      if (pattern[i + 2] === "/") {
+        out += "(?:.*/)?";
+        i += 3;
+      } else {
+        out += ".*";
+        i += 2;
+      }
+      continue;
+    }
+    if (pattern[i] === "*") {
+      out += "[^/]*";
+      i++;
+      continue;
+    }
+    if (pattern[i] === "?") {
+      out += "[^/]";
+      i++;
+      continue;
+    }
+    if (pattern[i] === "\\" && i + 1 < pattern.length) {
+      out += escapeRegex(pattern[i + 1]);
+      i += 2;
+      continue;
+    }
+    out += escapeRegex(pattern[i]);
+    i++;
+  }
+  return out;
+}
+
+function stripUnescapedTrailingSpaces(line: string): string {
+  let end = line.length;
+  while (end > 0 && line[end - 1] === " " && line[end - 2] !== "\\") {
+    end--;
+  }
+  return line.slice(0, end);
+}
+
+function compileGitignoreRule(rawLine: string, baseRelDir: string): GitignoreRule | null {
+  const cleaned = stripUnescapedTrailingSpaces(rawLine.replace(/\r$/, ""));
+  if (!cleaned || cleaned.startsWith("#")) {
+    return null;
+  }
+
+  let body = cleaned;
+  let negated = false;
+  if (body.startsWith("!")) {
+    negated = true;
+    body = body.slice(1);
+  } else if (body.startsWith("\\#") || body.startsWith("\\!")) {
+    body = body.slice(1);
+  }
+
+  if (!body) return null;
+
+  const dirOnly = body.endsWith("/");
+  if (dirOnly) {
+    body = body.replace(/\/+$/, "");
+  }
+  if (!body) return null;
+
+  const hasLeadingSlash = body.startsWith("/");
+  if (hasLeadingSlash) {
+    body = body.slice(1);
+  }
+  if (!body) return null;
+
+  const anchored = hasLeadingSlash || body.includes("/");
+  const globSrc = globToRegexSource(body);
+  const prefix = anchored ? "^" : "(?:^|/)";
+
+  return {
+    negated,
+    dirOnly,
+    baseRelDir,
+    regex: new RegExp(`${prefix}${globSrc}$`),
+    descendantRegex: new RegExp(`${prefix}${globSrc}/`),
+  };
+}
+
+function readGitignoreRules(dirPath: string, baseRelDir: string): GitignoreRule[] {
+  const gitignorePath = path.join(dirPath, ".gitignore");
+  if (!fs.existsSync(gitignorePath)) {
+    return [];
+  }
+  try {
+    const content = fs.readFileSync(gitignorePath, "utf-8");
+    const rules: GitignoreRule[] = [];
+    for (const line of content.split(/\r?\n/)) {
+      const compiled = compileGitignoreRule(line, baseRelDir);
+      if (compiled) {
+        rules.push(compiled);
+      }
+    }
+    return rules;
+  } catch {
+    return [];
+  }
+}
+
+function isIgnoredByRules(relPath: string, isDir: boolean, rules: GitignoreRule[]): boolean {
+  let ignored = false;
+  for (const rule of rules) {
+    let localRel = relPath;
+    if (rule.baseRelDir) {
+      if (!relPath.startsWith(rule.baseRelDir + "/")) {
+        continue;
+      }
+      localRel = relPath.slice(rule.baseRelDir.length + 1);
+    }
+
+    let matched = false;
+    if (rule.dirOnly) {
+      matched = isDir ? rule.regex.test(localRel) : rule.descendantRegex.test(localRel);
+    } else {
+      matched = rule.regex.test(localRel) || (!isDir && rule.descendantRegex.test(localRel));
+    }
+
+    if (matched) {
+      ignored = !rule.negated;
+    }
+  }
+  return ignored;
+}
+
+function compileIncludeRule(rawPattern: string): IncludeRule | null {
+  let normalized = toPosix(rawPattern.trim()).replace(/^\.\//, "").replace(/^\/+/, "").replace(/\/+$/, "");
+  if (!normalized || normalized === ".") {
+    return {
+      raw: ".",
+      segments: [],
+      exactRegex: /^.*$/,
+      isGlob: false,
+      wildcardPrefix: true,
+    };
+  }
+  const segments = normalized.split("/").filter(Boolean);
+  const isGlob = /[*?]/.test(normalized);
+  const globSrc = globToRegexSource(normalized);
+  return {
+    raw: normalized,
+    segments,
+    exactRegex: isGlob ? new RegExp(`^${globSrc}$`) : new RegExp(`^${escapeRegex(normalized)}(?:/.*)?$`),
+    isGlob,
+    wildcardPrefix: segments.includes("**"),
+  };
+}
+
+function compileIncludeRules(include?: string[]): IncludeRule[] {
+  if (!Array.isArray(include) || include.length === 0) {
+    return [];
+  }
+  const rules: IncludeRule[] = [];
+  for (const item of include) {
+    const compiled = compileIncludeRule(item);
+    if (compiled) {
+      rules.push(compiled);
+    }
+  }
+  return rules;
+}
+
+function matchSegmentsPrefix(dirSegments: string[], ruleSegments: string[]): boolean {
+  for (let i = 0; i < dirSegments.length; i++) {
+    if (i >= ruleSegments.length) {
+      return true;
+    }
+    if (ruleSegments[i] === "**") {
+      return true;
+    }
+    const segRegex = new RegExp(`^${globSegmentToRegex(ruleSegments[i])}$`);
+    if (!segRegex.test(dirSegments[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function shouldDescendIncludeDir(relDir: string, includeRules: IncludeRule[]): boolean {
+  if (includeRules.length === 0) return true;
+  const dirSegs = relDir.split("/").filter(Boolean);
+  for (const rule of includeRules) {
+    if (rule.segments.length === 0) return true;
+    if (matchSegmentsPrefix(dirSegs, rule.segments)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function matchesIncludeFile(relFile: string, includeRules: IncludeRule[]): boolean {
+  if (includeRules.length === 0) return true;
+  for (const rule of includeRules) {
+    if (rule.exactRegex.test(relFile)) {
+      return true;
+    }
+    if (rule.isGlob) {
+      const dirGlobPrefix = new RegExp(`^${globToRegexSource(rule.raw)}/`);
+      if (dirGlobPrefix.test(relFile)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function isDotEntryAllowedByInclude(relDir: string, includeRules: IncludeRule[]): boolean {
+  if (includeRules.length === 0) return false;
+  const dirSegs = relDir.split("/").filter(Boolean);
+  for (const rule of includeRules) {
+    const segIdx = dirSegs.length - 1;
+    if (segIdx < rule.segments.length && rule.segments[segIdx].startsWith(".")) {
+      const segRegex = new RegExp(`^${globSegmentToRegex(rule.segments[segIdx])}$`);
+      if (segRegex.test(dirSegs[segIdx])) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function collectFilesByExtension(
+  projectRoot: string,
+  allowedExtensions: Set<string>,
+  scanOptions?: StaticScanOptions
+): string[] {
+  if (!fs.existsSync(projectRoot)) return [];
+
+  const respectGitignore = scanOptions?.respectGitignore !== false;
+  const includeRules = compileIncludeRules(scanOptions?.include);
+  const customIgnoreRules: GitignoreRule[] = [];
+  if (Array.isArray(scanOptions?.ignore)) {
+    for (const pattern of scanOptions.ignore) {
+      const compiled = compileGitignoreRule(pattern, "");
+      if (compiled) {
+        customIgnoreRules.push(compiled);
+      }
+    }
+  }
+
+  const results: string[] = [];
+
+  function walk(currentDir: string, currentRel: string, inheritedGitignoreRules: GitignoreRule[]): void {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(currentDir);
+    } catch {
+      return;
+    }
+
+    const activeGitignore = respectGitignore
+      ? [...inheritedGitignoreRules, ...readGitignoreRules(currentDir, currentRel)]
+      : inheritedGitignoreRules;
+    const effectiveIgnoreRules = [...activeGitignore, ...customIgnoreRules];
+
+    for (const entry of entries) {
+      const entryAbs = path.join(currentDir, entry);
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(entryAbs);
+      } catch {
+        continue;
+      }
+
+      const relPath = currentRel ? `${currentRel}/${entry}` : entry;
+      if (stat.isDirectory()) {
+        if (entry === ".git" || entry === "node_modules") {
+          continue;
+        }
+        if (DEFAULT_HARD_IGNORE_DIRS.has(entry)) {
+          continue;
+        }
+        if (entry.startsWith(".") && !isDotEntryAllowedByInclude(relPath, includeRules)) {
+          continue;
+        }
+        if (!shouldDescendIncludeDir(relPath, includeRules)) {
+          continue;
+        }
+        if (effectiveIgnoreRules.length > 0 && isIgnoredByRules(relPath, true, effectiveIgnoreRules)) {
+          continue;
+        }
+        walk(entryAbs, relPath, activeGitignore);
+      } else {
+        const ext = path.extname(entry).toLowerCase();
+        if (!allowedExtensions.has(ext)) {
+          continue;
+        }
+        if (!matchesIncludeFile(relPath, includeRules)) {
+          continue;
+        }
+        if (effectiveIgnoreRules.length > 0 && isIgnoredByRules(relPath, false, effectiveIgnoreRules)) {
+          continue;
+        }
+        results.push(entryAbs);
+      }
+    }
+  }
+
+  walk(projectRoot, "", []);
+  return results;
+}
+
+function getAllCssFiles(
+  projectRoot: string,
+  scanOptions?: StaticScanOptions
+): string[] {
+  return collectFilesByExtension(projectRoot, CSS_EXTENSIONS, scanOptions);
+}
+
+function toDirSegments(filePath: string, projectRoot?: string): string[] {
+  const targetDir = path.dirname(filePath);
+  const normalized = projectRoot
+    ? toPosix(path.relative(projectRoot, targetDir))
+    : toPosix(targetDir);
+  return normalized
+    .toLowerCase()
+    .split("/")
+    .filter((seg) => seg !== "" && seg !== ".");
+}
+
+function commonPrefixDepth(a: string[], b: string[]): number {
+  const limit = Math.min(a.length, b.length);
+  let count = 0;
+  for (let i = 0; i < limit; i++) {
+    if (a[i] !== b[i]) break;
+    count++;
+  }
+  return count;
+}
+
+function sortCssFiles(
+  cssFiles: string[],
+  componentFilePath?: string,
+  projectRoot?: string
+): string[] {
+  if (!componentFilePath) {
+    return [...cssFiles].sort((a, b) => toPosix(a).localeCompare(toPosix(b)));
+  }
+  const componentDir = toPosix(path.dirname(componentFilePath)).toLowerCase();
   const componentBase = path.basename(componentFilePath, path.extname(componentFilePath));
-  
+  const componentSegments = toDirSegments(componentFilePath, projectRoot);
+
   return [...cssFiles].sort((a, b) => {
-    const dirA = path.dirname(a);
-    const dirB = path.dirname(b);
+    const dirA = toPosix(path.dirname(a)).toLowerCase();
+    const dirB = toPosix(path.dirname(b)).toLowerCase();
     const baseA = path.basename(a, path.extname(a));
     const baseB = path.basename(b, path.extname(b));
-    
+
     const inSameDirA = dirA === componentDir;
     const inSameDirB = dirB === componentDir;
-    
+
     const baseMatchA = baseA.startsWith(componentBase) || componentBase.startsWith(baseA);
     const baseMatchB = baseB.startsWith(componentBase) || componentBase.startsWith(baseB);
-    
+
     if ((inSameDirA && baseMatchA) && !(inSameDirB && baseMatchB)) return -1;
     if (!(inSameDirA && baseMatchA) && (inSameDirB && baseMatchB)) return 1;
-    
+
     if (inSameDirA && !inSameDirB) return -1;
     if (!inSameDirA && inSameDirB) return 1;
-    
+
     if (baseMatchA && !baseMatchB) return -1;
     if (!baseMatchA && baseMatchB) return 1;
-    
-    return 0;
+
+    const prefixA = commonPrefixDepth(componentSegments, toDirSegments(a, projectRoot));
+    const prefixB = commonPrefixDepth(componentSegments, toDirSegments(b, projectRoot));
+    if (prefixA !== prefixB) {
+      return prefixB - prefixA;
+    }
+
+    return toPosix(a).localeCompare(toPosix(b));
   });
 }
 
@@ -402,11 +772,12 @@ function parseSelectors(content: string): SelectorOrigin[] {
 function findClassOrigins(
   projectRoot: string,
   classNames: string[],
-  componentFilePath?: string
+  componentFilePath?: string,
+  scanOptions?: StaticScanOptions
 ): Record<string, { file: string; line: number; column: number }> {
   const origins: Record<string, { file: string; line: number; column: number }> = {};
-  const cssFiles = getAllCssFiles(projectRoot);
-  const sortedCssFiles = sortCssFiles(cssFiles, componentFilePath);
+  const cssFiles = getAllCssFiles(projectRoot, scanOptions);
+  const sortedCssFiles = sortCssFiles(cssFiles, componentFilePath, projectRoot);
   
   for (const file of sortedCssFiles) {
     try {
@@ -598,7 +969,8 @@ export class StaticContextResolver {
     line: number,
     column: number,
     tagName?: string,
-    classList?: string[]
+    classList?: string[],
+    scanOptions?: StaticScanOptions
   ): Promise<StaticMetadata> {
     const result: StaticMetadata = {
       rawAttributes: {},
@@ -632,7 +1004,7 @@ export class StaticContextResolver {
       result.comments = this.parsePrecedingComments(lines, tagLineIdx);
 
       if (classList && classList.length > 0) {
-        result.classOrigins = findClassOrigins(projectRoot, classList, filePath);
+        result.classOrigins = findClassOrigins(projectRoot, classList, filePath, scanOptions);
       }
 
     } catch (e) {
@@ -644,9 +1016,10 @@ export class StaticContextResolver {
 
   public resolveStaticHtmlLocation(
     projectRoot: string,
-    query: StaticHtmlQuery
+    query: StaticHtmlQuery,
+    scanOptions?: StaticScanOptions
   ): StaticHtmlLocation | null {
-    const htmlFiles = sortHtmlFiles(getAllHtmlFiles(projectRoot), projectRoot);
+    const htmlFiles = sortHtmlFiles(getAllHtmlFiles(projectRoot, scanOptions), projectRoot);
     if (htmlFiles.length === 0) return null;
 
     const normalizedTag = (query.tagName || "").toLowerCase();
@@ -743,8 +1116,11 @@ export class StaticContextResolver {
     };
   }
 
-  public generateStaticHtmlMap(projectRoot: string): StaticHtmlEntry[] {
-    const htmlFiles = sortHtmlFiles(getAllHtmlFiles(projectRoot), projectRoot);
+  public generateStaticHtmlMap(
+    projectRoot: string,
+    scanOptions?: StaticScanOptions
+  ): StaticHtmlEntry[] {
+    const htmlFiles = sortHtmlFiles(getAllHtmlFiles(projectRoot, scanOptions), projectRoot);
     const map: StaticHtmlEntry[] = [];
 
     for (const htmlFile of htmlFiles) {
@@ -802,39 +1178,11 @@ export class StaticContextResolver {
   }
 }
 
-function getAllHtmlFiles(dir: string, fileList: string[] = []): string[] {
-  if (!fs.existsSync(dir)) return fileList;
-  try {
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      const filePath = path.join(dir, file);
-      const stat = fs.statSync(filePath);
-      if (stat.isDirectory()) {
-        const base = path.basename(filePath);
-        if (
-          base !== "node_modules" &&
-          base !== ".git" &&
-          base !== "dist" &&
-          base !== "build" &&
-          base !== "out" &&
-          base !== ".gemini" &&
-          base !== ".agents" &&
-          base !== "build_output" &&
-          base !== ".scratch" &&
-          base !== ".devutil" &&
-          base !== "coverage"
-        ) {
-          getAllHtmlFiles(filePath, fileList);
-        }
-      } else {
-        const ext = path.extname(file).toLowerCase();
-        if (ext === ".html" || ext === ".htm") {
-          fileList.push(filePath);
-        }
-      }
-    }
-  } catch {}
-  return fileList;
+function getAllHtmlFiles(
+  projectRoot: string,
+  scanOptions?: StaticScanOptions
+): string[] {
+  return collectFilesByExtension(projectRoot, HTML_EXTENSIONS, scanOptions);
 }
 
 function sortHtmlFiles(htmlFiles: string[], projectRoot: string): string[] {

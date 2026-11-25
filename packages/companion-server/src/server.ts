@@ -4,8 +4,8 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { broadcastToTargets } from "@hoversource/client-injector";
-import { StaticContextResolver, StaticHtmlEntry } from "./staticResolver.js";
-export { StaticContextResolver, StaticHtmlEntry } from "./staticResolver.js";
+import { StaticContextResolver, StaticHtmlEntry, StaticScanOptions } from "./staticResolver.js";
+export { StaticContextResolver, StaticHtmlEntry, StaticScanOptions } from "./staticResolver.js";
 import {
   resolveFilePath,
   validateSourceLocation,
@@ -43,6 +43,15 @@ export interface ServerConfig {
   projectRoot: string;
   debugPort: number;
   globalConfigPath?: string;
+}
+
+function getStaticScanOptions(config: ServerConfig): StaticScanOptions {
+  const merged = loadMergedConfig(config.projectRoot, config.globalConfigPath);
+  return {
+    include: merged.include,
+    ignore: merged.ignore,
+    respectGitignore: merged.respectGitignore,
+  };
 }
 
 
@@ -93,7 +102,10 @@ function handleOverlayScript(
   const bundleContent = fs.readFileSync(bundlePath, "utf-8");
   let htmlBootstrap = "";
   try {
-    const htmlMap = staticResolver.generateStaticHtmlMap(config.projectRoot);
+    const htmlMap = staticResolver.generateStaticHtmlMap(
+      config.projectRoot,
+      getStaticScanOptions(config)
+    );
     htmlBootstrap = `window.__HOVERSOURCE_STATIC_HTML_MAP__ = ${JSON.stringify(htmlMap)};\n`;
   } catch {}
   const portBootstrap = `window.__HOVERSOURCE_PORT__ = ${config.port};\n`;
@@ -601,7 +613,15 @@ function handleStaticContext(
 
   const { absolutePath, lineVal, colVal, tagNameParam, classList } = params;
 
-  staticResolver.resolveStaticContext(config.projectRoot, absolutePath, lineVal, colVal, tagNameParam, classList)
+  staticResolver.resolveStaticContext(
+    config.projectRoot,
+    absolutePath,
+    lineVal,
+    colVal,
+    tagNameParam,
+    classList,
+    getStaticScanOptions(config)
+  )
     .then(metadata => {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(metadata));
@@ -639,12 +659,16 @@ function handleResolveHtmlElement(
   }
 
   try {
-    const location = staticResolver.resolveStaticHtmlLocation(config.projectRoot, {
-      tagName,
-      id,
-      classList,
-      attributes
-    });
+    const location = staticResolver.resolveStaticHtmlLocation(
+      config.projectRoot,
+      {
+        tagName,
+        id,
+        classList,
+        attributes,
+      },
+      getStaticScanOptions(config)
+    );
 
     if (location) {
       res.writeHead(200, { "Content-Type": "application/json" });

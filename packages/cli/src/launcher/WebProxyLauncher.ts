@@ -133,11 +133,13 @@ export class WebProxyLauncher implements AppLauncher {
       if (sniffedPort !== undefined && !seenSniffedPorts.has(sniffedPort)) {
         seenSniffedPorts.add(sniffedPort);
         console.log(`[HoverSource] Detected dev server listening on port ${sniffedPort} (shifted from ${targetDevPort}).`);
-        waitForServer(sniffedPort, Math.min(timeoutMs, 15_000), () => hasExited).then((ok) => {
-          if (ok) {
-            resolveSniffed?.({ ready: true, port: sniffedPort });
-          }
-        });
+        waitForServer(sniffedPort, Math.min(timeoutMs, 15_000), () => hasExited)
+          .then((ok) => {
+            if (ok) {
+              resolveSniffed?.({ ready: true, port: sniffedPort });
+            }
+          })
+          .catch(() => {});
       }
     };
 

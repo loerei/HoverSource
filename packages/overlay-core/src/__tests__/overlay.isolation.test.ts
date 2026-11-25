@@ -743,4 +743,53 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
       expect(spy).not.toHaveBeenCalled();
     }
   });
+
+  it("allows mode shortcuts (Alt+C, Alt+P) when filterPanel checkbox or non-text input has focus, while blocking host text inputs", async () => {
+    vi.useFakeTimers();
+    activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 1000 });
+    expect(activeEngine).not.toBeNull();
+    const shadow = document.getElementById("hoversource-host")!.shadowRoot!;
+
+    const target = document.createElement("button");
+    target.setAttribute("data-hs-source", "App.tsx:12:4");
+    target.textContent = "Action";
+    document.body.appendChild(target);
+    vi.spyOn(document, "elementsFromPoint").mockReturnValue([target]);
+
+    target.dispatchEvent(new PointerEvent("pointerover", { clientX: 20, clientY: 20, bubbles: true }));
+    await vi.advanceTimersByTimeAsync(60);
+
+    // Open filterPanel and focus a checkbox inside shadowRoot
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", altKey: true, ctrlKey: true }));
+    const checkbox = shadow.querySelector('.hoversource-config-panel input[type="checkbox"]') as HTMLInputElement;
+    expect(checkbox).not.toBeNull();
+    checkbox.focus();
+    expect(shadow.activeElement).toBe(checkbox);
+
+    // Alt+C and Alt+P must still trigger while filterPanel checkbox has focus
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", altKey: true }));
+    expect(clipboardWriteMock).toHaveBeenCalledTimes(1);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "p", code: "KeyP", altKey: true }));
+    expect(document.head.querySelectorAll("#hoversource-freeze-styles")).toHaveLength(1);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "p", code: "KeyP", altKey: true }));
+
+    // Host page checkbox (non-text input) must also allow shortcuts
+    const hostCheckbox = document.createElement("input");
+    hostCheckbox.type = "checkbox";
+    document.body.appendChild(hostCheckbox);
+    hostCheckbox.focus();
+    expect(document.activeElement).toBe(hostCheckbox);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", altKey: true }));
+    expect(clipboardWriteMock).toHaveBeenCalledTimes(2);
+
+    // Host page text input must still block shortcuts
+    const hostTextInput = document.createElement("input");
+    hostTextInput.type = "text";
+    document.body.appendChild(hostTextInput);
+    hostTextInput.focus();
+    expect(document.activeElement).toBe(hostTextInput);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", altKey: true }));
+    expect(clipboardWriteMock).toHaveBeenCalledTimes(2);
+  });
 });

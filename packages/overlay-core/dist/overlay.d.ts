@@ -55,6 +55,7 @@ export declare class OverlayEngine implements OverlayController {
     private makePanelDraggable;
     private switchMode;
     private openDashboardInBrowser;
+    private static readonly NON_TEXT_INPUT_TYPES;
     private isTyping;
     private readonly handlePointerOver;
     private readonly handlePointerMove;

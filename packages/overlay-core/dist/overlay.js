@@ -904,12 +904,31 @@ export class OverlayEngine {
             console.error("[HoverSource] Failed to request dashboard open:", e);
         });
     }
-    isTyping(e) {
+    static NON_TEXT_INPUT_TYPES = new Set([
+        "checkbox",
+        "radio",
+        "button",
+        "submit",
+        "reset",
+        "range",
+        "color",
+        "file",
+        "image",
+    ]);
+    isTyping(_e) {
         const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
         if (!activeEl)
             return false;
+        if (this.shadowRoot?.contains(activeEl))
+            return false;
         const tag = activeEl.tagName.toLowerCase();
-        return tag === "input" || tag === "textarea" || activeEl.hasAttribute("contenteditable");
+        if (tag === "input") {
+            const inputType = (activeEl.type || "text").toLowerCase();
+            return !OverlayEngine.NON_TEXT_INPUT_TYPES.has(inputType);
+        }
+        return (tag === "textarea" ||
+            activeEl.isContentEditable === true ||
+            (activeEl.hasAttribute("contenteditable") && activeEl.getAttribute("contenteditable") !== "false"));
     }
     handlePointerOver = (e) => {
         this.ensureUI();

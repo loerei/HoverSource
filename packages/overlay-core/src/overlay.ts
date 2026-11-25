@@ -971,11 +971,32 @@ export class OverlayEngine implements OverlayController {
       });
   }
 
-  private isTyping(e: KeyboardEvent): boolean {
+  private static readonly NON_TEXT_INPUT_TYPES = new Set([
+    "checkbox",
+    "radio",
+    "button",
+    "submit",
+    "reset",
+    "range",
+    "color",
+    "file",
+    "image",
+  ]);
+
+  private isTyping(_e: KeyboardEvent): boolean {
     const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
     if (!activeEl) return false;
+    if (this.shadowRoot?.contains(activeEl)) return false;
     const tag = activeEl.tagName.toLowerCase();
-    return tag === "input" || tag === "textarea" || activeEl.hasAttribute("contenteditable");
+    if (tag === "input") {
+      const inputType = ((activeEl as HTMLInputElement).type || "text").toLowerCase();
+      return !OverlayEngine.NON_TEXT_INPUT_TYPES.has(inputType);
+    }
+    return (
+      tag === "textarea" ||
+      (activeEl as HTMLElement).isContentEditable === true ||
+      (activeEl.hasAttribute("contenteditable") && activeEl.getAttribute("contenteditable") !== "false")
+    );
   }
 
   private readonly handlePointerOver = (e: PointerEvent) => {

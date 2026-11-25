@@ -43,6 +43,23 @@ export function rewriteLocationHeader(
   }
 }
 
+export function stripCspHeaders(headers: http.IncomingHttpHeaders): void {
+  delete headers["content-security-policy"];
+  delete headers["content-security-policy-report-only"];
+}
+
+export function sanitizeUpstreamResponseHeaders(
+  headers: http.IncomingHttpHeaders,
+  targetUrl: string,
+  proxyPort: number,
+  useHttps: boolean,
+  reqHost?: string
+): void {
+  stripCspHeaders(headers);
+  rewriteCookieHeaders(headers, useHttps);
+  rewriteLocationHeader(headers, targetUrl, proxyPort, useHttps, reqHost);
+}
+
 export interface ProxyOptions {
   targetUrl: string;
   proxyPort: number;
@@ -82,8 +99,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
       const companionReq = http.request(companionReqOpts, (companionRes) => {
         const responseHeaders = { ...companionRes.headers };
         // Ensure CSP is stripped from companion server responses just in case
-        delete responseHeaders["content-security-policy"];
-        delete responseHeaders["content-security-policy-report-only"];
+        stripCspHeaders(responseHeaders);
 
         if (isOverlayScript) {
           const chunks: Buffer[] = [];
@@ -153,12 +169,13 @@ export function startProxy(options: ProxyOptions): Promise<void> {
       // Performance Optimization: Stream non-HTML responses directly
       if (!pipeline.shouldTransform(contentType)) {
         const responseHeaders = { ...proxyRes.headers };
-        // Strip CSP headers to avoid iframe and asset restrictions
-        delete responseHeaders["content-security-policy"];
-        delete responseHeaders["content-security-policy-report-only"];
-        // Rewrite cookie domains and secure flag
-        rewriteCookieHeaders(responseHeaders, !!useHttps);
-        rewriteLocationHeader(responseHeaders, targetUrl, proxyPort, !!useHttps, req.headers.host);
+        sanitizeUpstreamResponseHeaders(
+          responseHeaders,
+          targetUrl,
+          proxyPort,
+          !!useHttps,
+          req.headers.host
+        );
 
         res.writeHead(proxyRes.statusCode || 200, responseHeaders);
         proxyRes.pipe(res, { end: true });
@@ -180,13 +197,14 @@ export function startProxy(options: ProxyOptions): Promise<void> {
         // Recalculate content headers after modification
         delete responseHeaders["content-length"];
         delete responseHeaders["content-encoding"];
-        // Strip CSP headers to ensure the browser loads the overlay script
-        delete responseHeaders["content-security-policy"];
-        delete responseHeaders["content-security-policy-report-only"];
         responseHeaders["content-type"] = "text/html; charset=utf-8";
-        // Rewrite cookie domains and secure flag
-        rewriteCookieHeaders(responseHeaders, !!useHttps);
-        rewriteLocationHeader(responseHeaders, targetUrl, proxyPort, !!useHttps, req.headers.host);
+        sanitizeUpstreamResponseHeaders(
+          responseHeaders,
+          targetUrl,
+          proxyPort,
+          !!useHttps,
+          req.headers.host
+        );
 
         res.writeHead(proxyRes.statusCode || 200, responseHeaders);
         res.end(transformedBody);

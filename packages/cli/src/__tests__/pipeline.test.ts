@@ -76,5 +76,66 @@ describe("ProxyResponsePipeline", () => {
       const result = pipeline.transform(body, "", options);
       expect(result).toHaveLength(0);
     });
+
+    it("should strip single-line, multiline, reversed, quoted, unquoted, whitespace-padded, quoted-gt, and Report-Only meta CSP tags while preserving non-CSP meta tags", () => {
+      const html = [
+        "<html><head>",
+        '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        '<meta name="x" data-test-http-equiv="Content-Security-Policy">',
+        '<meta http-equiv="Content-Security-Policy" content="default-src \'self\'">',
+        "<meta\n  http-equiv=\"Content-Security-Policy-Report-Only\"\n  content=\"script-src 'self'\"\n>",
+        '<meta content="default-src \'self\'" http-equiv="Content-Security-Policy">',
+        "<meta http-equiv='Content-Security-Policy' content='default-src *'>",
+        "<meta http-equiv=Content-Security-Policy content=default-src>",
+        '<meta http-equiv=" Content-Security-Policy " content="default-src \'self\'">',
+        '<meta data-expr="a>b" http-equiv="Content-Security-Policy" content="script-src \'self\' >">',
+        "</head><body>ok</body></html>",
+      ].join("\n");
+
+      const result = pipeline.transform(Buffer.from(html, "utf-8"), "", options).toString("utf-8");
+
+      expect(result).toContain('<meta charset="utf-8">');
+      expect(result).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
+      expect(result).toContain('<meta name="x" data-test-http-equiv="Content-Security-Policy">');
+      expect(result).not.toContain("default-src");
+      expect(result).not.toContain("script-src");
+      expect(result).not.toContain("Content-Security-Policy-Report-Only");
+      expect(result).not.toContain("data-expr");
+      expect(result).toContain(`${expectedInjection}\n</body>`);
+    });
+
+    it("should strip meta CSP tags cleanly when preceding text contains UTF-16 case-expanding characters like \\u0130", () => {
+      const html =
+        '<html><head><title>\u0130stanbul</title><meta http-equiv="Content-Security-Policy" content="default-src \'self\'"></head><body>ok</body></html>';
+      const result = pipeline.transform(Buffer.from(html, "utf-8"), "", options).toString("utf-8");
+
+      expect(result).toBe(
+        `<html><head><title>\u0130stanbul</title></head><body>ok${expectedInjection}\n</body></html>`
+      );
+    });
+
+    it("should strip meta CSP tags from gzip-compressed HTML", () => {
+      const html =
+        '<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'"></head><body>ok</body></html>';
+      const compressed = zlib.gzipSync(Buffer.from(html, "utf-8"));
+      const result = pipeline.transform(compressed, "gzip", options).toString("utf-8");
+
+      expect(result).toContain('<meta charset="utf-8">');
+      expect(result).not.toContain("Content-Security-Policy");
+      expect(result).toContain(`${expectedInjection}\n</body>`);
+    });
+
+    it("should complete in linear O(N) time on adversarial unclosed <meta sequences without corrupting payload", () => {
+      const payload = "<meta name='a' ".repeat(20_000);
+      const body = Buffer.from(payload, "utf-8");
+
+      const start = performance.now();
+      const result = pipeline.transform(body, "", options).toString("utf-8");
+      const elapsedMs = performance.now() - start;
+
+      expect(elapsedMs).toBeLessThan(1000);
+      expect(result).toBe(`${payload}\n${expectedInjection}`);
+    });
   });
 });

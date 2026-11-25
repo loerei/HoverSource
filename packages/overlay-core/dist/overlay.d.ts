@@ -11,6 +11,8 @@ export declare class OverlayEngine implements OverlayController {
     private static activeInstance;
     private static activeLaunchPromise;
     private config;
+    shadowHost: HTMLDivElement | null;
+    private shadowRoot;
     private container;
     private outlineBox;
     private tooltipBox;
@@ -21,6 +23,7 @@ export declare class OverlayEngine implements OverlayController {
     private uiVisible;
     private isFrozen;
     private freezeStyle;
+    private freezeShadowStyle;
     private launchAbortController;
     private shortcutsAttached;
     private modeActivated;

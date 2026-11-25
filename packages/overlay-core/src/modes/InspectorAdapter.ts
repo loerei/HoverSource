@@ -2,6 +2,7 @@ import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js
 import { SourceResolver, ParentVisualEffect } from "@hoversource/source-resolver";
 import { inspectVisualContext } from "../inspector.js";
 import { companionRequestJson } from "../companionTransport.js";
+import { escapeHtml } from "../safeDom.js";
 
 interface TooltipLabels {
   copyLabel: string;
@@ -75,8 +76,10 @@ export class InspectorAdapter implements InteractionMode {
     this.lastPointerEvent = event;
     const rawStack = document.elementsFromPoint(event.clientX, event.clientY) as HTMLElement[];
     const container = (this.controller as any).container as HTMLElement | null;
+    const shadowHost = (this.controller as any).shadowHost as HTMLElement | null;
     this.layerStack = rawStack.filter(el => {
       if (el === document.documentElement || el === document.body) return false;
+      if (shadowHost && (el === shadowHost || shadowHost.contains(el))) return false;
       if (container && (el === container || container.contains(el))) return false;
       return true;
     }).slice(0, this.maxTraversalDepth);
@@ -368,7 +371,7 @@ export class InspectorAdapter implements InteractionMode {
   ): string {
     const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
     const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
-    const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+    const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
 
     let vueHint = "";
     if (info.framework === "Vue" && !info.lineNumber) {
@@ -379,15 +382,24 @@ export class InspectorAdapter implements InteractionMode {
       `;
     }
 
+    const fileBase = info.fileName.split('/').pop().split('\\').pop();
+
     return `
       <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
-        <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
-        <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${info.framework}</span>
+        <span>${escapeHtml(info.componentName || element.tagName.toLowerCase())}${this.isFrozen ? ' [FROZEN]' : ''}</span>
+        <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${escapeHtml(info.framework)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
-        <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-          ${info.fileName.split('/').pop().split('\\').pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
+        <span
+          class="hoversource-link"
+          data-hs-open-file="${escapeHtml(info.fileName)}"
+          data-hs-open-line="${info.lineNumber || 1}"
+          data-hs-open-col="${info.columnNumber || 1}"
+          data-hs-open-tag="${escapeHtml(info.tagName || "")}"
+          data-hs-open-classes="${escapeHtml((info.classList || []).join(","))}"
+        >
+          ${escapeHtml(fileBase)}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
       ${vueHint}
@@ -408,14 +420,14 @@ export class InspectorAdapter implements InteractionMode {
     const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
     const elementSelector = `${tagName}${classStr}`;
     
-    let selectorHtml = `<span class="hoversource-value">${elementSelector}</span>`;
+    let selectorHtml = `<span class="hoversource-value">${escapeHtml(elementSelector)}</span>`;
     if (info.staticMetadata?.classOrigins) {
       const originParts = [];
       for (const cls of classList) {
         const origin = info.staticMetadata.classOrigins[cls];
         if (origin) {
           const fileBase = origin.file.split("/").pop().split("\\").pop();
-          originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`);
+          originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${escapeHtml(fileBase)}:${escapeHtml(origin.line)}]</span>`);
         }
       }
       if (originParts.length > 0) {
@@ -423,10 +435,12 @@ export class InspectorAdapter implements InteractionMode {
       }
     }
 
+    const fileBase = info.fileName.split('/').pop().split('\\').pop();
+
     return `
       <div class="hoversource-title" style="${this.isFrozen ? 'color: #f59e0b;' : ''}">
-        <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? ' [FROZEN]' : ''}</span>
-        <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${info.framework}</span>
+        <span>${escapeHtml(info.componentName || element.tagName.toLowerCase())}${this.isFrozen ? ' [FROZEN]' : ''}</span>
+        <span class="hoversource-framework" style="${this.isFrozen ? 'background: #78350f; color: #fde68a;' : ''}">${escapeHtml(info.framework)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Element: </span>
@@ -434,13 +448,20 @@ export class InspectorAdapter implements InteractionMode {
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
-        <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-          ${info.fileName.split('/').pop().split('\\').pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
+        <span
+          class="hoversource-link"
+          data-hs-open-file="${escapeHtml(info.fileName)}"
+          data-hs-open-line="${info.lineNumber || 1}"
+          data-hs-open-col="${info.columnNumber || 1}"
+          data-hs-open-tag="${escapeHtml(info.tagName || "")}"
+          data-hs-open-classes="${escapeHtml((info.classList || []).join(","))}"
+        >
+          ${escapeHtml(fileBase)}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Path: </span>
-        <span class="hoversource-value">${info.fileName}</span>
+        <span class="hoversource-value">${escapeHtml(info.fileName)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Size: </span>
@@ -448,11 +469,11 @@ export class InspectorAdapter implements InteractionMode {
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Color: </span>
-        <span class="hoversource-value">${color}</span>
+        <span class="hoversource-value">${escapeHtml(color)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Background: </span>
-        <span class="hoversource-value">${bgColor}</span>
+        <span class="hoversource-value">${escapeHtml(bgColor)}</span>
       </div>
     `;
   }
@@ -463,7 +484,7 @@ export class InspectorAdapter implements InteractionMode {
       html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Shadow: </span>
-          <span class="hoversource-value">${shadow}</span>
+          <span class="hoversource-value">${escapeHtml(shadow)}</span>
         </div>
       `;
     }
@@ -472,7 +493,7 @@ export class InspectorAdapter implements InteractionMode {
       html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Animation: </span>
-          <span class="hoversource-value">${animation}</span>
+          <span class="hoversource-value">${escapeHtml(animation)}</span>
         </div>
       `;
     }
@@ -484,7 +505,7 @@ export class InspectorAdapter implements InteractionMode {
       html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Layout: </span>
-          <span class="hoversource-value">${constraints}</span>
+          <span class="hoversource-value">${escapeHtml(constraints)}</span>
         </div>
       `;
     }
@@ -504,7 +525,7 @@ export class InspectorAdapter implements InteractionMode {
             const origin = info.staticMetadata.classOrigins[cls];
             if (origin) {
               const fileBase = origin.file.split("/").pop();
-              originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
+              originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${escapeHtml(fileBase)}:${escapeHtml(origin.line)}]</span>`;
               break;
             }
           }
@@ -512,7 +533,7 @@ export class InspectorAdapter implements InteractionMode {
         const isVisual = fx.property === "mask-image" || fx.property === "clip-path" || fx.property.startsWith("overflow");
         const cursorStyle = isVisual ? "cursor: pointer;" : "cursor: default;";
         const hoverClass = isVisual ? " hoversource-parent-item" : "";
-        return `<div class="hoversource-stack-item${hoverClass}" data-index="${idx}" style="${cursorStyle}">${fx.tagName}${classStr}${originLabel} ➔ ${fx.property}: ${fx.value}</div>`;
+        return `<div class="hoversource-stack-item${hoverClass}" data-index="${idx}" style="${cursorStyle}">${escapeHtml(fx.tagName)}${escapeHtml(classStr)}${originLabel} ➔ ${escapeHtml(fx.property)}: ${escapeHtml(fx.value)}</div>`;
       })
       .join("");
 
@@ -531,7 +552,7 @@ export class InspectorAdapter implements InteractionMode {
     let html = "";
     if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
       const commentsHtml = info.staticMetadata.comments
-        .map((c: string) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${c}</div>`)
+        .map((c: string) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${escapeHtml(c)}</div>`)
         .join("");
       html += `
         <div class="hoversource-section">
@@ -544,7 +565,7 @@ export class InspectorAdapter implements InteractionMode {
     }
     if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
       const attrs = Object.entries(info.staticMetadata.rawAttributes)
-        .map(([k, v]) => `${k}="${v}"`)
+        .map(([k, v]) => `${escapeHtml(k)}="${escapeHtml(v)}"`)
         .join(" ");
       html += `
         <div class="hoversource-section">
@@ -585,7 +606,7 @@ export class InspectorAdapter implements InteractionMode {
     html += this.renderStaticMetadata(info);
 
     const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
-    const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+    const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
 
     let vueHint = "";
     if (info.framework === "Vue" && !info.lineNumber) {
@@ -600,7 +621,7 @@ export class InspectorAdapter implements InteractionMode {
       <div class="hoversource-section">
         <span class="hoversource-label">Stack: </span>
         <div class="hoversource-stack">
-          ${stack.map(item => `<div class="hoversource-stack-item">${item}</div>`).join('')}
+          ${stack.map(item => `<div class="hoversource-stack-item">${escapeHtml(item)}</div>`).join('')}
         </div>
       </div>
       ${vueHint}
@@ -638,7 +659,7 @@ export class InspectorAdapter implements InteractionMode {
       const label = cls ? `${tag}.${cls}` : tag;
       const zIndex = this.layerStack.length - i;
       const svgContent = i === 0 ? topLayerSvg : chevronLayerSvg;
-      return `<div class="hs-layer-dot${isActive ? " hs-layer-dot--active" : ""}" style="z-index: ${zIndex}" title="Layer ${i + 1}: ${label}">${svgContent}</div>`;
+      return `<div class="hs-layer-dot${isActive ? " hs-layer-dot--active" : ""}" style="z-index: ${zIndex}" title="Layer ${i + 1}: ${escapeHtml(label)}">${svgContent}</div>`;
     }).join("");
     const scrollHint = (() => {
       const m = this.layerScrollModifiers;
@@ -911,7 +932,7 @@ export class InspectorAdapter implements InteractionMode {
     const clone = el.cloneNode(true) as HTMLElement;
     
     // Remove HoverSource containers or elements if any inside the clone
-    const hsEls = clone.querySelectorAll('.hoversource-container, [class^="hs-"]');
+    const hsEls = clone.querySelectorAll('#hoversource-host, .hoversource-container, [class^="hs-"]');
     hsEls.forEach(e => e.remove());
 
     return this.formatMinifiedHtmlNode(clone, "");

@@ -5,12 +5,15 @@ import { DesignAdapter } from "./modes/DesignAdapter.js";
 import { companionRequestJson } from "./companionTransport.js";
 import { waitForDomBody } from "./domReady.js";
 import { initInspectorMutationObserver, disconnectInspectorMutationObserver } from "./inspector.js";
+import { createSafeFragmentFromHtml, setElementContentSafely, el } from "./safeDom.js";
 export { waitForDomBody };
 export class OverlayEngine {
     static launchEpoch = 0;
     static activeInstance = null;
     static activeLaunchPromise = null;
     config = null;
+    shadowHost = null;
+    shadowRoot = null;
     container = null;
     outlineBox = null;
     tooltipBox = null;
@@ -21,6 +24,7 @@ export class OverlayEngine {
     uiVisible = true;
     isFrozen = false;
     freezeStyle = null;
+    freezeShadowStyle = null;
     launchAbortController = null;
     shortcutsAttached = false;
     modeActivated = false;
@@ -122,7 +126,9 @@ export class OverlayEngine {
     handleConfigUpdate(newConfig) {
         console.log("[HoverSource] Live reloading config...", newConfig);
         this.config = newConfig;
-        const oldStyle = document.getElementById("hoversource-styles");
+        const oldStyle = this.shadowRoot?.getElementById?.("hoversource-styles") ??
+            this.shadowRoot?.querySelector("#hoversource-styles") ??
+            document.getElementById("hoversource-styles");
         if (oldStyle)
             oldStyle.remove();
         this.initStyles();
@@ -174,7 +180,15 @@ export class OverlayEngine {
                 layerShapeStroke: "rgba(0,0,0,0.35)",
                 layerShapeHoverFill: "#d1d5db",
                 layerShapeHoverStroke: "rgba(0,0,0,0.6)",
-                layerHintColor: "#9ca3af"
+                layerHintColor: "#9ca3af",
+                panelBorder: "rgba(37, 99, 235, 0.3)",
+                panelGlow: "rgba(37, 99, 235, 0.2)",
+                navBg: "rgba(0, 0, 0, 0.05)",
+                navHoverBg: "rgba(0, 0, 0, 0.1)",
+                accent: "#2563eb",
+                accentGlow: "rgba(37, 99, 235, 0.4)",
+                accentHover: "#3b82f6",
+                rowHoverBg: "rgba(0, 0, 0, 0.02)",
             }
             : {
                 tooltipBg: "rgba(18, 18, 18, 0.95)",
@@ -188,11 +202,30 @@ export class OverlayEngine {
                 layerShapeStroke: "rgba(255,255,255,0.5)",
                 layerShapeHoverFill: "#3f3f46",
                 layerShapeHoverStroke: "rgba(255,255,255,0.7)",
-                layerHintColor: "#6b7280"
+                layerHintColor: "#6b7280",
+                panelBorder: "rgba(59, 130, 246, 0.3)",
+                panelGlow: "rgba(59, 130, 246, 0.2)",
+                navBg: "rgba(255, 255, 255, 0.08)",
+                navHoverBg: "rgba(255, 255, 255, 0.15)",
+                accent: "#3b82f6",
+                accentGlow: "rgba(59, 130, 246, 0.4)",
+                accentHover: "#60a5fa",
+                rowHoverBg: "rgba(255, 255, 255, 0.02)",
             };
         const style = document.createElement("style");
         style.id = "hoversource-styles";
-        style.innerHTML = `
+        style.textContent = `
+      :host {
+        all: initial;
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+        z-index: 2147483647;
+      }
       .hoversource-container {
         position: fixed;
         top: 0;
@@ -405,11 +438,11 @@ export class OverlayEngine {
         background: ${colors.tooltipBg};
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        border: 1px solid ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.3)" : "rgba(37, 99, 235, 0.3)"};
+        border: 1px solid ${colors.panelBorder};
         color: ${colors.tooltipText};
         padding: 10px 12px;
         border-radius: 8px;
-        box-shadow: 0 0 12px ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.2)" : "rgba(37, 99, 235, 0.2)"}, 0 8px 20px -5px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 0 12px ${colors.panelGlow}, 0 8px 20px -5px rgba(0, 0, 0, 0.5);
         z-index: 1000000;
         user-select: none;
         box-sizing: border-box;
@@ -425,7 +458,7 @@ export class OverlayEngine {
         cursor: move;
       }
       .hoversource-config-panel .nav-btn {
-        background: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"};
+        background: ${colors.navBg};
         border: 1px solid ${colors.borderSep};
         color: ${colors.tooltipText};
         cursor: pointer;
@@ -435,13 +468,13 @@ export class OverlayEngine {
         transition: all 0.2s ease;
       }
       .hoversource-config-panel .nav-btn:hover {
-        background: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)"};
+        background: ${colors.navHoverBg};
       }
       .hoversource-config-panel .title {
         font-weight: 700;
         font-size: 11.5px;
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
-        text-shadow: 0 0 6px ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.4)" : "rgba(37, 99, 235, 0.4)"};
+        color: ${colors.accent};
+        text-shadow: 0 0 6px ${colors.accentGlow};
         letter-spacing: 0.02em;
       }
       .hoversource-config-panel table {
@@ -452,7 +485,7 @@ export class OverlayEngine {
         transition: background-color 0.15s ease;
       }
       .hoversource-config-panel tr:hover {
-        background-color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.02)"};
+        background-color: ${colors.rowHoverBg};
       }
       .hoversource-config-panel td {
         padding: 4px 0;
@@ -477,25 +510,28 @@ export class OverlayEngine {
         display: flex;
         align-items: center;
         justify-content: center;
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        color: ${colors.accent};
         width: 12px;
         height: 12px;
         opacity: 0.75;
       }
       .hoversource-config-panel tr:hover .icon-wrapper {
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#60a5fa" : "#3b82f6"};
+        color: ${colors.accentHover};
       }
       .hoversource-config-panel tr.hs-row-disabled {
         opacity: 0.5;
       }
       .hoversource-config-panel input[type="checkbox"] {
         cursor: pointer;
-        accent-color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        accent-color: ${colors.accent};
         width: 12px;
         height: 12px;
       }
     `;
-        if (this.container) {
+        if (this.shadowRoot) {
+            this.shadowRoot.appendChild(style);
+        }
+        else if (this.container) {
             this.container.appendChild(style);
         }
         else if (document.head) {
@@ -503,8 +539,11 @@ export class OverlayEngine {
         }
     }
     createUI() {
-        if (this.container || !document.body)
+        if (this.shadowHost || this.container || !document.body)
             return;
+        this.shadowHost = document.createElement("div");
+        this.shadowHost.id = "hoversource-host";
+        this.shadowRoot = this.shadowHost.attachShadow({ mode: "open" });
         this.container = document.createElement("div");
         this.container.className = "hoversource-container";
         this.outlineBox = document.createElement("div");
@@ -514,19 +553,34 @@ export class OverlayEngine {
         this.tooltipBox = document.createElement("div");
         this.tooltipBox.className = "hoversource-tooltip";
         this.tooltipBox.style.display = "none";
+        this.tooltipBox.addEventListener("click", (e) => {
+            const target = e.target;
+            const link = target?.closest?.("[data-hs-open-file]");
+            if (!link)
+                return;
+            const file = link.dataset.hsOpenFile;
+            if (!file)
+                return;
+            const line = Number.parseInt(link.dataset.hsOpenLine || "1", 10) || 1;
+            const col = Number.parseInt(link.dataset.hsOpenCol || "1", 10) || 1;
+            const tagName = link.dataset.hsOpenTag || "";
+            const classList = link.dataset.hsOpenClasses || "";
+            openFileInIde(file, line, col, tagName, classList);
+        });
         this.container.appendChild(this.tooltipBox);
         this.filterPanel = document.createElement("div");
         this.filterPanel.className = "hoversource-config-panel";
         this.filterPanel.style.display = "none";
         this.container.appendChild(this.filterPanel);
-        document.body.appendChild(this.container);
+        this.shadowRoot.appendChild(this.container);
+        document.body.appendChild(this.shadowHost);
     }
     ensureUI() {
         if (!document.body)
             return;
-        if (this.container && !document.body.contains(this.container)) {
+        if (this.shadowHost && !document.body.contains(this.shadowHost)) {
             console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
-            document.body.appendChild(this.container);
+            document.body.appendChild(this.shadowHost);
         }
     }
     initShortcuts() {
@@ -609,7 +663,7 @@ export class OverlayEngine {
             this.filterPanel.style.display = "none";
         }
     }
-    renderFilterPanel() {
+    renderFilterPanel(restoreFocusId) {
         if (!this.filterPanel)
             return;
         const metadataTypes = [
@@ -671,51 +725,64 @@ export class OverlayEngine {
             aiInstructions: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
         };
         const fields = fieldsMap[activeType.id] || [];
-        let tableRowsHtml = "";
-        fields.forEach((field) => {
+        const rowNodes = fields.map((field) => {
             // Look up current filter value from config (default to true if not set)
             const filtersObj = this.config?.metadataFilter?.filters?.[activeType.id];
             const isChecked = filtersObj ? (filtersObj[field.key] !== false) : true;
             const svgIcon = iconsMap[field.key] || "";
-            tableRowsHtml += `
-        <tr class="${isChecked ? "" : "hs-row-disabled"}" style="cursor: pointer;">
-          <td class="label-col">
-            <span class="icon-wrapper">${svgIcon}</span>
-            <span>${field.label}</span>
-          </td>
-          <td class="check-col">
-            <input type="checkbox" data-type="${activeType.id}" data-field="${field.key}" ${isChecked ? "checked" : ""}>
-          </td>
-        </tr>
-      `;
+            return el("tr", { class: isChecked ? "" : "hs-row-disabled", style: "cursor: pointer;" }, [
+                el("td", { class: "label-col" }, [
+                    el("span", { class: "icon-wrapper" }, [
+                        svgIcon ? createSafeFragmentFromHtml(svgIcon) : null,
+                    ]),
+                    el("span", {}, [field.label]),
+                ]),
+                el("td", { class: "check-col" }, [
+                    el("input", {
+                        type: "checkbox",
+                        "data-type": activeType.id,
+                        "data-field": field.key,
+                        checked: isChecked,
+                    }),
+                ]),
+            ]);
         });
-        this.filterPanel.innerHTML = `
-      <div class="header" id="hoversource-drag-header">
-        <button class="nav-btn" id="hoversource-prev-btn">&lt;</button>
-        <div class="title">${activeType.name}</div>
-        <button class="nav-btn" id="hoversource-next-btn">&gt;</button>
-      </div>
-      <div class="table-container">
-        <table>
-          ${tableRowsHtml}
-        </table>
-      </div>
-    `;
+        const headerEl = el("div", { class: "header", id: "hoversource-drag-header" }, [
+            el("button", {
+                type: "button",
+                class: "nav-btn",
+                id: "hoversource-prev-btn",
+                "aria-label": "Previous metadata category",
+            }, ["<"]),
+            el("div", { class: "title" }, [activeType.name]),
+            el("button", {
+                type: "button",
+                class: "nav-btn",
+                id: "hoversource-next-btn",
+                "aria-label": "Next metadata category",
+            }, [">"]),
+        ]);
+        const tableContainerEl = el("div", { class: "table-container" }, [
+            el("table", {}, rowNodes),
+        ]);
+        this.filterPanel.replaceChildren(...[headerEl, tableContainerEl].filter((n) => n !== null));
         // Hook events
         const prevBtn = this.filterPanel.querySelector("#hoversource-prev-btn");
         const nextBtn = this.filterPanel.querySelector("#hoversource-next-btn");
         if (prevBtn) {
-            prevBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
+            prevBtn.addEventListener("click", () => {
+                const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+                const shouldRestoreFocus = activeEl === prevBtn;
                 this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex - 1 + metadataTypes.length) % metadataTypes.length;
-                this.renderFilterPanel();
+                this.renderFilterPanel(shouldRestoreFocus ? "hoversource-prev-btn" : undefined);
             });
         }
         if (nextBtn) {
-            nextBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
+            nextBtn.addEventListener("click", () => {
+                const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+                const shouldRestoreFocus = activeEl === nextBtn;
                 this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex + 1 + metadataTypes.length) % metadataTypes.length;
-                this.renderFilterPanel();
+                this.renderFilterPanel(shouldRestoreFocus ? "hoversource-next-btn" : undefined);
             });
         }
         const rows = this.filterPanel.querySelectorAll("tr");
@@ -758,6 +825,9 @@ export class OverlayEngine {
             });
         });
         this.makePanelDraggable();
+        if (restoreFocusId) {
+            this.filterPanel.querySelector(`#${restoreFocusId}`)?.focus();
+        }
     }
     makePanelDraggable() {
         if (!this.filterPanel)
@@ -835,7 +905,7 @@ export class OverlayEngine {
         return keyMatch || !!codeMatch;
     }
     isTyping(e) {
-        const activeEl = document.activeElement;
+        const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
         if (!activeEl)
             return false;
         const tag = activeEl.tagName.toLowerCase();
@@ -844,7 +914,12 @@ export class OverlayEngine {
     handlePointerOver = (e) => {
         this.ensureUI();
         const target = e.target;
-        if (!target || target === this.container || this.container?.contains(target)) {
+        const composedPath = typeof e.composedPath === "function" ? e.composedPath() : [];
+        const isOverlayEvent = Boolean((this.shadowHost && (target === this.shadowHost || this.shadowHost.contains(target) || composedPath.includes(this.shadowHost))) ||
+            (this.container && (target === this.container || this.container.contains(target) || composedPath.includes(this.container))));
+        if (isOverlayEvent)
+            return;
+        if (!target) {
             if (this.isFrozen) {
                 e.stopImmediatePropagation();
                 e.preventDefault();
@@ -871,8 +946,12 @@ export class OverlayEngine {
         }
     };
     blockEvent = (e) => {
-        if (this.container?.contains(e.target))
+        const target = e.target;
+        const composedPath = typeof e.composedPath === "function" ? e.composedPath() : [];
+        if ((this.shadowHost && (target === this.shadowHost || this.shadowHost.contains(target) || composedPath.includes(this.shadowHost))) ||
+            (this.container && (target === this.container || this.container.contains(target) || composedPath.includes(this.container)))) {
             return;
+        }
         e.stopImmediatePropagation();
         e.preventDefault();
     };
@@ -893,7 +972,13 @@ export class OverlayEngine {
         if (!this.tooltipBox)
             return;
         if (html) {
-            this.tooltipBox.innerHTML = html;
+            if (this.copyHintTimer !== null) {
+                clearTimeout(this.copyHintTimer);
+                this.copyHintTimer = null;
+            }
+            this.copyHintTarget = null;
+            this.copyHintOriginalNodes = null;
+            setElementContentSafely(this.tooltipBox, html);
             if (this.tooltipBox.style.display !== "block") {
                 this.tooltipBox.style.display = "block";
             }
@@ -1046,6 +1131,8 @@ export class OverlayEngine {
     }
     async copyToClipboard(text) {
         await navigator.clipboard.writeText(text);
+        if (this.isDestroyed)
+            return;
         console.log("[HoverSource] Copied component metadata to clipboard!");
         if (this.uiVisible && this.tooltipBox) {
             const hint = this.tooltipBox.querySelector(".hoversource-shortcut-hint");
@@ -1054,30 +1141,24 @@ export class OverlayEngine {
                     clearTimeout(this.copyHintTimer);
                     this.copyHintTimer = null;
                 }
-                const canReplaceNodes = typeof hint.replaceChildren === "function" &&
-                    hint.childNodes &&
-                    typeof hint.childNodes[Symbol.iterator] === "function";
-                const originalNodes = this.copyHintOriginalNodes && this.copyHintTarget === hint
+                const originalNodes = this.copyHintTarget === hint && this.copyHintOriginalNodes
                     ? this.copyHintOriginalNodes
-                    : canReplaceNodes
-                        ? Array.from(hint.childNodes).map((n) => n.cloneNode(true))
-                        : null;
-                const originalText = hint.innerHTML;
+                    : Array.from(hint.childNodes).map((n) => n.cloneNode(true));
                 this.copyHintTarget = hint;
                 this.copyHintOriginalNodes = originalNodes;
-                hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
+                const copiedSpan = el("span", { style: "color: #10b981; font-weight: bold;" }, ["Copied successfully for AI!"]);
+                if (copiedSpan) {
+                    hint.replaceChildren(copiedSpan);
+                }
                 this.copyHintTimer = setTimeout(() => {
                     this.copyHintTimer = null;
                     if (this.isDestroyed)
                         return;
-                    if (originalNodes && typeof hint.replaceChildren === "function") {
+                    if (this.copyHintTarget === hint) {
                         hint.replaceChildren(...originalNodes);
+                        this.copyHintTarget = null;
+                        this.copyHintOriginalNodes = null;
                     }
-                    else {
-                        hint.innerHTML = originalText;
-                    }
-                    this.copyHintTarget = null;
-                    this.copyHintOriginalNodes = null;
                 }, 1500);
             }
         }
@@ -1105,6 +1186,8 @@ export class OverlayEngine {
     }
     isUIVisible() { return this.uiVisible; }
     setFreezeMode(frozen) {
+        if (this.isFrozen === frozen)
+            return;
         this.isFrozen = frozen;
         const events = [
             "pointerout", "mouseout", "pointerleave", "mouseleave",
@@ -1115,19 +1198,30 @@ export class OverlayEngine {
             events.forEach(event => globalThis.addEventListener(event, this.blockEvent, { capture: true }));
             this.freezeStyle = document.createElement("style");
             this.freezeStyle.id = "hoversource-freeze-styles";
-            this.freezeStyle.innerHTML = `
+            this.freezeStyle.textContent = `
         * { pointer-events: auto !important; }
-        .hoversource-container { pointer-events: none !important; }
-        .hoversource-outline { pointer-events: none !important; }
-        .hoversource-tooltip, .hoversource-tooltip * { pointer-events: auto !important; }
+        #hoversource-host { pointer-events: none !important; }
       `;
-            document.head.appendChild(this.freezeStyle);
+            (document.head ?? document.documentElement)?.appendChild(this.freezeStyle);
+            if (this.shadowRoot) {
+                this.freezeShadowStyle = document.createElement("style");
+                this.freezeShadowStyle.id = "hoversource-freeze-shadow-styles";
+                this.freezeShadowStyle.textContent = `
+          .hoversource-container, .hoversource-outline { pointer-events: none !important; }
+          .hoversource-tooltip, .hoversource-tooltip *, .hoversource-config-panel, .hoversource-config-panel *, .hoversource-parent-badge, .hoversource-parent-badge * { pointer-events: auto !important; }
+        `;
+                this.shadowRoot.appendChild(this.freezeShadowStyle);
+            }
         }
         else {
             events.forEach(event => globalThis.removeEventListener(event, this.blockEvent, { capture: true }));
             if (this.freezeStyle) {
                 this.freezeStyle.remove();
                 this.freezeStyle = null;
+            }
+            if (this.freezeShadowStyle) {
+                this.freezeShadowStyle.remove();
+                this.freezeShadowStyle = null;
             }
         }
     }
@@ -1164,20 +1258,25 @@ export class OverlayEngine {
         }
         this.copyHintTarget = null;
         this.copyHintOriginalNodes = null;
+        this.shadowHost?.remove();
         this.container?.remove();
         this.freezeStyle?.remove();
+        this.freezeShadowStyle?.remove();
+        this.shadowHost = null;
+        this.shadowRoot = null;
         this.container = null;
         this.outlineBox = null;
         this.tooltipBox = null;
         this.filterPanel = null;
         this.freezeStyle = null;
+        this.freezeShadowStyle = null;
         this.parentHighlightElements = [];
         if (OverlayEngine.activeInstance === this) {
             OverlayEngine.activeInstance = null;
         }
     }
 }
-globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
+function openFileInIde(file, line, col, tagName, classList) {
     let path = `/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
         path += `&tagName=${encodeURIComponent(tagName)}`;
@@ -1193,7 +1292,8 @@ globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
         }
     })
         .catch(e => console.error("[HoverSource] Failed to reach companion server:", e));
-};
+}
+globalThis.__HoverSourceOpen__ = openFileInIde;
 if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
     globalThis.__HoverSourceInitialized__ = true;
     void OverlayEngine.launch().catch((err) => {

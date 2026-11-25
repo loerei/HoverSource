@@ -185,7 +185,8 @@ describe("overlay lifecycle & pre-<body> DOM readiness", () => {
     activeEngine = await launchPromise;
     expect(activeEngine).not.toBeNull();
     expect(doc.body.children.length).toBe(1);
-    expect(doc.body.children[0].className).toBe("hoversource-container");
+    expect(doc.body.children[0].id).toBe("hoversource-host");
+    expect(doc.body.children[0].shadowRoot?.children[0]?.className).toBe("hoversource-container");
   });
 
   it("logs warning on bodyless timeout and mounts zero containers or globalThis listeners even if DOMContentLoaded fires afterward", async () => {

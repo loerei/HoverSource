@@ -338,13 +338,13 @@
         if (m.type === "childList") {
           m.addedNodes.forEach((node) => {
             if (node.nodeType === 1) {
-              const el = node;
-              const loc = el.dataset.hoversourceLoc;
+              const el2 = node;
+              const loc = el2.dataset.hoversourceLoc;
               if (loc) {
-                invasiveLocs.set(el, loc);
+                invasiveLocs.set(el2, loc);
               }
               try {
-                el.querySelectorAll("[data-hoversource-loc]").forEach((child) => {
+                el2.querySelectorAll("[data-hoversource-loc]").forEach((child) => {
                   if (child instanceof HTMLElement) {
                     invasiveLocs.set(child, child.dataset.hoversourceLoc);
                   }
@@ -354,19 +354,19 @@
             }
           });
         } else if (m.type === "attributes" && m.attributeName === "data-hoversource-loc") {
-          const el = m.target;
-          const loc = el.dataset.hoversourceLoc;
+          const el2 = m.target;
+          const loc = el2.dataset.hoversourceLoc;
           if (loc) {
-            invasiveLocs.set(el, loc);
+            invasiveLocs.set(el2, loc);
           }
         }
       }
     });
     const scan = () => {
       try {
-        document.querySelectorAll("[data-hoversource-loc]").forEach((el) => {
-          if (el instanceof HTMLElement) {
-            invasiveLocs.set(el, el.dataset.hoversourceLoc);
+        document.querySelectorAll("[data-hoversource-loc]").forEach((el2) => {
+          if (el2 instanceof HTMLElement) {
+            invasiveLocs.set(el2, el2.dataset.hoversourceLoc);
           }
         });
       } catch {
@@ -868,10 +868,10 @@
       }
       return results;
     }
-    buildSelector(el) {
-      const tag = el.tagName.toLowerCase();
-      const id = el.id ? `#${el.id}` : "";
-      const classes = Array.from(el.classList).filter((c) => c && !c.startsWith("hoversource") && !c.startsWith("hs-")).join(".");
+    buildSelector(el2) {
+      const tag = el2.tagName.toLowerCase();
+      const id = el2.id ? `#${el2.id}` : "";
+      const classes = Array.from(el2.classList).filter((c) => c && !c.startsWith("hoversource") && !c.startsWith("hs-")).join(".");
       return `${tag}${id}${classes ? "." + classes : ""}`;
     }
   };
@@ -886,12 +886,12 @@
     if (typeof document.createElement === "function") {
       const originalCreateElement = document.createElement;
       document.createElement = function(tagName, options) {
-        const el = originalCreateElement.call(this, tagName, options);
+        const el2 = originalCreateElement.call(this, tagName, options);
         const source = captureSourceLocation();
-        if (source && el.dataset) {
-          el.dataset.hsSource = source;
+        if (source && el2.dataset) {
+          el2.dataset.hsSource = source;
         }
-        return el;
+        return el2;
       };
     }
     if (typeof Element !== "undefined" && Element?.prototype) {
@@ -1471,6 +1471,345 @@
     }
   }
 
+  // src/safeDom.ts
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  var MAX_DEPTH = 64;
+  var VALID_TAG_NAME = /^[a-zA-Z][a-zA-Z0-9-]*$/;
+  var VALID_ATTR_NAME = /^[a-zA-Z_:][a-zA-Z0-9_.:-]*$/;
+  var REJECTED_TAGS = /* @__PURE__ */ new Set([
+    "script",
+    "iframe",
+    "object",
+    "embed",
+    "foreignobject",
+    "style",
+    "base",
+    "animate",
+    "set",
+    "animatetransform",
+    "animatemotion"
+  ]);
+  var BODY_DISCARD_TAGS = /* @__PURE__ */ new Set(["script", "style"]);
+  var VOID_TAGS = /* @__PURE__ */ new Set([
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr"
+  ]);
+  var SVG_ELEMENT_TAGS = /* @__PURE__ */ new Set([
+    "svg",
+    "path",
+    "rect",
+    "circle",
+    "line",
+    "polyline",
+    "polygon",
+    "ellipse",
+    "g",
+    "defs",
+    "use",
+    "tspan",
+    "clippath",
+    "lineargradient",
+    "radialgradient",
+    "stop",
+    "pattern",
+    "mask",
+    "marker"
+  ]);
+  var URL_ATTRS = /* @__PURE__ */ new Set(["href", "src", "xlink:href", "action", "formaction"]);
+  var NAMED_ENTITIES = {
+    lt: "<",
+    gt: ">",
+    amp: "&",
+    quot: '"',
+    apos: "'"
+  };
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function decodeHtmlEntitiesOnce(input) {
+    return input.replace(/&(?:(lt|gt|amp|quot|apos)|#(\d+)|#[xX]([0-9a-fA-F]+));/g, (full, named, dec, hex) => {
+      if (named) {
+        return NAMED_ENTITIES[named] ?? full;
+      }
+      const codePoint = dec ? Number.parseInt(dec, 10) : Number.parseInt(hex, 16);
+      if (!Number.isFinite(codePoint) || codePoint <= 0 || codePoint > 1114111) {
+        return "\uFFFD";
+      }
+      if (codePoint >= 55296 && codePoint <= 57343) {
+        return "\uFFFD";
+      }
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return "\uFFFD";
+      }
+    });
+  }
+  function isUnsafeUrlValue(decodedValue) {
+    const normalized = decodedValue.replace(/[\u0000-\u0020]+/g, "").toLowerCase();
+    if (/^(?:javascript|vbscript):/.test(normalized)) {
+      return true;
+    }
+    if (/^data:(?:text\/html|image\/svg\+xml|application\/xhtml\+xml|text\/xml)(?:[;,]|$)/.test(normalized)) {
+      return true;
+    }
+    return false;
+  }
+  function setSanitizedAttribute(target, rawName, rawValue) {
+    const attrName = rawName.trim();
+    if (!attrName || !VALID_ATTR_NAME.test(attrName)) {
+      return;
+    }
+    const attrLower = attrName.toLowerCase();
+    if (attrLower.startsWith("on") || attrLower === "srcdoc") {
+      return;
+    }
+    const decodedValue = decodeHtmlEntitiesOnce(rawValue);
+    if (URL_ATTRS.has(attrLower) && isUnsafeUrlValue(decodedValue)) {
+      return;
+    }
+    target.setAttribute(attrName, decodedValue);
+  }
+  function applyParsedAttributes(target, attrSource) {
+    let i = 0;
+    const len = attrSource.length;
+    while (i < len) {
+      while (i < len && /[\s/]/.test(attrSource[i])) {
+        i++;
+      }
+      if (i >= len) {
+        break;
+      }
+      const nameStart = i;
+      while (i < len && !/[\s=/>]/.test(attrSource[i])) {
+        i++;
+      }
+      const attrName = attrSource.slice(nameStart, i);
+      if (!attrName) {
+        i++;
+        continue;
+      }
+      while (i < len && /\s/.test(attrSource[i])) {
+        i++;
+      }
+      if (i < len && attrSource[i] === "=") {
+        i++;
+        while (i < len && /\s/.test(attrSource[i])) {
+          i++;
+        }
+        let rawValue = "";
+        if (i < len && (attrSource[i] === '"' || attrSource[i] === "'")) {
+          const quote = attrSource[i];
+          i++;
+          const valStart = i;
+          while (i < len && attrSource[i] !== quote) {
+            i++;
+          }
+          rawValue = attrSource.slice(valStart, i);
+          if (i < len && attrSource[i] === quote) {
+            i++;
+          }
+        } else {
+          const valStart = i;
+          while (i < len && !/[\s>]/.test(attrSource[i])) {
+            i++;
+          }
+          rawValue = attrSource.slice(valStart, i);
+        }
+        setSanitizedAttribute(target, attrName, rawValue);
+      } else {
+        setSanitizedAttribute(target, attrName, "");
+      }
+    }
+  }
+  function findTagClose(html, startPos) {
+    let pos = startPos;
+    let quote = null;
+    while (pos < html.length) {
+      const ch = html[pos];
+      if (quote) {
+        if (ch === quote) {
+          quote = null;
+        }
+      } else if (ch === '"' || ch === "'") {
+        quote = ch;
+      } else if (ch === ">") {
+        return pos;
+      }
+      pos++;
+    }
+    return -1;
+  }
+  function findClosingBodyTagEnd(html, fromPos, tagLower) {
+    const closeRegex = new RegExp(`</${tagLower}\\s*>`, "gi");
+    closeRegex.lastIndex = fromPos;
+    const match = closeRegex.exec(html);
+    if (!match) {
+      return html.length;
+    }
+    return match.index + match[0].length;
+  }
+  function createElementForContext(tagName, inSvg) {
+    if (inSvg || tagName.toLowerCase() === "svg") {
+      return document.createElementNS(SVG_NS, tagName);
+    }
+    return document.createElement(tagName);
+  }
+  function createSafeFragmentFromHtml(html) {
+    const fragment = document.createDocumentFragment();
+    if (!html) {
+      return fragment;
+    }
+    const stack = [
+      { node: fragment, tagLower: "#fragment", inSvg: false }
+    ];
+    let pos = 0;
+    const len = html.length;
+    const appendText = (raw) => {
+      if (!raw)
+        return;
+      const parent = stack[stack.length - 1].node;
+      parent.appendChild(document.createTextNode(decodeHtmlEntitiesOnce(raw)));
+    };
+    while (pos < len) {
+      const ltIndex = html.indexOf("<", pos);
+      if (ltIndex === -1) {
+        appendText(html.slice(pos));
+        break;
+      }
+      if (ltIndex > pos) {
+        appendText(html.slice(pos, ltIndex));
+      }
+      if (html.startsWith("<!--", ltIndex)) {
+        const commentEnd = html.indexOf("-->", ltIndex + 4);
+        pos = commentEnd === -1 ? len : commentEnd + 3;
+        continue;
+      }
+      if (html.startsWith("</", ltIndex)) {
+        const closeGt = html.indexOf(">", ltIndex + 2);
+        if (closeGt === -1) {
+          appendText(html.slice(ltIndex));
+          break;
+        }
+        const rawCloseName = html.slice(ltIndex + 2, closeGt).trim();
+        if (!VALID_TAG_NAME.test(rawCloseName)) {
+          appendText(html.slice(ltIndex, closeGt + 1));
+          pos = closeGt + 1;
+          continue;
+        }
+        const closeLower = rawCloseName.toLowerCase();
+        for (let s = stack.length - 1; s >= 1; s--) {
+          if (stack[s].tagLower === closeLower) {
+            stack.length = s;
+            break;
+          }
+        }
+        pos = closeGt + 1;
+        continue;
+      }
+      const tagClose = findTagClose(html, ltIndex + 1);
+      if (tagClose === -1) {
+        const rem = html.slice(ltIndex + 1);
+        const nameMatch2 = rem.match(/^([a-zA-Z][a-zA-Z0-9-]*)(?=[\s/>]|$)/);
+        if (nameMatch2 && BODY_DISCARD_TAGS.has(nameMatch2[1].toLowerCase())) {
+          break;
+        }
+        appendText(html.slice(ltIndex));
+        break;
+      }
+      const inside = html.slice(ltIndex + 1, tagClose);
+      const nameMatch = inside.match(/^([a-zA-Z][a-zA-Z0-9-]*)(?=[\s/]|$)/);
+      if (!nameMatch) {
+        appendText("<");
+        pos = ltIndex + 1;
+        continue;
+      }
+      const tagName = nameMatch[1];
+      const tagLower = tagName.toLowerCase();
+      const afterName = inside.slice(tagName.length);
+      const isSelfClosing = /\/\s*$/.test(afterName);
+      const attrSource = isSelfClosing ? afterName.replace(/\/\s*$/, "") : afterName;
+      if (REJECTED_TAGS.has(tagLower)) {
+        if (BODY_DISCARD_TAGS.has(tagLower) && !isSelfClosing) {
+          pos = findClosingBodyTagEnd(html, tagClose + 1, tagLower);
+        } else {
+          pos = tagClose + 1;
+        }
+        continue;
+      }
+      if (stack.length - 1 >= MAX_DEPTH) {
+        pos = tagClose + 1;
+        continue;
+      }
+      const currentTop = stack[stack.length - 1];
+      const isSvgElement = currentTop.inSvg || tagLower === "svg";
+      const element = createElementForContext(tagName, isSvgElement);
+      applyParsedAttributes(element, attrSource);
+      currentTop.node.appendChild(element);
+      const isVoid = VOID_TAGS.has(tagLower);
+      if (!isSelfClosing && !isVoid) {
+        stack.push({
+          node: element,
+          tagLower,
+          inSvg: isSvgElement
+        });
+      }
+      pos = tagClose + 1;
+    }
+    return fragment;
+  }
+  function setElementContentSafely(el2, html) {
+    const fragment = createSafeFragmentFromHtml(html);
+    el2.replaceChildren(fragment);
+  }
+  function el(tag, attrs, children) {
+    if (!VALID_TAG_NAME.test(tag)) {
+      return null;
+    }
+    const tagLower = tag.toLowerCase();
+    if (REJECTED_TAGS.has(tagLower)) {
+      return null;
+    }
+    const element = SVG_ELEMENT_TAGS.has(tagLower) ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
+    if (attrs) {
+      for (const [key, value] of Object.entries(attrs)) {
+        if (value === null || value === void 0 || value === false) {
+          continue;
+        }
+        if (value === true) {
+          setSanitizedAttribute(element, key, "");
+        } else {
+          setSanitizedAttribute(element, key, String(value));
+        }
+      }
+    }
+    if (children) {
+      for (const child of children) {
+        if (child === null || child === void 0 || child === false || child === true) {
+          continue;
+        }
+        if (typeof child === "object" && "nodeType" in child) {
+          element.appendChild(child);
+        } else {
+          element.appendChild(document.createTextNode(String(child)));
+        }
+      }
+    }
+    return element;
+  }
+
   // src/modes/InspectorAdapter.ts
   var InspectorAdapter = class {
     id = "inspector";
@@ -1528,10 +1867,13 @@
       this.lastPointerEvent = event;
       const rawStack = document.elementsFromPoint(event.clientX, event.clientY);
       const container = this.controller.container;
-      this.layerStack = rawStack.filter((el) => {
-        if (el === document.documentElement || el === document.body)
+      const shadowHost = this.controller.shadowHost;
+      this.layerStack = rawStack.filter((el2) => {
+        if (el2 === document.documentElement || el2 === document.body)
           return false;
-        if (container && (el === container || container.contains(el)))
+        if (shadowHost && (el2 === shadowHost || shadowHost.contains(el2)))
+          return false;
+        if (container && (el2 === container || container.contains(el2)))
           return false;
         return true;
       }).slice(0, this.maxTraversalDepth);
@@ -1773,7 +2115,7 @@
     renderMinimalTooltip(element, info, labels) {
       const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
       const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
-      const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+      const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
       let vueHint = "";
       if (info.framework === "Vue" && !info.lineNumber) {
         vueHint = `
@@ -1782,15 +2124,23 @@
         </div>
       `;
       }
+      const fileBase = info.fileName.split("/").pop().split("\\").pop();
       return `
       <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
-        <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
-        <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${info.framework}</span>
+        <span>${escapeHtml(info.componentName || element.tagName.toLowerCase())}${this.isFrozen ? " [FROZEN]" : ""}</span>
+        <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${escapeHtml(info.framework)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
-        <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-          ${info.fileName.split("/").pop().split("\\").pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
+        <span
+          class="hoversource-link"
+          data-hs-open-file="${escapeHtml(info.fileName)}"
+          data-hs-open-line="${info.lineNumber || 1}"
+          data-hs-open-col="${info.columnNumber || 1}"
+          data-hs-open-tag="${escapeHtml(info.tagName || "")}"
+          data-hs-open-classes="${escapeHtml((info.classList || []).join(","))}"
+        >
+          ${escapeHtml(fileBase)}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
       ${vueHint}
@@ -1808,24 +2158,25 @@
       const classList = Array.from(element.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
       const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
       const elementSelector = `${tagName}${classStr}`;
-      let selectorHtml = `<span class="hoversource-value">${elementSelector}</span>`;
+      let selectorHtml = `<span class="hoversource-value">${escapeHtml(elementSelector)}</span>`;
       if (info.staticMetadata?.classOrigins) {
         const originParts = [];
         for (const cls of classList) {
           const origin = info.staticMetadata.classOrigins[cls];
           if (origin) {
-            const fileBase = origin.file.split("/").pop().split("\\").pop();
-            originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`);
+            const fileBase2 = origin.file.split("/").pop().split("\\").pop();
+            originParts.push(`<span style="color: #6b7280; font-size: 9px;">[${escapeHtml(fileBase2)}:${escapeHtml(origin.line)}]</span>`);
           }
         }
         if (originParts.length > 0) {
           selectorHtml += ` \u2794 ${originParts.join(" ")}`;
         }
       }
+      const fileBase = info.fileName.split("/").pop().split("\\").pop();
       return `
       <div class="hoversource-title" style="${this.isFrozen ? "color: #f59e0b;" : ""}">
-        <span>${info.componentName || element.tagName.toLowerCase()}${this.isFrozen ? " [FROZEN]" : ""}</span>
-        <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${info.framework}</span>
+        <span>${escapeHtml(info.componentName || element.tagName.toLowerCase())}${this.isFrozen ? " [FROZEN]" : ""}</span>
+        <span class="hoversource-framework" style="${this.isFrozen ? "background: #78350f; color: #fde68a;" : ""}">${escapeHtml(info.framework)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Element: </span>
@@ -1833,13 +2184,20 @@
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">File: </span>
-        <span class="hoversource-link" onclick="globalThis.__HoverSourceOpen__('${info.fileName}', ${info.lineNumber || 1}, ${info.columnNumber || 1}, '${info.tagName || ""}', '${(info.classList || []).join(",")}')">
-          ${info.fileName.split("/").pop().split("\\").pop()}${info.lineNumber ? `:${info.lineNumber}` : ""}
+        <span
+          class="hoversource-link"
+          data-hs-open-file="${escapeHtml(info.fileName)}"
+          data-hs-open-line="${info.lineNumber || 1}"
+          data-hs-open-col="${info.columnNumber || 1}"
+          data-hs-open-tag="${escapeHtml(info.tagName || "")}"
+          data-hs-open-classes="${escapeHtml((info.classList || []).join(","))}"
+        >
+          ${escapeHtml(fileBase)}${info.lineNumber ? `:${info.lineNumber}` : ""}
         </span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Path: </span>
-        <span class="hoversource-value">${info.fileName}</span>
+        <span class="hoversource-value">${escapeHtml(info.fileName)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Size: </span>
@@ -1847,11 +2205,11 @@
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Color: </span>
-        <span class="hoversource-value">${color}</span>
+        <span class="hoversource-value">${escapeHtml(color)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Background: </span>
-        <span class="hoversource-value">${bgColor}</span>
+        <span class="hoversource-value">${escapeHtml(bgColor)}</span>
       </div>
     `;
     }
@@ -1861,7 +2219,7 @@
         html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Shadow: </span>
-          <span class="hoversource-value">${shadow}</span>
+          <span class="hoversource-value">${escapeHtml(shadow)}</span>
         </div>
       `;
       }
@@ -1869,7 +2227,7 @@
         html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Animation: </span>
-          <span class="hoversource-value">${animation}</span>
+          <span class="hoversource-value">${escapeHtml(animation)}</span>
         </div>
       `;
       }
@@ -1878,7 +2236,7 @@
         html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Layout: </span>
-          <span class="hoversource-value">${constraints}</span>
+          <span class="hoversource-value">${escapeHtml(constraints)}</span>
         </div>
       `;
       }
@@ -1896,7 +2254,7 @@
             const origin = info.staticMetadata.classOrigins[cls];
             if (origin) {
               const fileBase = origin.file.split("/").pop();
-              originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${fileBase}:${origin.line}]</span>`;
+              originLabel = ` <span style="color: #6b7280; font-size: 9px;">[${escapeHtml(fileBase)}:${escapeHtml(origin.line)}]</span>`;
               break;
             }
           }
@@ -1904,7 +2262,7 @@
         const isVisual = fx.property === "mask-image" || fx.property === "clip-path" || fx.property.startsWith("overflow");
         const cursorStyle = isVisual ? "cursor: pointer;" : "cursor: default;";
         const hoverClass = isVisual ? " hoversource-parent-item" : "";
-        return `<div class="hoversource-stack-item${hoverClass}" data-index="${idx}" style="${cursorStyle}">${fx.tagName}${classStr}${originLabel} \u2794 ${fx.property}: ${fx.value}</div>`;
+        return `<div class="hoversource-stack-item${hoverClass}" data-index="${idx}" style="${cursorStyle}">${escapeHtml(fx.tagName)}${escapeHtml(classStr)}${originLabel} \u2794 ${escapeHtml(fx.property)}: ${escapeHtml(fx.value)}</div>`;
       }).join("");
       return `
       <div class="hoversource-section">
@@ -1920,7 +2278,7 @@
         return "";
       let html = "";
       if (info.staticMetadata.comments && info.staticMetadata.comments.length > 0) {
-        const commentsHtml = info.staticMetadata.comments.map((c) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${c}</div>`).join("");
+        const commentsHtml = info.staticMetadata.comments.map((c) => `<div class="hoversource-stack-item" style="color: #6b7280; font-style: italic;">${escapeHtml(c)}</div>`).join("");
         html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Source Comments: </span>
@@ -1931,7 +2289,7 @@
       `;
       }
       if (info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
-        const attrs = Object.entries(info.staticMetadata.rawAttributes).map(([k, v]) => `${k}="${v}"`).join(" ");
+        const attrs = Object.entries(info.staticMetadata.rawAttributes).map(([k, v]) => `${escapeHtml(k)}="${escapeHtml(v)}"`).join(" ");
         html += `
         <div class="hoversource-section">
           <span class="hoversource-label">Source Attributes: </span>
@@ -1963,7 +2321,7 @@
       html += this.renderParentEffects(info);
       html += this.renderStaticMetadata(info);
       const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
-      const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+      const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
       let vueHint = "";
       if (info.framework === "Vue" && !info.lineNumber) {
         vueHint = `
@@ -1976,7 +2334,7 @@
       <div class="hoversource-section">
         <span class="hoversource-label">Stack: </span>
         <div class="hoversource-stack">
-          ${stack.map((item) => `<div class="hoversource-stack-item">${item}</div>`).join("")}
+          ${stack.map((item) => `<div class="hoversource-stack-item">${escapeHtml(item)}</div>`).join("")}
         </div>
       </div>
       ${vueHint}
@@ -2001,14 +2359,14 @@
       const modeLabel = this.getShortcutLabel(shortcuts?.toggleMode) || "[Alt+X]";
       const topLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M296.5 69.2C311.4 62.3 328.6 62.3 343.5 69.2L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L296.5 69.2z" /></svg>`;
       const chevronLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M112.1 154.4L276.4 230.3C304.1 243.1 336 243.1 363.7 230.3L528 154.4L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L112.1 154.4z" /></svg>`;
-      const layerDots = this.layerStack.map((el, i) => {
+      const layerDots = this.layerStack.map((el2, i) => {
         const isActive = i === this.activeLayerIndex;
-        const tag = el.tagName.toLowerCase();
-        const cls = Array.from(el.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-")).slice(0, 2).join(".");
+        const tag = el2.tagName.toLowerCase();
+        const cls = Array.from(el2.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-")).slice(0, 2).join(".");
         const label = cls ? `${tag}.${cls}` : tag;
         const zIndex = this.layerStack.length - i;
         const svgContent = i === 0 ? topLayerSvg : chevronLayerSvg;
-        return `<div class="hs-layer-dot${isActive ? " hs-layer-dot--active" : ""}" style="z-index: ${zIndex}" title="Layer ${i + 1}: ${label}">${svgContent}</div>`;
+        return `<div class="hs-layer-dot${isActive ? " hs-layer-dot--active" : ""}" style="z-index: ${zIndex}" title="Layer ${i + 1}: ${escapeHtml(label)}">${svgContent}</div>`;
       }).join("");
       const scrollHint = (() => {
         const m = this.layerScrollModifiers;
@@ -2058,7 +2416,7 @@
               const fx = info.visualContext?.parentEffects[idx];
               if (fx?.element) {
                 const rowRect = item.getBoundingClientRect();
-                parentItems.forEach((el) => el.classList.remove("hs-parent-active"));
+                parentItems.forEach((el2) => el2.classList.remove("hs-parent-active"));
                 item.classList.add("hs-parent-active");
                 this.controller.clearParentHighlights();
                 this.controller.drawParentHighlight(fx, rowRect);
@@ -2243,25 +2601,25 @@ ${indent}</${tagName}>`;
       }
       return "";
     }
-    getMinifiedHTML(el) {
-      const clone = el.cloneNode(true);
-      const hsEls = clone.querySelectorAll('.hoversource-container, [class^="hs-"]');
+    getMinifiedHTML(el2) {
+      const clone = el2.cloneNode(true);
+      const hsEls = clone.querySelectorAll('#hoversource-host, .hoversource-container, [class^="hs-"]');
       hsEls.forEach((e) => e.remove());
       return this.formatMinifiedHtmlNode(clone, "");
     }
-    getTargetHTMLToCopy(el) {
-      const parent = el.parentElement;
+    getTargetHTMLToCopy(el2) {
+      const parent = el2.parentElement;
       if (parent && parent !== document.body && parent !== document.documentElement) {
         const parentInfo = this.resolver.resolve(parent);
         const isParentCustomComponent = !!parentInfo?.componentName && parentInfo.framework !== "Unknown";
         if (!isParentCustomComponent && parent.children.length <= 5) {
           const leafTags = ["input", "button", "img", "svg", "span", "i", "a", "label"];
-          if (leafTags.includes(el.tagName.toLowerCase()) || el.children.length === 0) {
+          if (leafTags.includes(el2.tagName.toLowerCase()) || el2.children.length === 0) {
             return parent;
           }
         }
       }
-      return el;
+      return el2;
     }
     copyAllLayers() {
       if (this.layerStack.length === 0)
@@ -2277,34 +2635,34 @@ ${indent}</${tagName}>`;
 
 `;
       }
-      this.layerStack.forEach((el, index) => {
+      this.layerStack.forEach((el2, index) => {
         const isLeaf = index === 0;
         if (isLeaf && !isChecked("layer1"))
           return;
         if (!isLeaf && !isChecked("layer2"))
           return;
         let info;
-        if (el === this.currentElement && this.currentSourceInfo) {
+        if (el2 === this.currentElement && this.currentSourceInfo) {
           info = this.currentSourceInfo;
         } else {
-          info = this.resolver.resolve(el) || {
-            componentName: el.tagName.toLowerCase(),
-            tagName: el.tagName.toLowerCase(),
+          info = this.resolver.resolve(el2) || {
+            componentName: el2.tagName.toLowerCase(),
+            tagName: el2.tagName.toLowerCase(),
             framework: "Unknown",
             fileName: "",
             lineNumber: 0,
             columnNumber: 0,
-            classList: Array.from(el.classList),
+            classList: Array.from(el2.classList),
             visualContext: null,
             staticMetadata: null
           };
-          info.visualContext = inspectVisualContext(el);
+          info.visualContext = inspectVisualContext(el2);
         }
         const layerNum = index + 1;
         const totalLayers = this.layerStack.length;
-        text += `#### Layer ${layerNum}/${totalLayers}: \`${info.componentName || el.tagName.toLowerCase()}\` (${el.tagName.toLowerCase()})
+        text += `#### Layer ${layerNum}/${totalLayers}: \`${info.componentName || el2.tagName.toLowerCase()}\` (${el2.tagName.toLowerCase()})
 `;
-        text += this.formatElementMetadata(el, info) + "\n\n";
+        text += this.formatElementMetadata(el2, info) + "\n\n";
       });
       if (isChecked("htmlStructure")) {
         const activeEl = this.layerStack[this.activeLayerIndex] || this.layerStack[0];
@@ -2450,11 +2808,14 @@ ${this.getMinifiedHTML(targetElToCopy)}
     }
     updateTargetAtPosition(x, y) {
       const container = this.controller.container;
+      const shadowHost = this.controller.shadowHost;
       const elements = document.elementsFromPoint(x, y);
-      const target = elements.find((el) => {
-        if (el === document.documentElement || el === document.body)
+      const target = elements.find((el2) => {
+        if (el2 === document.documentElement || el2 === document.body)
           return false;
-        if (container && (el === container || container.contains(el)))
+        if (shadowHost && (el2 === shadowHost || shadowHost.contains(el2)))
+          return false;
+        if (container && (el2 === container || container.contains(el2)))
           return false;
         return true;
       }) ?? this.anchorHElement ?? this.anchorVElement ?? void 0;
@@ -2531,21 +2892,24 @@ ${this.getMinifiedHTML(targetElToCopy)}
     };
     getSnapCandidates(mouseX, mouseY) {
       const container = this.controller.container;
+      const shadowHost = this.controller.shadowHost;
       const allEls = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, p, a, button, input, textarea, label, span, div, section, main, article, li, img, svg"));
       const candidates = [];
-      for (const el of allEls) {
-        if (el === document.documentElement || el === document.body)
+      for (const el2 of allEls) {
+        if (el2 === document.documentElement || el2 === document.body)
           continue;
-        if (container && (el === container || container.contains(el)))
+        if (shadowHost && (el2 === shadowHost || shadowHost.contains(el2)))
           continue;
-        const rect = el.getBoundingClientRect();
+        if (container && (el2 === container || container.contains(el2)))
+          continue;
+        const rect = el2.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0)
           continue;
         const distToCenterH = Math.min(Math.abs(rect.left - mouseX), Math.abs(rect.right - mouseX), Math.abs(rect.left + rect.width / 2 - mouseX));
         const distToCenterV = Math.min(Math.abs(rect.top - mouseY), Math.abs(rect.bottom - mouseY), Math.abs(rect.top + rect.height / 2 - mouseY));
         if (distToCenterH > 450 && distToCenterV > 450)
           continue;
-        candidates.push({ element: el, rect });
+        candidates.push({ element: el2, rect });
       }
       return candidates;
     }
@@ -2777,7 +3141,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
     updateVisuals() {
       if (!this.svgOverlay || !this.controller.isUIVisible())
         return;
-      this.svgOverlay.innerHTML = "";
+      this.svgOverlay.replaceChildren();
       if (this.badgeElementH)
         this.badgeElementH.style.display = "none";
       if (this.badgeElementV)
@@ -2790,8 +3154,8 @@ ${this.getMinifiedHTML(targetElToCopy)}
       const dotAbsX = dotViewportX;
       const dotAbsY = dotViewportY;
       const svgNS = "http://www.w3.org/2000/svg";
-      const drawAnchorOutline = (el, color) => {
-        const rect = el.getBoundingClientRect();
+      const drawAnchorOutline = (el2, color) => {
+        const rect = el2.getBoundingClientRect();
         const box = document.createElementNS(svgNS, "rect");
         box.setAttribute("x", rect.left.toString());
         box.setAttribute("y", rect.top.toString());
@@ -2841,7 +3205,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
       if (!element)
         return `<span style="color: #6b7280;">No Anchor</span>`;
       const sign = offset >= 0 ? "+" : "";
-      return `<span style="color: #10b981; font-weight:bold;">${selector} @ ${boundary || "None"} (${sign}${offset}px)</span>`;
+      return `<span style="color: #10b981; font-weight:bold;">${escapeHtml(selector)} @ ${escapeHtml(boundary || "None")} (${sign}${offset}px)</span>`;
     }
     buildTooltipHtml(info, fileBase, hStatus, vStatus, hintHtml, vueHint) {
       const classList = Array.from(this.targetElement.classList).filter((c) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
@@ -2855,11 +3219,11 @@ ${this.getMinifiedHTML(targetElToCopy)}
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Anchor Element: </span>
-        <span class="hoversource-value">${tagLower}${idStr}${classStr}</span>
+        <span class="hoversource-value">${escapeHtml(`${tagLower}${idStr}${classStr}`)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Anchor File: </span>
-        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
+        <span class="hoversource-value" style="color: #60a5fa;">${escapeHtml(fileBase)}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
       </div>
       <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
         <span class="hoversource-label">H-Anchor: </span>
@@ -3210,12 +3574,12 @@ The following is NOT resolved automatically and requires your judgment:
     }
     return document.body;
   }
-  function getSelector(el) {
-    if (!el)
+  function getSelector(el2) {
+    if (!el2)
       return "";
-    const tag = el.tagName.toLowerCase();
-    const id = el.id ? `#${el.id}` : "";
-    const classes = Array.from(el.classList).filter((c) => c && !c.startsWith("hoversource") && !c.startsWith("hs-")).join(".");
+    const tag = el2.tagName.toLowerCase();
+    const id = el2.id ? `#${el2.id}` : "";
+    const classes = Array.from(el2.classList).filter((c) => c && !c.startsWith("hoversource") && !c.startsWith("hs-")).join(".");
     const classStr = classes ? `.${classes}` : "";
     return `${tag}${id}${classStr}`;
   }
@@ -3313,6 +3677,8 @@ The following is NOT resolved automatically and requires your judgment:
     static activeInstance = null;
     static activeLaunchPromise = null;
     config = null;
+    shadowHost = null;
+    shadowRoot = null;
     container = null;
     outlineBox = null;
     tooltipBox = null;
@@ -3323,6 +3689,7 @@ The following is NOT resolved automatically and requires your judgment:
     uiVisible = true;
     isFrozen = false;
     freezeStyle = null;
+    freezeShadowStyle = null;
     launchAbortController = null;
     shortcutsAttached = false;
     modeActivated = false;
@@ -3421,7 +3788,7 @@ The following is NOT resolved automatically and requires your judgment:
     handleConfigUpdate(newConfig) {
       console.log("[HoverSource] Live reloading config...", newConfig);
       this.config = newConfig;
-      const oldStyle = document.getElementById("hoversource-styles");
+      const oldStyle = this.shadowRoot?.getElementById?.("hoversource-styles") ?? this.shadowRoot?.querySelector("#hoversource-styles") ?? document.getElementById("hoversource-styles");
       if (oldStyle)
         oldStyle.remove();
       this.initStyles();
@@ -3470,7 +3837,15 @@ The following is NOT resolved automatically and requires your judgment:
         layerShapeStroke: "rgba(0,0,0,0.35)",
         layerShapeHoverFill: "#d1d5db",
         layerShapeHoverStroke: "rgba(0,0,0,0.6)",
-        layerHintColor: "#9ca3af"
+        layerHintColor: "#9ca3af",
+        panelBorder: "rgba(37, 99, 235, 0.3)",
+        panelGlow: "rgba(37, 99, 235, 0.2)",
+        navBg: "rgba(0, 0, 0, 0.05)",
+        navHoverBg: "rgba(0, 0, 0, 0.1)",
+        accent: "#2563eb",
+        accentGlow: "rgba(37, 99, 235, 0.4)",
+        accentHover: "#3b82f6",
+        rowHoverBg: "rgba(0, 0, 0, 0.02)"
       } : {
         tooltipBg: "rgba(18, 18, 18, 0.95)",
         tooltipBorder: "rgba(255, 255, 255, 0.15)",
@@ -3483,11 +3858,30 @@ The following is NOT resolved automatically and requires your judgment:
         layerShapeStroke: "rgba(255,255,255,0.5)",
         layerShapeHoverFill: "#3f3f46",
         layerShapeHoverStroke: "rgba(255,255,255,0.7)",
-        layerHintColor: "#6b7280"
+        layerHintColor: "#6b7280",
+        panelBorder: "rgba(59, 130, 246, 0.3)",
+        panelGlow: "rgba(59, 130, 246, 0.2)",
+        navBg: "rgba(255, 255, 255, 0.08)",
+        navHoverBg: "rgba(255, 255, 255, 0.15)",
+        accent: "#3b82f6",
+        accentGlow: "rgba(59, 130, 246, 0.4)",
+        accentHover: "#60a5fa",
+        rowHoverBg: "rgba(255, 255, 255, 0.02)"
       };
       const style = document.createElement("style");
       style.id = "hoversource-styles";
-      style.innerHTML = `
+      style.textContent = `
+      :host {
+        all: initial;
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+        z-index: 2147483647;
+      }
       .hoversource-container {
         position: fixed;
         top: 0;
@@ -3700,11 +4094,11 @@ The following is NOT resolved automatically and requires your judgment:
         background: ${colors.tooltipBg};
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        border: 1px solid ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.3)" : "rgba(37, 99, 235, 0.3)"};
+        border: 1px solid ${colors.panelBorder};
         color: ${colors.tooltipText};
         padding: 10px 12px;
         border-radius: 8px;
-        box-shadow: 0 0 12px ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.2)" : "rgba(37, 99, 235, 0.2)"}, 0 8px 20px -5px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 0 12px ${colors.panelGlow}, 0 8px 20px -5px rgba(0, 0, 0, 0.5);
         z-index: 1000000;
         user-select: none;
         box-sizing: border-box;
@@ -3720,7 +4114,7 @@ The following is NOT resolved automatically and requires your judgment:
         cursor: move;
       }
       .hoversource-config-panel .nav-btn {
-        background: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"};
+        background: ${colors.navBg};
         border: 1px solid ${colors.borderSep};
         color: ${colors.tooltipText};
         cursor: pointer;
@@ -3730,13 +4124,13 @@ The following is NOT resolved automatically and requires your judgment:
         transition: all 0.2s ease;
       }
       .hoversource-config-panel .nav-btn:hover {
-        background: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)"};
+        background: ${colors.navHoverBg};
       }
       .hoversource-config-panel .title {
         font-weight: 700;
         font-size: 11.5px;
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
-        text-shadow: 0 0 6px ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.4)" : "rgba(37, 99, 235, 0.4)"};
+        color: ${colors.accent};
+        text-shadow: 0 0 6px ${colors.accentGlow};
         letter-spacing: 0.02em;
       }
       .hoversource-config-panel table {
@@ -3747,7 +4141,7 @@ The following is NOT resolved automatically and requires your judgment:
         transition: background-color 0.15s ease;
       }
       .hoversource-config-panel tr:hover {
-        background-color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.02)"};
+        background-color: ${colors.rowHoverBg};
       }
       .hoversource-config-panel td {
         padding: 4px 0;
@@ -3772,33 +4166,38 @@ The following is NOT resolved automatically and requires your judgment:
         display: flex;
         align-items: center;
         justify-content: center;
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        color: ${colors.accent};
         width: 12px;
         height: 12px;
         opacity: 0.75;
       }
       .hoversource-config-panel tr:hover .icon-wrapper {
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#60a5fa" : "#3b82f6"};
+        color: ${colors.accentHover};
       }
       .hoversource-config-panel tr.hs-row-disabled {
         opacity: 0.5;
       }
       .hoversource-config-panel input[type="checkbox"] {
         cursor: pointer;
-        accent-color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        accent-color: ${colors.accent};
         width: 12px;
         height: 12px;
       }
     `;
-      if (this.container) {
+      if (this.shadowRoot) {
+        this.shadowRoot.appendChild(style);
+      } else if (this.container) {
         this.container.appendChild(style);
       } else if (document.head) {
         document.head.appendChild(style);
       }
     }
     createUI() {
-      if (this.container || !document.body)
+      if (this.shadowHost || this.container || !document.body)
         return;
+      this.shadowHost = document.createElement("div");
+      this.shadowHost.id = "hoversource-host";
+      this.shadowRoot = this.shadowHost.attachShadow({ mode: "open" });
       this.container = document.createElement("div");
       this.container.className = "hoversource-container";
       this.outlineBox = document.createElement("div");
@@ -3808,19 +4207,34 @@ The following is NOT resolved automatically and requires your judgment:
       this.tooltipBox = document.createElement("div");
       this.tooltipBox.className = "hoversource-tooltip";
       this.tooltipBox.style.display = "none";
+      this.tooltipBox.addEventListener("click", (e) => {
+        const target = e.target;
+        const link = target?.closest?.("[data-hs-open-file]");
+        if (!link)
+          return;
+        const file = link.dataset.hsOpenFile;
+        if (!file)
+          return;
+        const line = Number.parseInt(link.dataset.hsOpenLine || "1", 10) || 1;
+        const col = Number.parseInt(link.dataset.hsOpenCol || "1", 10) || 1;
+        const tagName = link.dataset.hsOpenTag || "";
+        const classList = link.dataset.hsOpenClasses || "";
+        openFileInIde(file, line, col, tagName, classList);
+      });
       this.container.appendChild(this.tooltipBox);
       this.filterPanel = document.createElement("div");
       this.filterPanel.className = "hoversource-config-panel";
       this.filterPanel.style.display = "none";
       this.container.appendChild(this.filterPanel);
-      document.body.appendChild(this.container);
+      this.shadowRoot.appendChild(this.container);
+      document.body.appendChild(this.shadowHost);
     }
     ensureUI() {
       if (!document.body)
         return;
-      if (this.container && !document.body.contains(this.container)) {
+      if (this.shadowHost && !document.body.contains(this.shadowHost)) {
         console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
-        document.body.appendChild(this.container);
+        document.body.appendChild(this.shadowHost);
       }
     }
     initShortcuts() {
@@ -3894,7 +4308,7 @@ The following is NOT resolved automatically and requires your judgment:
         this.filterPanel.style.display = "none";
       }
     }
-    renderFilterPanel() {
+    renderFilterPanel(restoreFocusId) {
       if (!this.filterPanel)
         return;
       const metadataTypes = [
@@ -3956,49 +4370,76 @@ The following is NOT resolved automatically and requires your judgment:
         aiInstructions: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:12px;height:12px;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
       };
       const fields = fieldsMap[activeType.id] || [];
-      let tableRowsHtml = "";
-      fields.forEach((field) => {
+      const rowNodes = fields.map((field) => {
         const filtersObj = this.config?.metadataFilter?.filters?.[activeType.id];
         const isChecked = filtersObj ? filtersObj[field.key] !== false : true;
         const svgIcon = iconsMap[field.key] || "";
-        tableRowsHtml += `
-        <tr class="${isChecked ? "" : "hs-row-disabled"}" style="cursor: pointer;">
-          <td class="label-col">
-            <span class="icon-wrapper">${svgIcon}</span>
-            <span>${field.label}</span>
-          </td>
-          <td class="check-col">
-            <input type="checkbox" data-type="${activeType.id}" data-field="${field.key}" ${isChecked ? "checked" : ""}>
-          </td>
-        </tr>
-      `;
+        return el(
+          "tr",
+          { class: isChecked ? "" : "hs-row-disabled", style: "cursor: pointer;" },
+          [
+            el("td", { class: "label-col" }, [
+              el("span", { class: "icon-wrapper" }, [
+                svgIcon ? createSafeFragmentFromHtml(svgIcon) : null
+              ]),
+              el("span", {}, [field.label])
+            ]),
+            el("td", { class: "check-col" }, [
+              el("input", {
+                type: "checkbox",
+                "data-type": activeType.id,
+                "data-field": field.key,
+                checked: isChecked
+              })
+            ])
+          ]
+        );
       });
-      this.filterPanel.innerHTML = `
-      <div class="header" id="hoversource-drag-header">
-        <button class="nav-btn" id="hoversource-prev-btn">&lt;</button>
-        <div class="title">${activeType.name}</div>
-        <button class="nav-btn" id="hoversource-next-btn">&gt;</button>
-      </div>
-      <div class="table-container">
-        <table>
-          ${tableRowsHtml}
-        </table>
-      </div>
-    `;
+      const headerEl = el("div", { class: "header", id: "hoversource-drag-header" }, [
+        el(
+          "button",
+          {
+            type: "button",
+            class: "nav-btn",
+            id: "hoversource-prev-btn",
+            "aria-label": "Previous metadata category"
+          },
+          ["<"]
+        ),
+        el("div", { class: "title" }, [activeType.name]),
+        el(
+          "button",
+          {
+            type: "button",
+            class: "nav-btn",
+            id: "hoversource-next-btn",
+            "aria-label": "Next metadata category"
+          },
+          [">"]
+        )
+      ]);
+      const tableContainerEl = el("div", { class: "table-container" }, [
+        el("table", {}, rowNodes)
+      ]);
+      this.filterPanel.replaceChildren(
+        ...[headerEl, tableContainerEl].filter((n) => n !== null)
+      );
       const prevBtn = this.filterPanel.querySelector("#hoversource-prev-btn");
       const nextBtn = this.filterPanel.querySelector("#hoversource-next-btn");
       if (prevBtn) {
-        prevBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
+        prevBtn.addEventListener("click", () => {
+          const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+          const shouldRestoreFocus = activeEl === prevBtn;
           this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex - 1 + metadataTypes.length) % metadataTypes.length;
-          this.renderFilterPanel();
+          this.renderFilterPanel(shouldRestoreFocus ? "hoversource-prev-btn" : void 0);
         });
       }
       if (nextBtn) {
-        nextBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
+        nextBtn.addEventListener("click", () => {
+          const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+          const shouldRestoreFocus = activeEl === nextBtn;
           this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex + 1 + metadataTypes.length) % metadataTypes.length;
-          this.renderFilterPanel();
+          this.renderFilterPanel(shouldRestoreFocus ? "hoversource-next-btn" : void 0);
         });
       }
       const rows = this.filterPanel.querySelectorAll("tr");
@@ -4040,6 +4481,9 @@ The following is NOT resolved automatically and requires your judgment:
         });
       });
       this.makePanelDraggable();
+      if (restoreFocusId) {
+        this.filterPanel.querySelector(`#${restoreFocusId}`)?.focus();
+      }
     }
     makePanelDraggable() {
       if (!this.filterPanel)
@@ -4110,7 +4554,7 @@ The following is NOT resolved automatically and requires your judgment:
       return keyMatch || !!codeMatch;
     }
     isTyping(e) {
-      const activeEl = document.activeElement;
+      const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
       if (!activeEl)
         return false;
       const tag = activeEl.tagName.toLowerCase();
@@ -4119,7 +4563,13 @@ The following is NOT resolved automatically and requires your judgment:
     handlePointerOver = (e) => {
       this.ensureUI();
       const target = e.target;
-      if (!target || target === this.container || this.container?.contains(target)) {
+      const composedPath = typeof e.composedPath === "function" ? e.composedPath() : [];
+      const isOverlayEvent = Boolean(
+        this.shadowHost && (target === this.shadowHost || this.shadowHost.contains(target) || composedPath.includes(this.shadowHost)) || this.container && (target === this.container || this.container.contains(target) || composedPath.includes(this.container))
+      );
+      if (isOverlayEvent)
+        return;
+      if (!target) {
         if (this.isFrozen) {
           e.stopImmediatePropagation();
           e.preventDefault();
@@ -4146,8 +4596,11 @@ The following is NOT resolved automatically and requires your judgment:
       }
     };
     blockEvent = (e) => {
-      if (this.container?.contains(e.target))
+      const target = e.target;
+      const composedPath = typeof e.composedPath === "function" ? e.composedPath() : [];
+      if (this.shadowHost && (target === this.shadowHost || this.shadowHost.contains(target) || composedPath.includes(this.shadowHost)) || this.container && (target === this.container || this.container.contains(target) || composedPath.includes(this.container))) {
         return;
+      }
       e.stopImmediatePropagation();
       e.preventDefault();
     };
@@ -4168,7 +4621,13 @@ The following is NOT resolved automatically and requires your judgment:
       if (!this.tooltipBox)
         return;
       if (html) {
-        this.tooltipBox.innerHTML = html;
+        if (this.copyHintTimer !== null) {
+          clearTimeout(this.copyHintTimer);
+          this.copyHintTimer = null;
+        }
+        this.copyHintTarget = null;
+        this.copyHintOriginalNodes = null;
+        setElementContentSafely(this.tooltipBox, html);
         if (this.tooltipBox.style.display !== "block") {
           this.tooltipBox.style.display = "block";
         }
@@ -4292,8 +4751,8 @@ The following is NOT resolved automatically and requires your judgment:
       }
     }
     clearParentHighlights() {
-      for (const el of this.parentHighlightElements) {
-        el.remove();
+      for (const el2 of this.parentHighlightElements) {
+        el2.remove();
       }
       this.parentHighlightElements = [];
     }
@@ -4306,6 +4765,8 @@ The following is NOT resolved automatically and requires your judgment:
     }
     async copyToClipboard(text) {
       await navigator.clipboard.writeText(text);
+      if (this.isDestroyed)
+        return;
       console.log("[HoverSource] Copied component metadata to clipboard!");
       if (this.uiVisible && this.tooltipBox) {
         const hint = this.tooltipBox.querySelector(".hoversource-shortcut-hint");
@@ -4314,23 +4775,26 @@ The following is NOT resolved automatically and requires your judgment:
             clearTimeout(this.copyHintTimer);
             this.copyHintTimer = null;
           }
-          const canReplaceNodes = typeof hint.replaceChildren === "function" && hint.childNodes && typeof hint.childNodes[Symbol.iterator] === "function";
-          const originalNodes = this.copyHintOriginalNodes && this.copyHintTarget === hint ? this.copyHintOriginalNodes : canReplaceNodes ? Array.from(hint.childNodes).map((n) => n.cloneNode(true)) : null;
-          const originalText = hint.innerHTML;
+          const originalNodes = this.copyHintTarget === hint && this.copyHintOriginalNodes ? this.copyHintOriginalNodes : Array.from(hint.childNodes).map((n) => n.cloneNode(true));
           this.copyHintTarget = hint;
           this.copyHintOriginalNodes = originalNodes;
-          hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
+          const copiedSpan = el(
+            "span",
+            { style: "color: #10b981; font-weight: bold;" },
+            ["Copied successfully for AI!"]
+          );
+          if (copiedSpan) {
+            hint.replaceChildren(copiedSpan);
+          }
           this.copyHintTimer = setTimeout(() => {
             this.copyHintTimer = null;
             if (this.isDestroyed)
               return;
-            if (originalNodes && typeof hint.replaceChildren === "function") {
+            if (this.copyHintTarget === hint) {
               hint.replaceChildren(...originalNodes);
-            } else {
-              hint.innerHTML = originalText;
+              this.copyHintTarget = null;
+              this.copyHintOriginalNodes = null;
             }
-            this.copyHintTarget = null;
-            this.copyHintOriginalNodes = null;
           }, 1500);
         }
       }
@@ -4361,6 +4825,8 @@ The following is NOT resolved automatically and requires your judgment:
       return this.uiVisible;
     }
     setFreezeMode(frozen) {
+      if (this.isFrozen === frozen)
+        return;
       this.isFrozen = frozen;
       const events = [
         "pointerout",
@@ -4380,18 +4846,29 @@ The following is NOT resolved automatically and requires your judgment:
         events.forEach((event) => globalThis.addEventListener(event, this.blockEvent, { capture: true }));
         this.freezeStyle = document.createElement("style");
         this.freezeStyle.id = "hoversource-freeze-styles";
-        this.freezeStyle.innerHTML = `
+        this.freezeStyle.textContent = `
         * { pointer-events: auto !important; }
-        .hoversource-container { pointer-events: none !important; }
-        .hoversource-outline { pointer-events: none !important; }
-        .hoversource-tooltip, .hoversource-tooltip * { pointer-events: auto !important; }
+        #hoversource-host { pointer-events: none !important; }
       `;
-        document.head.appendChild(this.freezeStyle);
+        (document.head ?? document.documentElement)?.appendChild(this.freezeStyle);
+        if (this.shadowRoot) {
+          this.freezeShadowStyle = document.createElement("style");
+          this.freezeShadowStyle.id = "hoversource-freeze-shadow-styles";
+          this.freezeShadowStyle.textContent = `
+          .hoversource-container, .hoversource-outline { pointer-events: none !important; }
+          .hoversource-tooltip, .hoversource-tooltip *, .hoversource-config-panel, .hoversource-config-panel *, .hoversource-parent-badge, .hoversource-parent-badge * { pointer-events: auto !important; }
+        `;
+          this.shadowRoot.appendChild(this.freezeShadowStyle);
+        }
       } else {
         events.forEach((event) => globalThis.removeEventListener(event, this.blockEvent, { capture: true }));
         if (this.freezeStyle) {
           this.freezeStyle.remove();
           this.freezeStyle = null;
+        }
+        if (this.freezeShadowStyle) {
+          this.freezeShadowStyle.remove();
+          this.freezeShadowStyle = null;
         }
       }
     }
@@ -4428,20 +4905,25 @@ The following is NOT resolved automatically and requires your judgment:
       }
       this.copyHintTarget = null;
       this.copyHintOriginalNodes = null;
+      this.shadowHost?.remove();
       this.container?.remove();
       this.freezeStyle?.remove();
+      this.freezeShadowStyle?.remove();
+      this.shadowHost = null;
+      this.shadowRoot = null;
       this.container = null;
       this.outlineBox = null;
       this.tooltipBox = null;
       this.filterPanel = null;
       this.freezeStyle = null;
+      this.freezeShadowStyle = null;
       this.parentHighlightElements = [];
       if (_OverlayEngine.activeInstance === this) {
         _OverlayEngine.activeInstance = null;
       }
     }
   };
-  globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
+  function openFileInIde(file, line, col, tagName, classList) {
     let path = `/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
       path += `&tagName=${encodeURIComponent(tagName)}`;
@@ -4454,7 +4936,8 @@ The following is NOT resolved automatically and requires your judgment:
         console.error("[HoverSource] Editor open failed:", data.error);
       }
     }).catch((e) => console.error("[HoverSource] Failed to reach companion server:", e));
-  };
+  }
+  globalThis.__HoverSourceOpen__ = openFileInIde;
   if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
     globalThis.__HoverSourceInitialized__ = true;
     void OverlayEngine.launch().catch((err) => {

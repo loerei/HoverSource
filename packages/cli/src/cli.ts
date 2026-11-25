@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { startCompanionServer, loadMergedConfig } from "@hoversource/companion-server";
-import { injectOverlayScript } from "@hoversource/client-injector";
+import { injectOverlayScript, type InjectOverlayOptions } from "@hoversource/client-injector";
 import { startProxy } from "./proxy.js";
 import { exec } from "node:child_process";
 import path from "node:path";
@@ -396,14 +396,56 @@ export function findScriptPath(projectRoot: string): string {
   process.exit(1);
 }
 
-export async function startCdpInjectionWatch(debugPort: number, scriptWithPort: string): Promise<void> {
+export interface CdpInjectionWatchOptions {
+  companionPort?: number;
+  pollIntervalMs?: number;
+  signal?: AbortSignal;
+  injectFn?: (
+    port: number,
+    scriptContent: string,
+    options?: InjectOverlayOptions
+  ) => Promise<number>;
+}
+
+export async function startCdpInjectionWatch(
+  debugPort: number,
+  scriptWithPort: string,
+  optionsOrCompanionPort?: number | CdpInjectionWatchOptions
+): Promise<void> {
+  const options =
+    typeof optionsOrCompanionPort === "object" && optionsOrCompanionPort !== null
+      ? optionsOrCompanionPort
+      : undefined;
+  const companionPort =
+    typeof optionsOrCompanionPort === "number"
+      ? optionsOrCompanionPort
+      : options?.companionPort;
+  const rawInterval = options?.pollIntervalMs;
+  const intervalMs =
+    typeof rawInterval === "number" && Number.isFinite(rawInterval) && rawInterval > 0
+      ? rawInterval
+      : 2500;
+  const injectFn = options?.injectFn ?? injectOverlayScript;
+  const signal = options?.signal;
+
+  if (signal?.aborted) {
+    return;
+  }
+
   console.log(`[HoverSource] Watching debug port :${debugPort} for Chromium targets...`);
-  
+
   let isInjected = false;
-  
+  let isPolling = false;
+
   const pollAndInject = async () => {
+    if (isPolling || signal?.aborted) {
+      return;
+    }
+    isPolling = true;
     try {
-      const injectedCount = await injectOverlayScript(debugPort, scriptWithPort);
+      const injectOptions: InjectOverlayOptions | undefined =
+        companionPort !== undefined ? { companionPort } : undefined;
+      const injectedCount = await injectFn(debugPort, scriptWithPort, injectOptions);
       if (injectedCount > 0 && !isInjected) {
         console.log(`[HoverSource] Successfully connected and injected into ${injectedCount} target(s).`);
         isInjected = true;
@@ -414,13 +456,27 @@ export async function startCdpInjectionWatch(debugPort: number, scriptWithPort: 
         isInjected = false;
       }
       if (process.env.DEBUG) {
-        console.debug("[HoverSource] Ignored poll injection error:", err.message);
+        console.debug("[HoverSource] Ignored poll injection error:", err?.message ?? err);
       }
+    } finally {
+      isPolling = false;
     }
   };
 
   await pollAndInject();
-  setInterval(pollAndInject, 2500);
+  if (signal?.aborted) {
+    return;
+  }
+
+  const intervalId = setInterval(pollAndInject, intervalMs);
+  intervalId.unref();
+
+  if (signal) {
+    const onAbort = () => {
+      clearInterval(intervalId);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  }
 }
 
 function determineIfElectron(execArg: string, projectRoot: string): boolean {

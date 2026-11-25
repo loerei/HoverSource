@@ -5,18 +5,26 @@ import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 import { OverlayController, InteractionMode } from "./modes/types.js";
 import { ParentVisualEffect } from "@hoversource/source-resolver";
+import { companionRequestJson } from "./companionTransport.js";
+import { waitForDomBody } from "./domReady.js";
+import { initInspectorMutationObserver, disconnectInspectorMutationObserver } from "./inspector.js";
+import { createSafeFragmentFromHtml, setElementContentSafely, el } from "./safeDom.js";
 
-function getCompanionBaseUrl() {
-  const isProxy = (globalThis as any).__HOVERSOURCE_PROXY__ === true;
-  if (isProxy) {
-    return "/hoversource";
-  }
-  const port = (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
-  return `http://127.0.0.1:${port}`;
+export { waitForDomBody };
+
+export interface OverlayEngineLaunchOptions {
+  configTimeoutMs?: number;
+  domReadyTimeoutMs?: number;
 }
 
-class OverlayEngine implements OverlayController {
+export class OverlayEngine implements OverlayController {
+  private static launchEpoch = 0;
+  private static activeInstance: OverlayEngine | null = null;
+  private static activeLaunchPromise: Promise<OverlayEngine | null> | null = null;
+
   private config: any = null;
+  public shadowHost: HTMLDivElement | null = null;
+  private shadowRoot: ShadowRoot | null = null;
   private container: HTMLDivElement | null = null;
   private outlineBox: HTMLDivElement | null = null;
   private tooltipBox: HTMLDivElement | null = null;
@@ -28,6 +36,16 @@ class OverlayEngine implements OverlayController {
   private uiVisible = true;
   private isFrozen = false;
   private freezeStyle: HTMLStyleElement | null = null;
+  private freezeShadowStyle: HTMLStyleElement | null = null;
+
+  private launchAbortController: AbortController | null = null;
+  private shortcutsAttached = false;
+  private modeActivated = false;
+  private listenersAttached = false;
+  private isDestroyed = false;
+  private copyHintTimer: ReturnType<typeof setTimeout> | null = null;
+  private copyHintTarget: Element | null = null;
+  private copyHintOriginalNodes: ChildNode[] | null = null;
 
   private readonly inspectorMode = new InspectorAdapter();
   private readonly designMode = new DesignAdapter();
@@ -35,70 +53,146 @@ class OverlayEngine implements OverlayController {
 
   private constructor() {}
 
-  public static async launch(): Promise<OverlayEngine> {
-    const engine = new OverlayEngine();
-    await engine.init();
-    return engine;
+  public static async launch(options?: OverlayEngineLaunchOptions): Promise<OverlayEngine | null> {
+    const epoch = ++OverlayEngine.launchEpoch;
+    const prevInstance = OverlayEngine.activeInstance;
+    const prevPromise = OverlayEngine.activeLaunchPromise;
+    OverlayEngine.activeInstance = null;
+    OverlayEngine.activeLaunchPromise = null;
+
+    prevInstance?.launchAbortController?.abort();
+    prevInstance?.destroy();
+
+    let currentPromise!: Promise<OverlayEngine | null>;
+    currentPromise = (async (): Promise<OverlayEngine | null> => {
+      try {
+        if (prevPromise) {
+          const prior = await prevPromise.catch(() => null);
+          prior?.destroy();
+        }
+        if (OverlayEngine.launchEpoch !== epoch) {
+          return null;
+        }
+        const engine = new OverlayEngine();
+        OverlayEngine.activeInstance = engine;
+        try {
+          await engine.init(options);
+        } catch (err) {
+          engine.destroy();
+          throw err;
+        }
+        if (OverlayEngine.launchEpoch !== epoch) {
+          engine.destroy();
+          return null;
+        }
+        return engine.isDestroyed ? null : engine;
+      } finally {
+        if (OverlayEngine.activeLaunchPromise === currentPromise) {
+          OverlayEngine.activeLaunchPromise = null;
+        }
+      }
+    })();
+
+    OverlayEngine.activeLaunchPromise = currentPromise;
+    return currentPromise;
   }
 
-  private async init() {
-    await this.loadConfig();
+  public static async destroyActive(): Promise<void> {
+    ++OverlayEngine.launchEpoch;
+    const inst = OverlayEngine.activeInstance;
+    const pending = OverlayEngine.activeLaunchPromise;
+    OverlayEngine.activeInstance = null;
+    OverlayEngine.activeLaunchPromise = null;
+
+    inst?.launchAbortController?.abort();
+    inst?.destroy();
+
+    if (pending) {
+      const resolved = await pending.catch(() => null);
+      resolved?.destroy();
+    }
+  }
+
+  private readonly handleWindowMessage = (e: MessageEvent) => {
+    if (
+      e.origin === globalThis.location.origin &&
+      e.source === (globalThis as unknown) &&
+      e.data?.type === "HOVERSOURCE_CONFIG_CHANGED"
+    ) {
+      this.handleConfigUpdate(e.data.config);
+    }
+  };
+
+  private async init(options?: OverlayEngineLaunchOptions) {
+    this.launchAbortController = new AbortController();
+    await this.loadConfig(options?.configTimeoutMs ?? 2000, this.launchAbortController.signal);
+    if (this.isDestroyed) return;
+
+    const bodyReady = await waitForDomBody(options?.domReadyTimeoutMs, this.launchAbortController.signal);
+    if (this.isDestroyed) return;
+    if (!bodyReady) {
+      console.warn("[HoverSource] Timed out waiting for document.body; skipping overlay UI mount.");
+      return;
+    }
+
+    void initInspectorMutationObserver(options?.domReadyTimeoutMs, this.launchAbortController.signal);
+
     this.createUI();
     this.initStyles();
     this.initShortcuts();
 
     this.activeMode.activate(this);
+    this.modeActivated = true;
     
     globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
     globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
     globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
-
-    globalThis.addEventListener("message", (e) => {
-      if (
-        e.origin === globalThis.location.origin &&
-        e.source === (globalThis as unknown) &&
-        e.data?.type === "HOVERSOURCE_CONFIG_CHANGED"
-      ) {
-        this.handleConfigUpdate(e.data.config);
-      }
-    });
+    globalThis.addEventListener("message", this.handleWindowMessage);
+    this.listenersAttached = true;
   }
 
   private handleConfigUpdate(newConfig: any) {
     console.log("[HoverSource] Live reloading config...", newConfig);
     this.config = newConfig;
 
-    const oldStyle = document.getElementById("hoversource-styles");
+    const oldStyle =
+      this.shadowRoot?.getElementById?.("hoversource-styles") ??
+      this.shadowRoot?.querySelector("#hoversource-styles") ??
+      document.getElementById("hoversource-styles");
     if (oldStyle) oldStyle.remove();
     this.initStyles();
 
     this.activeMode.onConfigUpdate(newConfig);
   }
 
-  private async loadConfig() {
+  private async loadConfig(timeoutMs = 2000, signal?: AbortSignal) {
     try {
-      const res = await fetch(`${getCompanionBaseUrl()}/config`);
-      const data = await res.json();
-      this.config = data.config;
-      console.log("[HoverSource] Configuration loaded from companion server:", this.config);
+      const data = await companionRequestJson("/config", { timeoutMs, signal });
+      if (data?.config) {
+        this.config = data.config;
+        console.log("[HoverSource] Configuration loaded from companion server:", this.config);
+        return;
+      }
     } catch (e) {
-      console.warn("[HoverSource] Failed to fetch config, falling back to defaults", e);
-      this.config = {
-        theme: "dark",
-        minimalModeByDefault: false,
-        snappingThreshold: 15,
-        desnappingThreshold: 15,
-        maxTraversalDepth: 32,
-        shortcuts: {
-          toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-          copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-          openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
-        }
-      };
+      if (!signal?.aborted) {
+        console.warn("[HoverSource] Failed to fetch config, falling back to defaults", e);
+      }
     }
+    this.config = {
+      theme: "dark",
+      minimalModeByDefault: false,
+      snappingThreshold: 15,
+      desnappingThreshold: 15,
+      maxTraversalDepth: 32,
+      shortcuts: {
+        toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
+        toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
+        toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
+        copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
+        openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
+        toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
+      }
+    };
   }
 
   private initStyles() {
@@ -119,7 +213,15 @@ class OverlayEngine implements OverlayController {
           layerShapeStroke: "rgba(0,0,0,0.35)",
           layerShapeHoverFill: "#d1d5db",
           layerShapeHoverStroke: "rgba(0,0,0,0.6)",
-          layerHintColor: "#9ca3af"
+          layerHintColor: "#9ca3af",
+          panelBorder: "rgba(37, 99, 235, 0.3)",
+          panelGlow: "rgba(37, 99, 235, 0.2)",
+          navBg: "rgba(0, 0, 0, 0.05)",
+          navHoverBg: "rgba(0, 0, 0, 0.1)",
+          accent: "#2563eb",
+          accentGlow: "rgba(37, 99, 235, 0.4)",
+          accentHover: "#3b82f6",
+          rowHoverBg: "rgba(0, 0, 0, 0.02)",
         }
       : {
           tooltipBg: "rgba(18, 18, 18, 0.95)",
@@ -133,12 +235,31 @@ class OverlayEngine implements OverlayController {
           layerShapeStroke: "rgba(255,255,255,0.5)",
           layerShapeHoverFill: "#3f3f46",
           layerShapeHoverStroke: "rgba(255,255,255,0.7)",
-          layerHintColor: "#6b7280"
+          layerHintColor: "#6b7280",
+          panelBorder: "rgba(59, 130, 246, 0.3)",
+          panelGlow: "rgba(59, 130, 246, 0.2)",
+          navBg: "rgba(255, 255, 255, 0.08)",
+          navHoverBg: "rgba(255, 255, 255, 0.15)",
+          accent: "#3b82f6",
+          accentGlow: "rgba(59, 130, 246, 0.4)",
+          accentHover: "#60a5fa",
+          rowHoverBg: "rgba(255, 255, 255, 0.02)",
         };
 
     const style = document.createElement("style");
     style.id = "hoversource-styles";
-    style.innerHTML = `
+    style.textContent = `
+      :host {
+        all: initial;
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+        z-index: 2147483647;
+      }
       .hoversource-container {
         position: fixed;
         top: 0;
@@ -351,11 +472,11 @@ class OverlayEngine implements OverlayController {
         background: ${colors.tooltipBg};
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        border: 1px solid ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.3)" : "rgba(37, 99, 235, 0.3)"};
+        border: 1px solid ${colors.panelBorder};
         color: ${colors.tooltipText};
         padding: 10px 12px;
         border-radius: 8px;
-        box-shadow: 0 0 12px ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.2)" : "rgba(37, 99, 235, 0.2)"}, 0 8px 20px -5px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 0 12px ${colors.panelGlow}, 0 8px 20px -5px rgba(0, 0, 0, 0.5);
         z-index: 1000000;
         user-select: none;
         box-sizing: border-box;
@@ -371,7 +492,7 @@ class OverlayEngine implements OverlayController {
         cursor: move;
       }
       .hoversource-config-panel .nav-btn {
-        background: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.05)"};
+        background: ${colors.navBg};
         border: 1px solid ${colors.borderSep};
         color: ${colors.tooltipText};
         cursor: pointer;
@@ -381,13 +502,13 @@ class OverlayEngine implements OverlayController {
         transition: all 0.2s ease;
       }
       .hoversource-config-panel .nav-btn:hover {
-        background: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.15)" : "rgba(0, 0, 0, 0.1)"};
+        background: ${colors.navHoverBg};
       }
       .hoversource-config-panel .title {
         font-weight: 700;
         font-size: 11.5px;
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
-        text-shadow: 0 0 6px ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(59, 130, 246, 0.4)" : "rgba(37, 99, 235, 0.4)"};
+        color: ${colors.accent};
+        text-shadow: 0 0 6px ${colors.accentGlow};
         letter-spacing: 0.02em;
       }
       .hoversource-config-panel table {
@@ -398,7 +519,7 @@ class OverlayEngine implements OverlayController {
         transition: background-color 0.15s ease;
       }
       .hoversource-config-panel tr:hover {
-        background-color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.02)"};
+        background-color: ${colors.rowHoverBg};
       }
       .hoversource-config-panel td {
         padding: 4px 0;
@@ -423,33 +544,39 @@ class OverlayEngine implements OverlayController {
         display: flex;
         align-items: center;
         justify-content: center;
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        color: ${colors.accent};
         width: 12px;
         height: 12px;
         opacity: 0.75;
       }
       .hoversource-config-panel tr:hover .icon-wrapper {
-        color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#60a5fa" : "#3b82f6"};
+        color: ${colors.accentHover};
       }
       .hoversource-config-panel tr.hs-row-disabled {
         opacity: 0.5;
       }
       .hoversource-config-panel input[type="checkbox"] {
         cursor: pointer;
-        accent-color: ${colors.tooltipBorder === "rgba(255, 255, 255, 0.15)" ? "#3b82f6" : "#2563eb"};
+        accent-color: ${colors.accent};
         width: 12px;
         height: 12px;
       }
     `;
-    if (this.container) {
+    if (this.shadowRoot) {
+      this.shadowRoot.appendChild(style);
+    } else if (this.container) {
       this.container.appendChild(style);
-    } else {
+    } else if (document.head) {
       document.head.appendChild(style);
     }
   }
 
   private createUI() {
-    if (this.container) return;
+    if (this.shadowHost || this.container || !document.body) return;
+    this.shadowHost = document.createElement("div");
+    this.shadowHost.id = "hoversource-host";
+    this.shadowRoot = this.shadowHost.attachShadow({ mode: "open" });
+
     this.container = document.createElement("div");
     this.container.className = "hoversource-container";
 
@@ -461,6 +588,18 @@ class OverlayEngine implements OverlayController {
     this.tooltipBox = document.createElement("div");
     this.tooltipBox.className = "hoversource-tooltip";
     this.tooltipBox.style.display = "none";
+    this.tooltipBox.addEventListener("click", (e) => {
+      const target = e.target as Element | null;
+      const link = target?.closest?.("[data-hs-open-file]") as HTMLElement | null;
+      if (!link) return;
+      const file = link.dataset.hsOpenFile;
+      if (!file) return;
+      const line = Number.parseInt(link.dataset.hsOpenLine || "1", 10) || 1;
+      const col = Number.parseInt(link.dataset.hsOpenCol || "1", 10) || 1;
+      const tagName = link.dataset.hsOpenTag || "";
+      const classList = link.dataset.hsOpenClasses || "";
+      openFileInIde(file, line, col, tagName, classList);
+    });
     this.container.appendChild(this.tooltipBox);
 
     this.filterPanel = document.createElement("div");
@@ -468,18 +607,21 @@ class OverlayEngine implements OverlayController {
     this.filterPanel.style.display = "none";
     this.container.appendChild(this.filterPanel);
 
-    document.body.appendChild(this.container);
+    this.shadowRoot.appendChild(this.container);
+    document.body.appendChild(this.shadowHost);
   }
 
   private ensureUI() {
-    if (this.container && !document.body.contains(this.container)) {
+    if (!document.body) return;
+    if (this.shadowHost && !document.body.contains(this.shadowHost)) {
       console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
-      document.body.appendChild(this.container);
+      document.body.appendChild(this.shadowHost);
     }
   }
 
   private initShortcuts() {
     globalThis.addEventListener("keydown", this.handleKeyDown);
+    this.shortcutsAttached = true;
   }
 
   private handleModeShortcuts(e: KeyboardEvent, shortcuts: any) {
@@ -556,7 +698,7 @@ class OverlayEngine implements OverlayController {
     }
   }
 
-  private renderFilterPanel() {
+  private renderFilterPanel(restoreFocusId?: "hoversource-prev-btn" | "hoversource-next-btn") {
     if (!this.filterPanel) return;
 
     const metadataTypes = [
@@ -624,54 +766,83 @@ class OverlayEngine implements OverlayController {
 
     const fields = fieldsMap[activeType.id] || [];
 
-    let tableRowsHtml = "";
-    fields.forEach((field) => {
+    const rowNodes = fields.map((field) => {
       // Look up current filter value from config (default to true if not set)
       const filtersObj = this.config?.metadataFilter?.filters?.[activeType.id];
       const isChecked = filtersObj ? (filtersObj[field.key] !== false) : true;
       const svgIcon = iconsMap[field.key] || "";
 
-      tableRowsHtml += `
-        <tr class="${isChecked ? "" : "hs-row-disabled"}" style="cursor: pointer;">
-          <td class="label-col">
-            <span class="icon-wrapper">${svgIcon}</span>
-            <span>${field.label}</span>
-          </td>
-          <td class="check-col">
-            <input type="checkbox" data-type="${activeType.id}" data-field="${field.key}" ${isChecked ? "checked" : ""}>
-          </td>
-        </tr>
-      `;
+      return el(
+        "tr",
+        { class: isChecked ? "" : "hs-row-disabled", style: "cursor: pointer;" },
+        [
+          el("td", { class: "label-col" }, [
+            el("span", { class: "icon-wrapper" }, [
+              svgIcon ? createSafeFragmentFromHtml(svgIcon) : null,
+            ]),
+            el("span", {}, [field.label]),
+          ]),
+          el("td", { class: "check-col" }, [
+            el("input", {
+              type: "checkbox",
+              "data-type": activeType.id,
+              "data-field": field.key,
+              checked: isChecked,
+            }),
+          ]),
+        ]
+      );
     });
 
-    this.filterPanel.innerHTML = `
-      <div class="header" id="hoversource-drag-header">
-        <button class="nav-btn" id="hoversource-prev-btn">&lt;</button>
-        <div class="title">${activeType.name}</div>
-        <button class="nav-btn" id="hoversource-next-btn">&gt;</button>
-      </div>
-      <div class="table-container">
-        <table>
-          ${tableRowsHtml}
-        </table>
-      </div>
-    `;
+    const headerEl = el("div", { class: "header", id: "hoversource-drag-header" }, [
+      el(
+        "button",
+        {
+          type: "button",
+          class: "nav-btn",
+          id: "hoversource-prev-btn",
+          "aria-label": "Previous metadata category",
+        },
+        ["<"]
+      ),
+      el("div", { class: "title" }, [activeType.name]),
+      el(
+        "button",
+        {
+          type: "button",
+          class: "nav-btn",
+          id: "hoversource-next-btn",
+          "aria-label": "Next metadata category",
+        },
+        [">"]
+      ),
+    ]);
+
+    const tableContainerEl = el("div", { class: "table-container" }, [
+      el("table", {}, rowNodes),
+    ]);
+
+    this.filterPanel.replaceChildren(
+      ...[headerEl, tableContainerEl].filter((n): n is HTMLElement => n !== null)
+    );
 
     // Hook events
-    const prevBtn = this.filterPanel.querySelector("#hoversource-prev-btn");
-    const nextBtn = this.filterPanel.querySelector("#hoversource-next-btn");
+    const prevBtn = this.filterPanel.querySelector("#hoversource-prev-btn") as HTMLButtonElement | null;
+    const nextBtn = this.filterPanel.querySelector("#hoversource-next-btn") as HTMLButtonElement | null;
     if (prevBtn) {
-      prevBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
+      prevBtn.addEventListener("click", () => {
+        const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+        const shouldRestoreFocus = activeEl === prevBtn;
         this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex - 1 + metadataTypes.length) % metadataTypes.length;
-        this.renderFilterPanel();
+        this.renderFilterPanel(shouldRestoreFocus ? "hoversource-prev-btn" : undefined);
       });
     }
     if (nextBtn) {
-      nextBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
+      nextBtn.addEventListener("click", () => {
+        const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+        const shouldRestoreFocus = activeEl === nextBtn;
         this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex + 1 + metadataTypes.length) % metadataTypes.length;
-        this.renderFilterPanel();
+        this.renderFilterPanel(shouldRestoreFocus ? "hoversource-next-btn" : undefined);
       });
     }
 
@@ -718,6 +889,9 @@ class OverlayEngine implements OverlayController {
     });
 
     this.makePanelDraggable();
+    if (restoreFocusId) {
+      (this.filterPanel.querySelector(`#${restoreFocusId}`) as HTMLElement | null)?.focus();
+    }
   }
 
   private makePanelDraggable() {
@@ -770,8 +944,7 @@ class OverlayEngine implements OverlayController {
   }
 
   private openDashboardInBrowser() {
-    fetch(`${getCompanionBaseUrl()}/open-dashboard`)
-      .then(r => r.json())
+    companionRequestJson("/open-dashboard")
       .then(data => {
         if (data.success) {
           console.log("[HoverSource] Triggered dashboard browser open.");
@@ -800,7 +973,7 @@ class OverlayEngine implements OverlayController {
   }
 
   private isTyping(e: KeyboardEvent): boolean {
-    const activeEl = document.activeElement;
+    const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
     if (!activeEl) return false;
     const tag = activeEl.tagName.toLowerCase();
     return tag === "input" || tag === "textarea" || activeEl.hasAttribute("contenteditable");
@@ -809,7 +982,13 @@ class OverlayEngine implements OverlayController {
   private readonly handlePointerOver = (e: PointerEvent) => {
     this.ensureUI();
     const target = e.target as HTMLElement | null;
-    if (!target || target === this.container || this.container?.contains(target)) {
+    const composedPath = typeof e.composedPath === "function" ? e.composedPath() : [];
+    const isOverlayEvent = Boolean(
+      (this.shadowHost && (target === this.shadowHost || this.shadowHost.contains(target as Node) || composedPath.includes(this.shadowHost))) ||
+      (this.container && (target === this.container || this.container.contains(target as Node) || composedPath.includes(this.container)))
+    );
+    if (isOverlayEvent) return;
+    if (!target) {
       if (this.isFrozen) {
         e.stopImmediatePropagation();
         e.preventDefault();
@@ -840,7 +1019,14 @@ class OverlayEngine implements OverlayController {
   };
 
   private readonly blockEvent = (e: Event) => {
-    if (this.container?.contains(e.target as Node)) return;
+    const target = e.target as Node | null;
+    const composedPath = typeof e.composedPath === "function" ? e.composedPath() : [];
+    if (
+      (this.shadowHost && (target === this.shadowHost || this.shadowHost.contains(target) || composedPath.includes(this.shadowHost))) ||
+      (this.container && (target === this.container || this.container.contains(target) || composedPath.includes(this.container)))
+    ) {
+      return;
+    }
     e.stopImmediatePropagation();
     e.preventDefault();
   };
@@ -863,7 +1049,13 @@ class OverlayEngine implements OverlayController {
   public drawTooltip(html: string, pointerEvent: PointerEvent): void {
     if (!this.tooltipBox) return;
     if (html) {
-      this.tooltipBox.innerHTML = html;
+      if (this.copyHintTimer !== null) {
+        clearTimeout(this.copyHintTimer);
+        this.copyHintTimer = null;
+      }
+      this.copyHintTarget = null;
+      this.copyHintOriginalNodes = null;
+      setElementContentSafely(this.tooltipBox, html);
       if (this.tooltipBox.style.display !== "block") {
         this.tooltipBox.style.display = "block";
       }
@@ -1032,15 +1224,40 @@ class OverlayEngine implements OverlayController {
 
   public async copyToClipboard(text: string): Promise<void> {
     await navigator.clipboard.writeText(text);
+    if (this.isDestroyed) return;
     console.log("[HoverSource] Copied component metadata to clipboard!");
 
     if (this.uiVisible && this.tooltipBox) {
       const hint = this.tooltipBox.querySelector(".hoversource-shortcut-hint");
       if (hint) {
-        const originalText = hint.innerHTML;
-        hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
-        setTimeout(() => {
-          hint.innerHTML = originalText;
+        if (this.copyHintTimer !== null) {
+          clearTimeout(this.copyHintTimer);
+          this.copyHintTimer = null;
+        }
+        const originalNodes =
+          this.copyHintTarget === hint && this.copyHintOriginalNodes
+            ? this.copyHintOriginalNodes
+            : Array.from(hint.childNodes).map((n) => n.cloneNode(true) as ChildNode);
+        this.copyHintTarget = hint;
+        this.copyHintOriginalNodes = originalNodes;
+
+        const copiedSpan = el(
+          "span",
+          { style: "color: #10b981; font-weight: bold;" },
+          ["Copied successfully for AI!"]
+        );
+        if (copiedSpan) {
+          hint.replaceChildren(copiedSpan);
+        }
+
+        this.copyHintTimer = setTimeout(() => {
+          this.copyHintTimer = null;
+          if (this.isDestroyed) return;
+          if (this.copyHintTarget === hint) {
+            hint.replaceChildren(...originalNodes);
+            this.copyHintTarget = null;
+            this.copyHintOriginalNodes = null;
+          }
         }, 1500);
       }
     }
@@ -1050,7 +1267,7 @@ class OverlayEngine implements OverlayController {
 
   public async saveConfig(newConfig: any): Promise<void> {
     try {
-      const res = await fetch(`${getCompanionBaseUrl()}/config`, {
+      const data = await companionRequestJson("/config", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1060,7 +1277,6 @@ class OverlayEngine implements OverlayController {
           target: "local"
         })
       });
-      const data = await res.json();
       if (data.success && data.config) {
         this.config = data.config;
       }
@@ -1072,6 +1288,7 @@ class OverlayEngine implements OverlayController {
   public isUIVisible(): boolean { return this.uiVisible; }
 
   public setFreezeMode(frozen: boolean): void {
+    if (this.isFrozen === frozen) return;
     this.isFrozen = frozen;
     const events = [
       "pointerout", "mouseout", "pointerleave", "mouseleave",
@@ -1084,30 +1301,96 @@ class OverlayEngine implements OverlayController {
 
       this.freezeStyle = document.createElement("style");
       this.freezeStyle.id = "hoversource-freeze-styles";
-      this.freezeStyle.innerHTML = `
+      this.freezeStyle.textContent = `
         * { pointer-events: auto !important; }
-        .hoversource-container { pointer-events: none !important; }
-        .hoversource-outline { pointer-events: none !important; }
-        .hoversource-tooltip, .hoversource-tooltip * { pointer-events: auto !important; }
+        #hoversource-host { pointer-events: none !important; }
       `;
-      document.head.appendChild(this.freezeStyle);
+      (document.head ?? document.documentElement)?.appendChild(this.freezeStyle);
+
+      if (this.shadowRoot) {
+        this.freezeShadowStyle = document.createElement("style");
+        this.freezeShadowStyle.id = "hoversource-freeze-shadow-styles";
+        this.freezeShadowStyle.textContent = `
+          .hoversource-container, .hoversource-outline { pointer-events: none !important; }
+          .hoversource-tooltip, .hoversource-tooltip *, .hoversource-config-panel, .hoversource-config-panel *, .hoversource-parent-badge, .hoversource-parent-badge * { pointer-events: auto !important; }
+        `;
+        this.shadowRoot.appendChild(this.freezeShadowStyle);
+      }
     } else {
       events.forEach(event => globalThis.removeEventListener(event, this.blockEvent, { capture: true }));
       if (this.freezeStyle) {
         this.freezeStyle.remove();
         this.freezeStyle = null;
       }
+      if (this.freezeShadowStyle) {
+        this.freezeShadowStyle.remove();
+        this.freezeShadowStyle = null;
+      }
+    }
+  }
+
+  public destroy(): void {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
+
+    this.launchAbortController?.abort();
+    this.launchAbortController = null;
+
+    disconnectInspectorMutationObserver();
+    this.setFreezeMode(false);
+
+    if (this.modeActivated) {
+      this.activeMode.deactivate();
+      this.modeActivated = false;
+    }
+    if (this.shortcutsAttached) {
+      globalThis.removeEventListener("keydown", this.handleKeyDown);
+      this.shortcutsAttached = false;
+    }
+    if (this.listenersAttached) {
+      globalThis.removeEventListener("pointerover", this.handlePointerOver, { capture: true });
+      globalThis.removeEventListener("pointermove", this.handlePointerMove, { capture: true });
+      globalThis.removeEventListener("scroll", this.handleScroll, { capture: true });
+      globalThis.removeEventListener("message", this.handleWindowMessage);
+      this.listenersAttached = false;
+    }
+    if (typeof document !== "undefined") {
+      document.onmouseup = null;
+      document.onmousemove = null;
+    }
+    if (this.copyHintTimer !== null) {
+      clearTimeout(this.copyHintTimer);
+      this.copyHintTimer = null;
+    }
+    this.copyHintTarget = null;
+    this.copyHintOriginalNodes = null;
+
+    this.shadowHost?.remove();
+    this.container?.remove();
+    this.freezeStyle?.remove();
+    this.freezeShadowStyle?.remove();
+    this.shadowHost = null;
+    this.shadowRoot = null;
+    this.container = null;
+    this.outlineBox = null;
+    this.tooltipBox = null;
+    this.filterPanel = null;
+    this.freezeStyle = null;
+    this.freezeShadowStyle = null;
+    this.parentHighlightElements = [];
+
+    if (OverlayEngine.activeInstance === this) {
+      OverlayEngine.activeInstance = null;
     }
   }
 }
 
-(globalThis as any).__HoverSourceOpen__ = (file: string, line: number, col: number, tagName?: string, classList?: string) => {
-  let url = `${getCompanionBaseUrl()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
-  if (tagName) url += `&tagName=${encodeURIComponent(tagName)}`;
-  if (classList) url += `&classList=${encodeURIComponent(classList)}`;
+function openFileInIde(file: string, line: number, col: number, tagName?: string, classList?: string) {
+  let path = `/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
+  if (tagName) path += `&tagName=${encodeURIComponent(tagName)}`;
+  if (classList) path += `&classList=${encodeURIComponent(classList)}`;
 
-  fetch(url)
-    .then(r => r.json())
+  companionRequestJson(path)
     .then(data => {
       if (data.success) {
         console.log(`[HoverSource] Opened file in editor: ${file}`);
@@ -1116,11 +1399,15 @@ class OverlayEngine implements OverlayController {
       }
     })
     .catch(e => console.error("[HoverSource] Failed to reach companion server:", e));
-};
+}
+
+(globalThis as any).__HoverSourceOpen__ = openFileInIde;
 
 if (typeof document !== "undefined" && !(globalThis as any).__HoverSourceInitialized__) {
   (globalThis as any).__HoverSourceInitialized__ = true;
-  OverlayEngine.launch();
+  void OverlayEngine.launch().catch((err) => {
+    console.error("[HoverSource] Overlay initialization failed:", err);
+  });
   console.log("[HoverSource] Overlay injected.");
 }
 

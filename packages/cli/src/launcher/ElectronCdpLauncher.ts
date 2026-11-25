@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import { spawn } from "node:child_process";
+import { closeAllCdpSessions } from "@hoversource/client-injector";
 import { AppLauncher, LaunchConfig } from "./types.js";
 import { StaticContextResolver } from "@hoversource/companion-server";
 import {
@@ -12,6 +13,37 @@ import {
   detectDevServerPort,
 } from "../cli.js";
 import { resolveDevServerPort } from "../port.js";
+
+export function createElectronCdpCleanup(deps: {
+  watchAbort?: AbortController;
+  closeSessions?: () => void;
+  exit?: (code?: number) => void;
+  processEvents?: Pick<NodeJS.EventEmitter, "once" | "removeListener">;
+  child?: Pick<NodeJS.EventEmitter, "on" | "removeListener">;
+}): () => void {
+  const processEvents = deps.processEvents ?? process;
+  const exit = deps.exit ?? (() => process.exit());
+  let cleanedUp = false;
+
+  const cleanup = () => {
+    if (cleanedUp) {
+      return;
+    }
+    cleanedUp = true;
+    processEvents.removeListener("SIGINT", cleanup);
+    processEvents.removeListener("SIGTERM", cleanup);
+    deps.child?.removeListener("exit", cleanup);
+    deps.watchAbort?.abort();
+    deps.closeSessions?.();
+    exit();
+  };
+
+  processEvents.once("SIGINT", cleanup);
+  processEvents.once("SIGTERM", cleanup);
+  deps.child?.on("exit", cleanup);
+
+  return cleanup;
+}
 
 export class ElectronCdpLauncher implements AppLauncher {
   async launch(config: LaunchConfig): Promise<void> {
@@ -33,57 +65,60 @@ export class ElectronCdpLauncher implements AppLauncher {
       excludePorts: [serverPort, debugPort]
     });
 
-    const runWithCdp = (portToUse: number) => {
-      console.log(`[HoverSource] Launching target command with remote debugging: ${[resolvedCmd, ...cmdArgs].join(" ")}`);
-      
-      const env = {
-        ...process.env,
-        ...devResult.env,
-        ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${portToUse}`
-      };
+    console.log(`[HoverSource] Launching target command with remote debugging: ${[resolvedCmd, ...cmdArgs].join(" ")}`);
 
-      const useShell = process.platform === "win32";
-      const child = useShell
-        ? spawn([resolvedCmd, ...cmdArgs].join(" "), {
-            shell: true,
-            env,
-            cwd: validateSafePath(projectRoot),
-            stdio: "inherit",
-          })
-        : spawn(resolvedCmd, cmdArgs, {
-            shell: false,
-            env,
-            cwd: validateSafePath(projectRoot),
-            stdio: "inherit",
-            detached: true,
-          });
-
-      child.on("error", (err) => {
-        console.error(`[HoverSource] Exec command failed to start: ${err.message}`);
-      });
-
-      const scriptPath = findScriptPath(projectRoot);
-      const scriptContent = fs.readFileSync(validateSafePath(scriptPath), "utf-8");
-      const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
-      let htmlBootstrap = "";
-      try {
-        const staticResolver = new StaticContextResolver();
-        const htmlMap = staticResolver.generateStaticHtmlMap(projectRoot);
-        htmlBootstrap = `globalThis.__HOVERSOURCE_STATIC_HTML_MAP__ = ${JSON.stringify(htmlMap)};\n`;
-      } catch {}
-      const scriptWithPort = portBootstrap + htmlBootstrap + scriptContent;
-      
-      startCdpInjectionWatch(portToUse, scriptWithPort);
-
-      const cleanup = () => {
-        process.exit();
-      };
-
-      process.once("SIGINT", cleanup);
-      process.once("SIGTERM", cleanup);
-      child.on("exit", cleanup);
+    const env = {
+      ...process.env,
+      ...devResult.env,
+      ELECTRON_EXTRA_LAUNCH_ARGS: `--remote-debugging-port=${debugPort}`
     };
 
-    runWithCdp(debugPort);
+    const useShell = process.platform === "win32";
+    const child = useShell
+      ? spawn([resolvedCmd, ...cmdArgs].join(" "), {
+          shell: true,
+          env,
+          cwd: validateSafePath(projectRoot),
+          stdio: "inherit",
+        })
+      : spawn(resolvedCmd, cmdArgs, {
+          shell: false,
+          env,
+          cwd: validateSafePath(projectRoot),
+          stdio: "inherit",
+          detached: true,
+        });
+
+    child.on("error", (err) => {
+      console.error(`[HoverSource] Exec command failed to start: ${err.message}`);
+    });
+
+    const scriptPath = findScriptPath(projectRoot);
+    const scriptContent = fs.readFileSync(validateSafePath(scriptPath), "utf-8");
+    const portBootstrap = `globalThis.__HOVERSOURCE_PORT__ = ${serverPort};\n`;
+    let htmlBootstrap = "";
+    try {
+      const staticResolver = new StaticContextResolver();
+      const htmlMap = staticResolver.generateStaticHtmlMap(projectRoot);
+      htmlBootstrap = `globalThis.__HOVERSOURCE_STATIC_HTML_MAP__ = ${JSON.stringify(htmlMap)};\n`;
+    } catch (err) {
+      if (process.env.DEBUG) {
+        console.debug("[HoverSource] Ignored static HTML map generation error:", err);
+      }
+    }
+    const scriptWithPort = portBootstrap + htmlBootstrap + scriptContent;
+
+    const watchAbort = new AbortController();
+    createElectronCdpCleanup({
+      watchAbort,
+      closeSessions: closeAllCdpSessions,
+      processEvents: process,
+      child,
+    });
+
+    void startCdpInjectionWatch(debugPort, scriptWithPort, {
+      companionPort: serverPort,
+      signal: watchAbort.signal,
+    });
   }
 }

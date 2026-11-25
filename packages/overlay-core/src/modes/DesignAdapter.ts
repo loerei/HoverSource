@@ -1,12 +1,9 @@
 import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js";
 import { SourceResolver } from "@hoversource/source-resolver";
+import { escapeHtml } from "../safeDom.js";
 
 export type SnapBoundaryH = "Left-Edge" | "Right-Edge" | "Center-Axis";
 export type SnapBoundaryV = "Top-Edge" | "Bottom-Edge" | "Center-Axis";
-
-function getCompanionPort(): number {
-  return (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
-}
 
 export class DesignAdapter implements InteractionMode {
   public readonly id = "design";
@@ -152,9 +149,11 @@ export class DesignAdapter implements InteractionMode {
 
   private updateTargetAtPosition(x: number, y: number): void {
     const container = (this.controller as any).container as HTMLElement | null;
+    const shadowHost = (this.controller as any).shadowHost as HTMLElement | null;
     const elements = document.elementsFromPoint(x, y) as HTMLElement[];
     const target = elements.find(el => {
       if (el === document.documentElement || el === document.body) return false;
+      if (shadowHost && (el === shadowHost || shadowHost.contains(el))) return false;
       if (container && (el === container || container.contains(el))) return false;
       return true;
     }) ?? this.anchorHElement ?? this.anchorVElement ?? undefined;
@@ -246,11 +245,13 @@ export class DesignAdapter implements InteractionMode {
 
   private getSnapCandidates(mouseX: number, mouseY: number): { element: HTMLElement; rect: DOMRect }[] {
     const container = (this.controller as any).container as HTMLElement | null;
+    const shadowHost = (this.controller as any).shadowHost as HTMLElement | null;
     const allEls = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, p, a, button, input, textarea, label, span, div, section, main, article, li, img, svg")) as HTMLElement[];
     const candidates: { element: HTMLElement; rect: DOMRect }[] = [];
 
     for (const el of allEls) {
       if (el === document.documentElement || el === document.body) continue;
+      if (shadowHost && (el === shadowHost || shadowHost.contains(el))) continue;
       if (container && (el === container || container.contains(el))) continue;
       
       const rect = el.getBoundingClientRect();
@@ -560,7 +561,7 @@ export class DesignAdapter implements InteractionMode {
     if (!this.svgOverlay || !this.controller.isUIVisible()) return;
 
     // Clear SVG overlay
-    this.svgOverlay.innerHTML = "";
+    this.svgOverlay.replaceChildren();
     if (this.badgeElementH) this.badgeElementH.style.display = "none";
     if (this.badgeElementV) this.badgeElementV.style.display = "none";
 
@@ -640,7 +641,7 @@ export class DesignAdapter implements InteractionMode {
   ): string {
     if (!element) return `<span style="color: #6b7280;">No Anchor</span>`;
     const sign = offset >= 0 ? "+" : "";
-    return `<span style="color: #10b981; font-weight:bold;">${selector} @ ${boundary || "None"} (${sign}${offset}px)</span>`;
+    return `<span style="color: #10b981; font-weight:bold;">${escapeHtml(selector)} @ ${escapeHtml(boundary || "None")} (${sign}${offset}px)</span>`;
   }
 
   private buildTooltipHtml(
@@ -663,11 +664,11 @@ export class DesignAdapter implements InteractionMode {
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Anchor Element: </span>
-        <span class="hoversource-value">${tagLower}${idStr}${classStr}</span>
+        <span class="hoversource-value">${escapeHtml(`${tagLower}${idStr}${classStr}`)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Anchor File: </span>
-        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
+        <span class="hoversource-value" style="color: #60a5fa;">${escapeHtml(fileBase)}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
       </div>
       <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
         <span class="hoversource-label">H-Anchor: </span>

@@ -20,7 +20,9 @@ describe("Proxy Server Integration", () => {
           "Content-Security-Policy": "default-src 'self'",
           "Content-Security-Policy-Report-Only": "default-src 'none'",
         });
-        res.end("<html><body><h1>Target HTML</h1></body></html>");
+        res.end(
+          '<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'"><meta http-equiv="Content-Security-Policy-Report-Only" content="script-src \'none\'"></head><body><h1>Target HTML</h1></body></html>'
+        );
       } else if (req.url === "/text") {
         res.writeHead(200, {
           "Content-Type": "text/plain",
@@ -91,7 +93,11 @@ describe("Proxy Server Integration", () => {
         res.writeHead(200, { "Content-Type": "application/javascript" });
         res.end("console.log('mock overlay');");
       } else if (req.url === "/config") {
-        res.writeHead(200, { "Content-Type": "application/json" });
+        res.writeHead(200, {
+          "Content-Type": "application/json",
+          "Content-Security-Policy": "default-src 'none'",
+          "Content-Security-Policy-Report-Only": "default-src 'none'",
+        });
         res.end(JSON.stringify({ config: "mock config" }));
       } else {
         res.writeHead(404, { "Content-Type": "text/plain" });
@@ -146,12 +152,14 @@ describe("Proxy Server Integration", () => {
     });
   };
 
-  it("should inject script tag and strip CSP headers from HTML responses", async () => {
+  it("should inject script tag, strip CSP headers, and strip meta CSP tags from HTML responses", async () => {
     const res = await getUrl("/html");
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("text/html");
     expect(res.headers["content-security-policy"]).toBeUndefined();
     expect(res.headers["content-security-policy-report-only"]).toBeUndefined();
+    expect(res.body).toContain('<meta charset="utf-8">');
+    expect(res.body).not.toContain("Content-Security-Policy");
     expect(res.body).toContain(`<script src="${overlayScriptUrl}"></script>`);
     expect(res.body).toContain("Target HTML");
   });
@@ -175,6 +183,8 @@ describe("Proxy Server Integration", () => {
     const resConfig = await getUrl("/hoversource/config");
     expect(resConfig.status).toBe(200);
     expect(resConfig.headers["content-type"]).toBe("application/json");
+    expect(resConfig.headers["content-security-policy"]).toBeUndefined();
+    expect(resConfig.headers["content-security-policy-report-only"]).toBeUndefined();
     expect(resConfig.body).toContain("mock config");
   });
 

@@ -1,14 +1,69 @@
+import { waitForDomBody } from "./domReady.js";
 let contextCache = new WeakMap();
 let parentStyleCache = new WeakMap();
+let activeObserver = null;
+let observerEpoch = 0;
+let activeObserverAbortController = null;
 export function clearInspectorCache() {
     contextCache = new WeakMap();
     parentStyleCache = new WeakMap();
 }
-if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
-    const observer = new MutationObserver(() => {
-        clearInspectorCache();
-    });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+export function disconnectInspectorMutationObserver() {
+    ++observerEpoch;
+    if (activeObserverAbortController) {
+        activeObserverAbortController.abort();
+        activeObserverAbortController = null;
+    }
+    if (activeObserver) {
+        activeObserver.disconnect();
+        activeObserver = null;
+    }
+}
+export async function initInspectorMutationObserver(timeoutMs, signal) {
+    if (activeObserverAbortController) {
+        activeObserverAbortController.abort();
+        activeObserverAbortController = null;
+    }
+    const epoch = ++observerEpoch;
+    if (signal?.aborted || typeof MutationObserver === "undefined" || typeof document === "undefined") {
+        return null;
+    }
+    const controller = new AbortController();
+    activeObserverAbortController = controller;
+    const onExternalAbort = () => controller.abort(signal?.reason);
+    signal?.addEventListener("abort", onExternalAbort, { once: true });
+    try {
+        if (!document.body) {
+            const ready = await waitForDomBody(timeoutMs, controller.signal);
+            if (!ready)
+                return null;
+        }
+        if (epoch !== observerEpoch || controller.signal.aborted || !document.body) {
+            return null;
+        }
+        if (activeObserver) {
+            activeObserver.disconnect();
+            activeObserver = null;
+        }
+        const observer = new MutationObserver(() => {
+            clearInspectorCache();
+        });
+        try {
+            observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+            activeObserver = observer;
+            return observer;
+        }
+        catch {
+            observer.disconnect();
+            return null;
+        }
+    }
+    finally {
+        signal?.removeEventListener("abort", onExternalAbort);
+        if (activeObserverAbortController === controller) {
+            activeObserverAbortController = null;
+        }
+    }
 }
 function inspectLayoutConstraints(element, layoutConstraints) {
     try {

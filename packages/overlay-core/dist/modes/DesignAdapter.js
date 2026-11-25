@@ -1,7 +1,5 @@
 import { SourceResolver } from "@hoversource/source-resolver";
-function getCompanionPort() {
-    return globalThis.__HOVERSOURCE_PORT__ ?? 7300;
-}
+import { escapeHtml } from "../safeDom.js";
 export class DesignAdapter {
     id = "design";
     controller;
@@ -135,9 +133,12 @@ export class DesignAdapter {
     }
     updateTargetAtPosition(x, y) {
         const container = this.controller.container;
+        const shadowHost = this.controller.shadowHost;
         const elements = document.elementsFromPoint(x, y);
         const target = elements.find(el => {
             if (el === document.documentElement || el === document.body)
+                return false;
+            if (shadowHost && (el === shadowHost || shadowHost.contains(el)))
                 return false;
             if (container && (el === container || container.contains(el)))
                 return false;
@@ -219,10 +220,13 @@ export class DesignAdapter {
     };
     getSnapCandidates(mouseX, mouseY) {
         const container = this.controller.container;
+        const shadowHost = this.controller.shadowHost;
         const allEls = Array.from(document.querySelectorAll("h1, h2, h3, h4, h5, h6, p, a, button, input, textarea, label, span, div, section, main, article, li, img, svg"));
         const candidates = [];
         for (const el of allEls) {
             if (el === document.documentElement || el === document.body)
+                continue;
+            if (shadowHost && (el === shadowHost || shadowHost.contains(el)))
                 continue;
             if (container && (el === container || container.contains(el)))
                 continue;
@@ -478,7 +482,7 @@ export class DesignAdapter {
         if (!this.svgOverlay || !this.controller.isUIVisible())
             return;
         // Clear SVG overlay
-        this.svgOverlay.innerHTML = "";
+        this.svgOverlay.replaceChildren();
         if (this.badgeElementH)
             this.badgeElementH.style.display = "none";
         if (this.badgeElementV)
@@ -548,7 +552,7 @@ export class DesignAdapter {
         if (!element)
             return `<span style="color: #6b7280;">No Anchor</span>`;
         const sign = offset >= 0 ? "+" : "";
-        return `<span style="color: #10b981; font-weight:bold;">${selector} @ ${boundary || "None"} (${sign}${offset}px)</span>`;
+        return `<span style="color: #10b981; font-weight:bold;">${escapeHtml(selector)} @ ${escapeHtml(boundary || "None")} (${sign}${offset}px)</span>`;
     }
     buildTooltipHtml(info, fileBase, hStatus, vStatus, hintHtml, vueHint) {
         const classList = Array.from(this.targetElement.classList).filter(c => !c.startsWith("hoversource") && !c.startsWith("hs-"));
@@ -562,11 +566,11 @@ export class DesignAdapter {
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Anchor Element: </span>
-        <span class="hoversource-value">${tagLower}${idStr}${classStr}</span>
+        <span class="hoversource-value">${escapeHtml(`${tagLower}${idStr}${classStr}`)}</span>
       </div>
       <div class="hoversource-section">
         <span class="hoversource-label">Anchor File: </span>
-        <span class="hoversource-value" style="color: #60a5fa;">${fileBase}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
+        <span class="hoversource-value" style="color: #60a5fa;">${escapeHtml(fileBase)}${info.lineNumber ? `:${info.lineNumber}` : ""}</span>
       </div>
       <div class="hoversource-section" style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
         <span class="hoversource-label">H-Anchor: </span>

@@ -1,5 +1,7 @@
 export type SemanticShortcut = 'copyMetadata' | 'toggleFreeze' | 'toggleMinimal' | 'copyAllLayers';
 export interface OverlayController {
+    /** Optional Shadow DOM host element encapsulating the overlay UI */
+    readonly shadowHost?: HTMLElement | null;
     /** Renders a highlighted box over a specific element */
     drawHighlight(target: HTMLElement, isFrozen: boolean): void;
     /** Renders secondary outline frame and leader line callout for a single parent effect */

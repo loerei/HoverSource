@@ -235,6 +235,7 @@ async function launchHeadlessChromium(userDataDir) {
     "--disable-sync",
     "--metrics-recording-only",
     "--disable-default-apps",
+    "--enable-logging=stderr",
     "about:blank",
   ];
 
@@ -246,13 +247,18 @@ async function launchHeadlessChromium(userDataDir) {
 
   let stdout = "";
   let stderr = "";
+  let exitInfo = "";
   child.stdout?.on("data", (d) => { stdout = appendClamped(stdout, d); });
   child.stderr?.on("data", (d) => { stderr = appendClamped(stderr, d); });
+  child.once("exit", (code, signal) => {
+    exitInfo = ` (exited early: code=${code}, signal=${signal})`;
+  });
 
+  const launchTimeoutMs = process.env.CI ? 45_000 : STEP_TIMEOUT_MS;
   const devToolsUrl = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`Timed out waiting for Chromium DevTools endpoint.\nstderr:\n${stderr}`));
-    }, STEP_TIMEOUT_MS);
+      reject(new Error(`Timed out waiting for Chromium DevTools endpoint (${binary})${exitInfo}.\nstderr:\n${stderr}`));
+    }, launchTimeoutMs);
 
     const checkReady = () => {
       const m = /DevTools listening on (ws:\/\/[^\s]+)/.exec(stderr);

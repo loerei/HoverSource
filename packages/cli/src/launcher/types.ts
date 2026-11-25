@@ -3,6 +3,9 @@ export interface LaunchConfig {
   projectRoot: string;
   serverPort: number;
   debugPort: number;
+  devPort?: number;
+  proxyPort?: number;
+  autoResolve?: boolean;
   args: any;
 }
 

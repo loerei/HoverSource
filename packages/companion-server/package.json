@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
+    },
+    "./config": {
+      "types": "./dist/configStore.d.ts",
+      "import": "./dist/configStore.js"
     }
   },
   "publishConfig": {

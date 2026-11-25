@@ -207,3 +207,151 @@ describe("Companion Server /validate-line route", () => {
     expect(fallbackData.correctedFile).toBe(fallbackFile);
   });
 });
+
+describe("Companion Server /config and /reload-config routes", () => {
+  let tempDir: string;
+  let server: http.Server;
+  let testPort: number;
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hoversource-cfg-srv-"));
+    server = startCompanionServer({
+      port: 0,
+      projectRoot: tempDir,
+      debugPort: 9222,
+    });
+    await new Promise<void>((resolve) => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once("listening", resolve);
+      }
+    });
+    testPort = (server.address() as { port: number }).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch {}
+        resolve();
+      });
+    });
+  });
+
+  it("returns 400 JSON when POST /config receives invalid config fields or bounds", async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { theme: "invalid-theme", maxTraversalDepth: 5 },
+      }),
+    });
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBeTruthy();
+    expect(fs.existsSync(path.join(tempDir, ".hoversourcerc"))).toBe(false);
+  });
+
+  it("persists valid local config delta via POST /config and reloads on POST /reload-config", async () => {
+    const postRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { theme: "light", maxTraversalDepth: 40 },
+      }),
+    });
+    expect(postRes.status).toBe(200);
+    const postData = await postRes.json();
+    expect(postData.success).toBe(true);
+    expect(postData.config.theme).toBe("light");
+    expect(postData.config.maxTraversalDepth).toBe(40);
+
+    // Externally update local config on disk, then trigger POST /reload-config
+    fs.writeFileSync(
+      path.join(tempDir, ".hoversourcerc"),
+      JSON.stringify({ theme: "system", maxTraversalDepth: 64 }),
+      "utf-8"
+    );
+
+    const reloadRes = await fetch(`http://127.0.0.1:${testPort}/reload-config`, {
+      method: "POST",
+    });
+    expect(reloadRes.status).toBe(200);
+    const reloadData = await reloadRes.json();
+    expect(reloadData.success).toBe(true);
+    expect(reloadData.config.theme).toBe("system");
+    expect(reloadData.config.maxTraversalDepth).toBe(64);
+  });
+
+  it("returns identity JSON on GET /status while GET /ping returns pong", async () => {
+    const pingRes = await fetch(`http://127.0.0.1:${testPort}/ping`);
+    expect(pingRes.status).toBe(200);
+    expect(await pingRes.text()).toBe("pong");
+
+    const statusRes = await fetch(`http://127.0.0.1:${testPort}/status`);
+    expect(statusRes.status).toBe(200);
+    const statusData = await statusRes.json();
+    expect(statusData).toEqual({
+      ok: true,
+      pid: process.pid,
+      port: 0,
+      projectRoot: normalizeProjectPath(tempDir),
+      debugPort: 9222,
+    });
+  });
+
+  it("rejects out-of-range ports with 400 and clears ports.dev via null", async () => {
+    const badRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { ports: { companion: 70000, proxy: 0 } },
+      }),
+    });
+    expect(badRes.status).toBe(400);
+    const badData = await badRes.json();
+    expect(badData.error).toBeTruthy();
+
+    const setRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { ports: { dev: 5173, companionConflict: "takeover" } },
+      }),
+    });
+    expect(setRes.status).toBe(200);
+    const setData = await setRes.json();
+    expect(setData.config.ports.dev).toBe(5173);
+    expect(setData.config.ports.companionConflict).toBe("takeover");
+
+    const clearRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: "local",
+        config: { ports: { dev: null } },
+      }),
+    });
+    expect(clearRes.status).toBe(200);
+    const clearData = await clearRes.json();
+    expect(clearData.config.ports.dev).toBeUndefined();
+  });
+
+  it("serves dashboard HTML containing all 5 port control IDs", async () => {
+    const res = await fetch(`http://127.0.0.1:${testPort}/dashboard`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('id="companion-port-input"');
+    expect(html).toContain('id="debug-port-input"');
+    expect(html).toContain('id="proxy-port-input"');
+    expect(html).toContain('id="dev-port-input"');
+    expect(html).toContain('id="companion-conflict-select"');
+  });
+});

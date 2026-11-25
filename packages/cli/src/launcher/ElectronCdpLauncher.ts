@@ -9,7 +9,6 @@ import {
   validateSafePath,
   findScriptPath,
   startCdpInjectionWatch,
-  resolveDebugPortConflicts,
   detectDevServerPort,
 } from "../cli.js";
 import { resolveDevServerPort } from "../port.js";
@@ -21,10 +20,10 @@ export class ElectronCdpLauncher implements AppLauncher {
     const { command, args: cmdArgs } = parseCommand(execCommand);
     const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
 
-    const autoResolve = args["auto-resolve"] === true;
+    const autoResolve = config.autoResolve ?? (args["auto-resolve"] === true);
 
     // Check if the dev server port is occupied and resolve it
-    const devPort = detectDevServerPort(projectRoot, execCommand);
+    const devPort = config.devPort ?? detectDevServerPort(projectRoot, execCommand);
     const devResult = await resolveDevServerPort({
       projectRoot,
       execCommand,
@@ -34,7 +33,7 @@ export class ElectronCdpLauncher implements AppLauncher {
       excludePorts: [serverPort, debugPort]
     });
 
-    const runWithCdp = (portToUse: number, patchRestorer?: () => void) => {
+    const runWithCdp = (portToUse: number) => {
       console.log(`[HoverSource] Launching target command with remote debugging: ${[resolvedCmd, ...cmdArgs].join(" ")}`);
       
       const env = {
@@ -77,7 +76,6 @@ export class ElectronCdpLauncher implements AppLauncher {
       startCdpInjectionWatch(portToUse, scriptWithPort);
 
       const cleanup = () => {
-        if (patchRestorer) patchRestorer();
         process.exit();
       };
 
@@ -86,7 +84,6 @@ export class ElectronCdpLauncher implements AppLauncher {
       child.on("exit", cleanup);
     };
 
-    const resolved = await resolveDebugPortConflicts(debugPort, projectRoot, autoResolve, args);
-    runWithCdp(resolved.resolvedDebugPort, resolved.patchRestorer);
+    runWithCdp(debugPort);
   }
 }

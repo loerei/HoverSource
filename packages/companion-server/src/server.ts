@@ -2,7 +2,6 @@ import http from "node:http";
 import { exec } from "node:child_process";
 import path from "node:path";
 import fs from "node:fs";
-import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { broadcastToTargets } from "@hoversource/client-injector";
 import { StaticContextResolver, StaticHtmlEntry } from "./staticResolver.js";
@@ -12,44 +11,25 @@ import {
   validateSourceLocation,
   verifyAndCorrectSourceLocation,
 } from "./sourceLocation.js";
+import {
+  ShortcutKey,
+  HoverSourceConfig,
+  ConfigTarget,
+  normalizeProjectPath,
+  loadMergedConfig,
+  getConfigForTarget,
+  getGlobalConfigPath,
+  getLocalConfigPath,
+  registerRecentProject,
+  getRecentProjects,
+  parseConfigDelta,
+  saveConfigDelta,
+  deleteConfigTarget,
+} from "./configStore.js";
+export { ShortcutKey, HoverSourceConfig, CompanionConflictPolicy, PortsConfig, normalizeProjectPath, loadMergedConfig } from "./configStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-export interface ShortcutKey {
-  key: string;
-  altKey: boolean;
-  ctrlKey: boolean;
-  shiftKey: boolean;
-}
-
-export interface HoverSourceConfig {
-  theme: "dark" | "light" | "system";
-  minimalModeByDefault: boolean;
-  editor: string;
-  autoResolvePortConflicts?: boolean;
-  webAppDevServerTimeout?: number;
-  snappingThreshold?: number;
-  desnappingThreshold?: number;
-  maxTraversalDepth?: number;
-  shortcuts: {
-    toggleUI: ShortcutKey;
-    toggleMinimal: ShortcutKey;
-    toggleFreeze: ShortcutKey;
-    copyMetadata: ShortcutKey;
-    copyAllLayers: ShortcutKey;
-    openDashboard: ShortcutKey;
-    toggleMode: ShortcutKey;
-  };
-  metadataFilter?: {
-    panelPosition?: { x: number; y: number };
-    filters?: {
-      component?: Record<string, boolean>;
-      layer?: Record<string, boolean>;
-      design?: Record<string, boolean>;
-    };
-  };
-}
 
 export interface ServerConfig {
   port: number;
@@ -57,193 +37,23 @@ export interface ServerConfig {
   debugPort: number;
 }
 
-// Default Hardcoded Configurations
-const DEFAULT_CONFIG: HoverSourceConfig = {
-  theme: "dark",
-  minimalModeByDefault: false,
-  editor: "vscode",
-  autoResolvePortConflicts: false,
-  webAppDevServerTimeout: 120,
-  snappingThreshold: 15,
-  desnappingThreshold: 15,
-  maxTraversalDepth: 32,
-  shortcuts: {
-    toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-    toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-    toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-    copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-    copyAllLayers: { key: "c", altKey: true, ctrlKey: false, shiftKey: true },
-    openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-    toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
-  },
-  metadataFilter: {
-    filters: {
-      component: {
-        componentName: true,
-        elementSelector: true,
-        filePath: true,
-        framework: true,
-        dimensions: true,
-        keyStyles: true,
-        parentStyles: true,
-        layoutConstraints: true,
-        sourceComments: true,
-        sourceAttributes: true
-      },
-      layer: {
-        layerSummary: true,
-        layer1: true,
-        layer2: true,
-        htmlStructure: true
-      },
-      design: {
-        compInfo: true,
-        horizontalAnchor: true,
-        verticalAnchor: true,
-        layoutContext: true,
-        suggestedCss: true,
-        sourceFiles: true,
-        aiInstructions: true
-      }
-    }
-  }
-};
-
-function getGlobalConfigPath(): string {
-  return path.join(os.homedir(), ".hoversourcerc");
-}
-
-function getLocalConfigPath(projectRoot: string): string {
-  return path.join(projectRoot, ".hoversourcerc");
-}
-
-// Helper to normalize project path casing (Windows drive letters) and separators
-export function normalizeProjectPath(projectPath: string): string {
-  let resolved = projectPath.replaceAll("\\", "/");
-  if (!resolved.startsWith("/") && !/^[a-zA-Z]:/.test(resolved)) {
-    resolved = path.resolve(projectPath).replaceAll("\\", "/");
-  }
-  if (/^[a-zA-Z]:/.test(resolved)) {
-    resolved = resolved[0].toUpperCase() + resolved.slice(1);
-  }
-  return resolved;
-}
-
-// Helper to record recent projects
-function registerRecentProject(projectRoot: string) {
-  const globalPath = getGlobalConfigPath();
-  let globalData: any = {};
-  
-  if (fs.existsSync(globalPath)) {
-    try {
-      globalData = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
-    } catch {}
-  }
-  
-  if (!globalData.recentProjects) {
-    globalData.recentProjects = [];
-  }
-  
-  const normalized = normalizeProjectPath(projectRoot);
-  
-  // Clean up and deduplicate existing recentProjects
-  const cleaned: string[] = [];
-  for (const p of globalData.recentProjects) {
-    const norm = normalizeProjectPath(p);
-    if (!cleaned.includes(norm)) {
-      cleaned.push(norm);
-    }
-  }
-  
-  if (!cleaned.includes(normalized)) {
-    cleaned.push(normalized);
-    if (cleaned.length > 10) {
-      cleaned.shift();
-    }
-  }
-  
-  globalData.recentProjects = cleaned;
-  
-  try {
-    fs.writeFileSync(globalPath, JSON.stringify(globalData, null, 2), "utf-8");
-  } catch (e) {
-    console.warn(`[HoverSource] Failed to save project history to global config`, e);
-  }
-}
-
-function getRecentProjects(): string[] {
-  const globalPath = getGlobalConfigPath();
-  if (fs.existsSync(globalPath)) {
-    try {
-      const globalData = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
-      const list = globalData.recentProjects || [];
-      const cleaned: string[] = [];
-      for (const p of list) {
-        const norm = normalizeProjectPath(p);
-        if (!cleaned.includes(norm)) {
-          cleaned.push(norm);
-        }
-      }
-      return cleaned;
-    } catch {}
-  }
-  return [];
-}
-
-// Load and merge config hierarchies
-export function loadMergedConfig(projectRoot: string): HoverSourceConfig {
-  let config = { ...DEFAULT_CONFIG };
-
-  // 1. Read Global Config
-  const globalPath = getGlobalConfigPath();
-  if (fs.existsSync(globalPath)) {
-    try {
-      const globalConfig = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
-      // Strip recentProjects from configuration merge
-      if (globalConfig.recentProjects) {
-        delete globalConfig.recentProjects;
-      }
-      config = mergeDeep(config, globalConfig);
-    } catch (e) {
-      console.warn(`[HoverSource] Failed to parse global config at ${globalPath}`, e);
-    }
-  }
-
-  // 2. Read Local Config
-  const localPath = getLocalConfigPath(projectRoot);
-  if (fs.existsSync(localPath)) {
-    try {
-      const localConfig = JSON.parse(fs.readFileSync(localPath, "utf-8"));
-      config = mergeDeep(config, localConfig);
-    } catch (e) {
-      console.warn(`[HoverSource] Failed to parse local config at ${localPath}`, e);
-    }
-  }
-
-  return config;
-}
-
-
-// Simple deep helper
-function mergeDeep(target: any, source: any): any {
-  if (typeof target !== "object" || target === null || typeof source !== "object" || source === null) {
-    return source;
-  }
-  const result = { ...target };
-  for (const key of Object.keys(source)) {
-    if (key in target) {
-      result[key] = mergeDeep(target[key], source[key]);
-    } else {
-      result[key] = source[key];
-    }
-  }
-  return result;
-}
-
 
 function handlePing(req: http.IncomingMessage, res: http.ServerResponse) {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("pong");
+}
+
+function handleStatus(req: http.IncomingMessage, res: http.ServerResponse, config: ServerConfig) {
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(
+    JSON.stringify({
+      ok: true,
+      pid: process.pid,
+      port: config.port,
+      projectRoot: normalizeProjectPath(config.projectRoot),
+      debugPort: config.debugPort,
+    })
+  );
 }
 
 function handleShutdown(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -323,49 +133,11 @@ function handleOpenDashboard(req: http.IncomingMessage, res: http.ServerResponse
   });
 }
 
-function readConfigFromFile(filePath: string): any {
-  if (fs.existsSync(filePath)) {
-    try {
-      return JSON.parse(fs.readFileSync(filePath, "utf-8"));
-    } catch (e) {
-      console.warn(`[HoverSource] Failed to parse config file at ${filePath}:`, e);
-    }
-  }
-  return null;
-}
-
-function getConfigForTarget(queryTarget: string | null, customPath: string | null, defaultRoot: string): HoverSourceConfig {
-  let targetConfig = { ...DEFAULT_CONFIG };
-  if (queryTarget === "global") {
-    const globalPath = getGlobalConfigPath();
-    const raw = readConfigFromFile(globalPath);
-    if (raw) {
-      if (raw.recentProjects) delete raw.recentProjects;
-      targetConfig = mergeDeep(targetConfig, raw);
-    }
-  } else if (queryTarget === "local") {
-    const localPath = getLocalConfigPath(defaultRoot);
-    const raw = readConfigFromFile(localPath);
-    if (raw) {
-      targetConfig = mergeDeep(targetConfig, raw);
-    }
-  } else if (queryTarget === "custom" && customPath) {
-    const customPathConfig = getLocalConfigPath(customPath);
-    const raw = readConfigFromFile(customPathConfig);
-    if (raw) {
-      targetConfig = mergeDeep(targetConfig, raw);
-    }
-  } else {
-    targetConfig = loadMergedConfig(defaultRoot);
-  }
-  return targetConfig;
-}
-
 function handleConfigGet(req: http.IncomingMessage, res: http.ServerResponse, url: URL, config: ServerConfig) {
   registerRecentProject(config.projectRoot);
   const queryTarget = url.searchParams.get("target");
   const customPath = url.searchParams.get("customPath");
-  
+
   const targetConfig = getConfigForTarget(queryTarget, customPath, config.projectRoot);
 
   let configExists = false;
@@ -380,7 +152,7 @@ function handleConfigGet(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (targetPath) {
     configExists = fs.existsSync(targetPath);
   }
-  
+
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({
     config: targetConfig,
@@ -397,55 +169,43 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
   });
   req.on("end", () => {
     try {
-      const payload = JSON.parse(body);
-      const { config: newConfig, target, customPath } = payload;
-      
+      let payload: any;
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Invalid JSON payload" }));
+        return;
+      }
+
+      const { config: newConfig, target, customPath } = payload ?? {};
+
       if (!newConfig || !target) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Missing config or target in payload" }));
         return;
       }
 
-      let targetPath = "";
-      if (target === "global") {
-        targetPath = getGlobalConfigPath();
-      } else if (target === "local") {
-        targetPath = getLocalConfigPath(config.projectRoot);
-      } else if (target === "custom" && customPath) {
-        targetPath = getLocalConfigPath(customPath);
-        registerRecentProject(customPath);
-      } else {
+      if (target !== "global" && target !== "local" && (target !== "custom" || !customPath)) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Invalid target or missing customPath" }));
         return;
       }
 
-      // Read existing target config to merge delta
-      let targetConfig = {};
-      if (fs.existsSync(targetPath)) {
-        try {
-          targetConfig = JSON.parse(fs.readFileSync(targetPath, "utf-8"));
-        } catch (e) {
-          console.warn(`[HoverSource] Failed to parse existing config at ${targetPath}, overwriting.`, e);
-        }
+      const parsed = parseConfigDelta(newConfig);
+      if (!parsed.ok) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: parsed.error, issues: parsed.issues }));
+        return;
       }
 
-      // Deep merge the delta
-      targetConfig = mergeDeep(targetConfig, newConfig);
-
-      // Preserve recentProjects key in global config if it existed
-      if (target === "global") {
-        const existingGlobal = fs.existsSync(targetPath) ? JSON.parse(fs.readFileSync(targetPath, "utf-8")) : {};
-        if (existingGlobal.recentProjects) {
-          (targetConfig as any).recentProjects = existingGlobal.recentProjects;
-        }
-      }
-
-      fs.writeFileSync(targetPath, JSON.stringify(targetConfig, null, 2), "utf-8");
-      console.log(`[HoverSource] Configuration delta merged and saved to: ${targetPath}`);
-
-      // Load the fully merged configuration to broadcast
-      const fullyMerged = loadMergedConfig(config.projectRoot);
+      const { savedTo, config: fullyMerged } = saveConfigDelta(
+        parsed.value,
+        target as ConfigTarget,
+        config.projectRoot,
+        customPath
+      );
+      console.log(`[HoverSource] Configuration delta merged and saved to: ${savedTo}`);
 
       // Broadcast configuration hot-reload trigger to active app pages
       const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(fullyMerged)} }, "*");`;
@@ -454,29 +214,12 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
       );
 
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ success: true, savedTo: targetPath, config: fullyMerged }));
+      res.end(JSON.stringify({ success: true, savedTo, config: fullyMerged }));
     } catch (e: any) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: `Failed to save config: ${e.message}` }));
     }
   });
-}
-
-function updateRecentProjectsOnDelete(globalPath: string, target: string | null, customPath: string | null, localProjectRoot: string): void {
-  if (!fs.existsSync(globalPath)) return;
-  try {
-    const globalData = JSON.parse(fs.readFileSync(globalPath, "utf-8"));
-    if (globalData.recentProjects) {
-      const pathToRemove = target === "local" ? localProjectRoot : (customPath || "");
-      const normalized = normalizeProjectPath(pathToRemove);
-      globalData.recentProjects = globalData.recentProjects
-        .map((p: string) => normalizeProjectPath(p))
-        .filter((p: string) => p !== normalized);
-      fs.writeFileSync(globalPath, JSON.stringify(globalData, null, 2), "utf-8");
-    }
-  } catch (e: any) {
-    console.warn(`[HoverSource] Failed to update recent list on config delete`, e);
-  }
 }
 
 function handleConfigDelete(
@@ -490,27 +233,24 @@ function handleConfigDelete(
     const customPath = url.searchParams.get("customPath");
     const removeRecent = url.searchParams.get("removeRecent") === "true";
 
-    let targetPath = "";
-    if (target === "local") {
-      targetPath = getLocalConfigPath(config.projectRoot);
-    } else if (target === "custom" && customPath) {
-      targetPath = getLocalConfigPath(customPath);
-    }
-
     let deletedFile = false;
-    if (targetPath && fs.existsSync(targetPath)) {
-      fs.unlinkSync(targetPath);
-      deletedFile = true;
-      console.log(`[HoverSource] Configuration deleted at: ${targetPath}`);
-    }
+    let newConfig: HoverSourceConfig;
 
-    const globalPath = getGlobalConfigPath();
-    if (removeRecent || target === "custom") {
-      updateRecentProjectsOnDelete(globalPath, target, customPath, config.projectRoot);
+    if (target === "local" || (target === "custom" && customPath)) {
+      const result = deleteConfigTarget(target, config.projectRoot, customPath, removeRecent);
+      deletedFile = result.deletedFile;
+      newConfig = result.newConfig;
+      if (deletedFile) {
+        const deletedPath = target === "local"
+          ? getLocalConfigPath(config.projectRoot)
+          : getLocalConfigPath(customPath!);
+        console.log(`[HoverSource] Configuration deleted at: ${deletedPath}`);
+      }
+    } else {
+      newConfig = loadMergedConfig(config.projectRoot);
     }
 
     // Broadcast configuration hot-reload trigger to active app pages with the new merged config
-    const newConfig = loadMergedConfig(config.projectRoot);
     const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(newConfig)} }, "*");`;
     broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
       console.error("[HoverSource] Broadcast failed on delete:", e)
@@ -521,6 +261,22 @@ function handleConfigDelete(
   } catch (e: any) {
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: `Failed to delete config: ${e.message}` }));
+  }
+}
+
+function handleReloadConfig(req: http.IncomingMessage, res: http.ServerResponse, config: ServerConfig) {
+  try {
+    const merged = loadMergedConfig(config.projectRoot);
+    const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(merged)} }, "*");`;
+    broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
+      console.error("[HoverSource] Broadcast failed on reload:", e)
+    );
+
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ success: true, config: merged }));
+  } catch (e: any) {
+    res.writeHead(500, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: `Failed to reload config: ${e.message}` }));
   }
 }
 
@@ -732,6 +488,10 @@ function routeRequest(
     handlePing(req, res);
     return;
   }
+  if (path === "/status" && method === "GET") {
+    handleStatus(req, res, config);
+    return;
+  }
   if (path === "/shutdown") {
     handleShutdown(req, res);
     return;
@@ -756,6 +516,10 @@ function routeRequest(
     } else if (method === "DELETE") {
       handleConfigDelete(req, res, url, config);
     }
+    return;
+  }
+  if (path === "/reload-config" && method === "POST") {
+    handleReloadConfig(req, res, config);
     return;
   }
   if (path === "/validate-line" && method === "GET") {

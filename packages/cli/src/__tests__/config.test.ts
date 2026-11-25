@@ -1,0 +1,361 @@
+import fs from "node:fs";
+import http from "node:http";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { runConfigCommand } from "../commands/config.js";
+
+describe("runConfigCommand", () => {
+  let tmpRoot: string;
+  let globalConfigPath: string;
+  let projectRoot: string;
+  const cleanupServers: http.Server[] = [];
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), "hs-config-cmd-test-"));
+    globalConfigPath = path.join(tmpRoot, "global.hoversourcerc");
+    projectRoot = path.join(tmpRoot, "project");
+    fs.mkdirSync(projectRoot, { recursive: true });
+  });
+
+  afterEach(async () => {
+    while (cleanupServers.length > 0) {
+      const srv = cleanupServers.pop()!;
+      await new Promise<void>((resolve) => srv.close(() => resolve()));
+    }
+    vi.restoreAllMocks();
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  function captureStdout(): string[] {
+    const chunks: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      chunks.push(String(chunk));
+      return true;
+    }) as typeof process.stdout.write);
+    return chunks;
+  }
+
+  it("supports list/show across --merged, --global, and --local with --json purity", async () => {
+    fs.writeFileSync(globalConfigPath, JSON.stringify({ theme: "light", ports: { companion: 7310 } }));
+    fs.writeFileSync(path.join(projectRoot, ".hoversourcerc"), JSON.stringify({ editor: "cursor" }));
+
+    const stdout = captureStdout();
+    const mergedCode = await runConfigCommand({
+      positionals: ["config", "list"],
+      args: { json: true, merged: true },
+      projectRoot,
+      requestedPort: 7300,
+      globalConfigPath,
+    });
+    expect(mergedCode).toBe(0);
+    const mergedOut = JSON.parse(stdout.join("").trim());
+    expect(mergedOut.target).toBe("merged");
+    expect(mergedOut.exists).toBe(true);
+    expect(mergedOut.config.theme).toBe("light");
+    expect(mergedOut.config.editor).toBe("cursor");
+    expect(mergedOut.config.ports.companion).toBe(7310);
+
+    stdout.length = 0;
+    const globalCode = await runConfigCommand({
+      positionals: ["config", "show"],
+      args: { json: true, global: true },
+      projectRoot,
+      requestedPort: 7300,
+      globalConfigPath,
+    });
+    expect(globalCode).toBe(0);
+    const globalOut = JSON.parse(stdout.join("").trim());
+    expect(globalOut.target).toBe("global");
+    expect(globalOut.config.theme).toBe("light");
+    expect(globalOut.config.editor).toBe("vscode");
+
+    stdout.length = 0;
+    const localCode = await runConfigCommand({
+      positionals: ["config", "list"],
+      args: { json: true, local: true },
+      projectRoot,
+      requestedPort: 7300,
+      globalConfigPath,
+    });
+    expect(localCode).toBe(0);
+    const localOut = JSON.parse(stdout.join("").trim());
+    expect(localOut.target).toBe("local");
+    expect(localOut.config.editor).toBe("cursor");
+    expect(localOut.config.theme).toBe("dark");
+  });
+
+  it("supports get for valid dot-paths and returns exit code 2 for unknown keys", async () => {
+    const stdout = captureStdout();
+    const code = await runConfigCommand({
+      positionals: ["config", "get", "shortcuts.copyMetadata.key"],
+      args: { json: true },
+      projectRoot,
+      requestedPort: 7300,
+      globalConfigPath,
+    });
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout.join("").trim())).toEqual({
+      key: "shortcuts.copyMetadata.key",
+      value: "c",
+      target: "merged",
+    });
+
+    stdout.length = 0;
+    const portCode = await runConfigCommand({
+      positionals: ["config", "get", "ports.debug"],
+      args: { json: true },
+      projectRoot,
+      requestedPort: 7300,
+      globalConfigPath,
+    });
+    expect(portCode).toBe(0);
+    expect(JSON.parse(stdout.join("").trim()).value).toBe(9222);
+
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const badCode = await runConfigCommand({
+      positionals: ["config", "get", "does.not.exist"],
+      args: {},
+      projectRoot,
+      requestedPort: 7300,
+      globalConfigPath,
+    });
+    expect(badCode).toBe(2);
+    expect(errSpy).toHaveBeenCalled();
+  });
+
+  it("validates set updates, handles ports.dev auto clearing, rejects invalid inputs, and honors --dry-run", async () => {
+    const stdout = captureStdout();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // Valid updates
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "theme", "light"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "maxTraversalDepth", "15"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "minimalModeByDefault", "true"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "shortcuts.copyMetadata.key", "k"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "ports.debug", "9223"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "ports.dev", "5174"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "ports.dev", "auto"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "ports.companionConflict", "takeover"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+
+    const saved = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, ".hoversourcerc"), "utf-8")
+    );
+    expect(saved.theme).toBe("light");
+    expect(saved.maxTraversalDepth).toBe(15);
+    expect(saved.minimalModeByDefault).toBe(true);
+    expect(saved.shortcuts.copyMetadata.key).toBe("k");
+    expect(saved.ports.debug).toBe(9223);
+    expect(saved.ports.dev).toBeUndefined();
+    expect(saved.ports.companionConflict).toBe("takeover");
+
+    // Invalid values -> exit 2
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "maxTraversalDepth", "999"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "ports.debug", "70000"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "ports.companionConflict", "invalid"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    // Conflicting --global and --local -> exit 2
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "theme", "dark"],
+        args: { global: true, local: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    // --dry-run leaves disk unmodified
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "set", "theme", "system"],
+        args: { "dry-run": true, json: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    expect(JSON.parse(stdout.join("").trim()).dryRun).toBe(true);
+    const afterDryRun = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, ".hoversourcerc"), "utf-8")
+    );
+    expect(afterDryRun.theme).toBe("light");
+  });
+
+  it("enforces delete safety guards (--global rejected, non-TTY requires --yes, succeeds with --yes)", async () => {
+    const localPath = path.join(projectRoot, ".hoversourcerc");
+    fs.writeFileSync(localPath, JSON.stringify({ theme: "light" }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "delete"],
+        args: { global: true, yes: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "delete"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        stdinIsTTY: false,
+      })
+    ).toBe(2);
+    expect(fs.existsSync(localPath)).toBe(true);
+
+    const stdout = captureStdout();
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "delete"],
+        args: { yes: true, json: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+        stdinIsTTY: false,
+        reloadTimeoutMs: 50,
+      })
+    ).toBe(0);
+    expect(fs.existsSync(localPath)).toBe(false);
+    expect(JSON.parse(stdout.join("").trim()).deleted).toBe(true);
+  });
+
+  it("triggers POST /reload-config when companion server responds pong", async () => {
+    const calls: string[] = [];
+    const srv = http.createServer((req, res) => {
+      calls.push(`${req.method} ${req.url}`);
+      if (req.method === "GET" && req.url === "/ping") {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("pong");
+        return;
+      }
+      if (req.method === "POST" && req.url === "/reload-config") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    cleanupServers.push(srv);
+    const port = (srv.address() as net.AddressInfo).port;
+
+    const stdout = captureStdout();
+    const code = await runConfigCommand({
+      positionals: ["config", "set", "theme", "light"],
+      args: { json: true },
+      projectRoot,
+      requestedPort: port,
+      globalConfigPath,
+    });
+
+    expect(code).toBe(0);
+    expect(calls).toEqual(["GET /ping", "POST /reload-config"]);
+    expect(JSON.parse(stdout.join("").trim()).reloaded).toBe(true);
+  });
+});

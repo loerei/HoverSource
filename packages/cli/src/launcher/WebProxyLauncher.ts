@@ -16,11 +16,36 @@ import {
 } from "../cli.js";
 import { resolveDevServerPort } from "../port.js";
 
+const ANSI_ESCAPE_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]/g;
+const LOCAL_URL_PORT_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(\d{1,5})\b/gi;
+
+export function stripAnsi(input: string): string {
+  return input.replace(ANSI_ESCAPE_RE, "");
+}
+
+export function extractListeningPortFromOutput(
+  chunk: string,
+  ignoredPorts?: Set<number> | number[]
+): number | undefined {
+  const ignored = ignoredPorts instanceof Set ? ignoredPorts : new Set(ignoredPorts ?? []);
+  const clean = stripAnsi(chunk);
+  LOCAL_URL_PORT_RE.lastIndex = 0;
+
+  let match: RegExpExecArray | null;
+  while ((match = LOCAL_URL_PORT_RE.exec(clean)) !== null) {
+    const port = Number.parseInt(match[1], 10);
+    if (port >= 1 && port <= 65535 && !ignored.has(port)) {
+      return port;
+    }
+  }
+  return undefined;
+}
+
 export class WebProxyLauncher implements AppLauncher {
   private readonly patcher = new ReactRuntimePatcher();
 
   async launch(config: LaunchConfig): Promise<void> {
-    const { execCommand, projectRoot, serverPort, args } = config;
+    const { execCommand, projectRoot, serverPort, debugPort, args } = config;
 
     // Apply React runtime patching
     this.patcher.patch(projectRoot);
@@ -29,20 +54,21 @@ export class WebProxyLauncher implements AppLauncher {
     const timeoutSec = mergedConfig.webAppDevServerTimeout ?? 120;
     const timeoutMs = timeoutSec * 1000;
 
-    const expectedDevPort = detectDevServerPort(projectRoot, execCommand);
+    const expectedDevPort = config.devPort ?? detectDevServerPort(projectRoot, execCommand);
     console.log(`[HoverSource] Web app detected. Dev server expected on port ${expectedDevPort}.`);
 
-    const autoResolve = args["auto-resolve"] === true;
+    const autoResolve = config.autoResolve ?? (args["auto-resolve"] === true);
+    const baseExcludePorts = [serverPort, debugPort, ...(config.proxyPort ? [config.proxyPort] : [])];
     const devResult = await resolveDevServerPort({
       projectRoot,
       execCommand,
       expectedPort: expectedDevPort,
       mode: "web",
       autoResolve,
-      excludePorts: [serverPort]
+      excludePorts: baseExcludePorts
     });
 
-    const targetDevPort = devResult.port;
+    let targetDevPort = devResult.port;
     if (targetDevPort !== expectedDevPort) {
       console.log(`[HoverSource] Dev server will use port ${targetDevPort} instead of ${expectedDevPort}.`);
     }
@@ -54,12 +80,15 @@ export class WebProxyLauncher implements AppLauncher {
     const projectBootstrap = path.resolve(projectRoot, "node_modules/@hoversource/cli/dist/bootstrap.js");
     const bootstrapPath = fs.existsSync(projectBootstrap) ? projectBootstrap : localBootstrap;
     const bootstrapUrl = pathToFileURL(bootstrapPath).href;
-    
-    const env = { ...process.env, ...devResult.env };
+
+    const env: NodeJS.ProcessEnv = { ...process.env, ...devResult.env };
+    if (process.stdout.isTTY && !process.env.NO_COLOR && !args["no-color"]) {
+      env.FORCE_COLOR = "1";
+    }
     const currentOptions = env.NODE_OPTIONS || "";
     env.NODE_OPTIONS = `${currentOptions} --import "${bootstrapUrl}"`.trim();
 
-    // Spawn the dev server
+    // Spawn the dev server with piped stdout/stderr so we can tee-sniff listening URLs
     const { command, args: cmdArgs } = parseCommand(execCommand);
     const finalArgs = [...cmdArgs, ...devResult.extraArgs];
     const resolvedCmd = resolveWindowsCommand(validateSafeCommand(command));
@@ -69,13 +98,13 @@ export class WebProxyLauncher implements AppLauncher {
           shell: true,
           env,
           cwd: validateSafePath(projectRoot),
-          stdio: "inherit",
+          stdio: ["inherit", "pipe", "pipe"],
         })
       : spawn(resolvedCmd, finalArgs, {
           shell: false,
           env,
           cwd: validateSafePath(projectRoot),
-          stdio: "inherit",
+          stdio: ["inherit", "pipe", "pipe"],
           detached: true,
         });
 
@@ -90,9 +119,44 @@ export class WebProxyLauncher implements AppLauncher {
       exitCode = code;
     });
 
-    // Wait for the dev server to be ready
+    const ignoredPorts = new Set<number>(baseExcludePorts);
+    const seenSniffedPorts = new Set<number>([targetDevPort]);
+
+    let resolveSniffed: ((res: { ready: boolean; port: number }) => void) | undefined;
+    const sniffedPromise = new Promise<{ ready: boolean; port: number }>((resolve) => {
+      resolveSniffed = resolve;
+    });
+
+    const handleOutputChunk = (stream: NodeJS.WriteStream, chunk: Buffer) => {
+      stream.write(chunk);
+      const sniffedPort = extractListeningPortFromOutput(chunk.toString("utf8"), ignoredPorts);
+      if (sniffedPort !== undefined && !seenSniffedPorts.has(sniffedPort)) {
+        seenSniffedPorts.add(sniffedPort);
+        console.log(`[HoverSource] Detected dev server listening on port ${sniffedPort} (shifted from ${targetDevPort}).`);
+        waitForServer(sniffedPort, Math.min(timeoutMs, 15_000), () => hasExited)
+          .then((ok) => {
+            if (ok) {
+              resolveSniffed?.({ ready: true, port: sniffedPort });
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    child.stdout?.on("data", (chunk: Buffer) => handleOutputChunk(process.stdout, chunk));
+    child.stderr?.on("data", (chunk: Buffer) => handleOutputChunk(process.stderr, chunk));
+
+    // Wait for the dev server to be ready (racing expected port vs sniffed fallback port)
     console.log(`[HoverSource] Waiting for dev server on port ${targetDevPort} (timeout: ${timeoutSec}s)...`);
-    const ready = await waitForServer(targetDevPort, timeoutMs, () => hasExited);
+    const primaryPromise = waitForServer(targetDevPort, timeoutMs, () => hasExited).then((ready) => ({
+      ready,
+      port: targetDevPort,
+    }));
+    const waitResult = await Promise.race([primaryPromise, sniffedPromise]);
+    const ready = waitResult.ready;
+    if (ready && waitResult.port !== targetDevPort) {
+      targetDevPort = waitResult.port;
+    }
 
     if (!ready) {
       if (hasExited) {
@@ -134,6 +198,9 @@ export class WebProxyLauncher implements AppLauncher {
     process.once("SIGTERM", cleanup);
     child.on("exit", cleanup);
 
-    await runProxyMode(`http://localhost:${targetDevPort}`, serverPort, args);
+    await runProxyMode(`http://localhost:${targetDevPort}`, serverPort, args, {
+      proxyPort: config.proxyPort,
+      excludePorts: [serverPort, targetDevPort, debugPort],
+    });
   }
 }

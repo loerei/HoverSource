@@ -153,6 +153,35 @@
               </div>
             </label>
           </div>
+          <div class="bg-slate-950/40 border border-slate-800 rounded-lg p-3 space-y-3">
+            <h3 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Port Settings</h3>
+            <div class="grid grid-cols-2 gap-2.5">
+              <div>
+                <label for="companion-port-input" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Companion Port</label>
+                <input id="companion-port-input" type="number" min="1" max="65535" placeholder="7300" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+              </div>
+              <div>
+                <label for="debug-port-input" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Debug Port</label>
+                <input id="debug-port-input" type="number" min="1" max="65535" placeholder="9222" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+              </div>
+              <div>
+                <label for="proxy-port-input" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Proxy Port</label>
+                <input id="proxy-port-input" type="number" min="1" max="65535" placeholder="Auto" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+              </div>
+              <div>
+                <label for="dev-port-input" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Dev Port</label>
+                <input id="dev-port-input" type="number" min="1" max="65535" placeholder="Auto" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+              </div>
+            </div>
+            <div>
+              <label for="companion-conflict-select" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Companion Conflict Policy</label>
+              <select id="companion-conflict-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none">
+                <option value="shift">Shift (auto-select next free port)</option>
+                <option value="takeover">Takeover (stop existing companion)</option>
+                <option value="fail">Fail (exit with conflict error)</option>
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -440,6 +469,11 @@
       desnappingThreshold: 15,
       maxTraversalDepth: 32,
       layerPickerScroll: { altKey: true, shiftKey: true, ctrlKey: false },
+      ports: {
+        companion: 7300,
+        debug: 9222,
+        companionConflict: 'shift'
+      },
       shortcuts: {
         toggleUI: { key: 'h', altKey: true, ctrlKey: false, shiftKey: false },
         toggleMinimal: { key: 'm', altKey: true, ctrlKey: false, shiftKey: false },
@@ -460,6 +494,11 @@
     const snappingThresholdInput = document.querySelector('.snapping-threshold-input');
     const desnappingThresholdInput = document.querySelector('.desnapping-threshold-input');
     const maxDepthInput = document.querySelector('.max-depth-input');
+    const companionPortInput = document.getElementById('companion-port-input');
+    const debugPortInput = document.getElementById('debug-port-input');
+    const proxyPortInput = document.getElementById('proxy-port-input');
+    const devPortInput = document.getElementById('dev-port-input');
+    const companionConflictSelect = document.getElementById('companion-conflict-select');
     const saveTargetSelect = new CustomDropdownWrapper(document.querySelector('.target-dropdown'));
     const customPathInput = document.querySelector('.custom-path-input');
     const saveBtns = document.querySelectorAll('.save-btn');
@@ -539,6 +578,11 @@
           maxDepthInput.value = val;
           checkChanges();
         });
+        companionPortInput.addEventListener('input', checkChanges);
+        debugPortInput.addEventListener('input', checkChanges);
+        proxyPortInput.addEventListener('input', checkChanges);
+        devPortInput.addEventListener('input', checkChanges);
+        companionConflictSelect.addEventListener('change', checkChanges);
 
       } catch (e) {
         console.error('Failed to init dashboard', e);
@@ -574,6 +618,13 @@
         snappingThresholdInput.value = loadedConfig.snappingThreshold ?? 15;
         desnappingThresholdInput.value = loadedConfig.desnappingThreshold ?? 15;
         maxDepthInput.value = loadedConfig.maxTraversalDepth ?? 32;
+
+        const ports = loadedConfig.ports || {};
+        companionPortInput.value = ports.companion ?? 7300;
+        debugPortInput.value = ports.debug ?? 9222;
+        proxyPortInput.value = ports.proxy ?? '';
+        devPortInput.value = ports.dev ?? '';
+        companionConflictSelect.value = ports.companionConflict || 'shift';
         
         setupShortcutUI('toggleUI', loadedConfig.shortcuts.toggleUI);
         setupShortcutUI('toggleMinimal', loadedConfig.shortcuts.toggleMinimal);
@@ -696,6 +747,29 @@
       };
     }
 
+    function parseOptionalPort(inputEl) {
+      const raw = inputEl.value.trim();
+      if (raw === '') return null;
+      return Number(raw);
+    }
+
+    function parseRequiredPort(inputEl, fallback) {
+      const raw = inputEl.value.trim();
+      if (raw === '') return fallback;
+      return Number(raw);
+    }
+
+    function normalizePortsForCompare(ports) {
+      const p = ports || {};
+      return {
+        companion: p.companion ?? 7300,
+        debug: p.debug ?? 9222,
+        proxy: p.proxy ?? null,
+        dev: p.dev ?? null,
+        companionConflict: p.companionConflict || 'shift'
+      };
+    }
+
     function getConfigFromUI() {
       const shortcuts = {
         toggleUI: getShortcutFromUI('toggleUI'),
@@ -721,7 +795,14 @@
         desnappingThreshold: Number.isNaN(deSnapVal) ? 15 : deSnapVal,
         maxTraversalDepth: Number.isNaN(depthVal) ? 32 : Math.min(100, Math.max(8, depthVal)),
         shortcuts,
-        layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll')
+        layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll'),
+        ports: {
+          companion: parseRequiredPort(companionPortInput, 7300),
+          debug: parseRequiredPort(debugPortInput, 9222),
+          proxy: parseOptionalPort(proxyPortInput),
+          dev: parseOptionalPort(devPortInput),
+          companionConflict: companionConflictSelect.value || 'shift'
+        }
       };
     }
 
@@ -729,7 +810,28 @@
       if (!loadedConfig) return;
       
       const current = getConfigFromUI();
-      const hasChanged = JSON.stringify(current) !== JSON.stringify(loadedConfig);
+      const baseline = {
+        theme: loadedConfig.theme || 'dark',
+        minimalModeByDefault: !!loadedConfig.minimalModeByDefault,
+        editor: loadedConfig.editor || 'vscode',
+        autoResolvePortConflicts: !!loadedConfig.autoResolvePortConflicts,
+        layerPickerEnabled: loadedConfig.layerPickerEnabled !== false,
+        snappingThreshold: loadedConfig.snappingThreshold ?? 15,
+        desnappingThreshold: loadedConfig.desnappingThreshold ?? 15,
+        maxTraversalDepth: loadedConfig.maxTraversalDepth ?? 32,
+        shortcuts: {
+          toggleUI: loadedConfig.shortcuts?.toggleUI || DEFAULT_CONFIG.shortcuts.toggleUI,
+          toggleMinimal: loadedConfig.shortcuts?.toggleMinimal || DEFAULT_CONFIG.shortcuts.toggleMinimal,
+          toggleFreeze: loadedConfig.shortcuts?.toggleFreeze || DEFAULT_CONFIG.shortcuts.toggleFreeze,
+          copyMetadata: loadedConfig.shortcuts?.copyMetadata || DEFAULT_CONFIG.shortcuts.copyMetadata,
+          copyAllLayers: loadedConfig.shortcuts?.copyAllLayers || DEFAULT_CONFIG.shortcuts.copyAllLayers,
+          openDashboard: loadedConfig.shortcuts?.openDashboard || DEFAULT_CONFIG.shortcuts.openDashboard,
+          toggleMode: loadedConfig.shortcuts?.toggleMode || DEFAULT_CONFIG.shortcuts.toggleMode
+        },
+        layerPickerScroll: loadedConfig.layerPickerScroll || DEFAULT_CONFIG.layerPickerScroll,
+        ports: normalizePortsForCompare(loadedConfig.ports)
+      };
+      const hasChanged = JSON.stringify(current) !== JSON.stringify(baseline);
       
       saveBtns.forEach(btn => {
         if (hasChanged) {
@@ -755,6 +857,11 @@
         snappingThresholdInput.value = DEFAULT_CONFIG.snappingThreshold;
         desnappingThresholdInput.value = DEFAULT_CONFIG.desnappingThreshold;
         maxDepthInput.value = DEFAULT_CONFIG.maxTraversalDepth;
+        companionPortInput.value = DEFAULT_CONFIG.ports.companion;
+        debugPortInput.value = DEFAULT_CONFIG.ports.debug;
+        proxyPortInput.value = '';
+        devPortInput.value = '';
+        companionConflictSelect.value = DEFAULT_CONFIG.ports.companionConflict;
         
         setupShortcutUI('toggleUI', DEFAULT_CONFIG.shortcuts.toggleUI);
         setupShortcutUI('toggleMinimal', DEFAULT_CONFIG.shortcuts.toggleMinimal);
@@ -799,7 +906,9 @@
             showToast('Configuration saved successfully!');
             await loadConfigForSelectedTarget();
           } else {
-            alert('Failed to save configuration');
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData.error || 'Failed to save configuration';
+            showToast(errMsg, true);
           }
         } catch (e) {
           console.error('Error saving config', e);
@@ -881,9 +990,15 @@
       };
     }
 
-    function showToast(msg) {
+    function showToast(msg, isError = false) {
       const toast = document.getElementById('toast');
       toast.querySelector('.toast-message').textContent = msg;
+      toast.classList.remove('border-emerald-500/30', 'text-emerald-400', 'border-red-500/30', 'text-red-400');
+      if (isError) {
+        toast.classList.add('border-red-500/30', 'text-red-400');
+      } else {
+        toast.classList.add('border-emerald-500/30', 'text-emerald-400');
+      }
       toast.classList.remove('translate-y-20', 'opacity-0');
       toast.classList.add('translate-y-0', 'opacity-100');
       setTimeout(() => {

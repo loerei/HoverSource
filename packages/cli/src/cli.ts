@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { startCompanionServer } from "@hoversource/companion-server";
+import { startCompanionServer, loadMergedConfig } from "@hoversource/companion-server";
 import { injectOverlayScript } from "@hoversource/client-injector";
 import { startProxy } from "./proxy.js";
 import { exec } from "node:child_process";
@@ -10,19 +10,23 @@ import net from "node:net";
 import http from "node:http";
 import https from "node:https";
 import { fileURLToPath } from "node:url";
-import { restoreLeftoverPatches, recordPatchState, removePatchState } from "./utils/patchState.js";
+import { restoreLeftoverPatches } from "./utils/patchState.js";
 import { setupConsoleMonkeypatch } from "./utils/logger.js";
+import { parseCliArgs } from "./args.js";
+import { runDashboardCommand } from "./commands/dashboard.js";
+import { runConfigCommand } from "./commands/config.js";
 import {
+  CliUsageError,
   findFreePort,
-  getPidUsingPort,
-  getProcessName,
-  killProcess,
-  askQuestion,
-  resolveCompanionPort
+  resolveCompanionPort,
+  resolvePortPrecedence,
+  resolveDebugPort,
+  bindServerWithRetry,
 } from "./port.js";
 
 // Re-export port functions for backward compatibility
 export {
+  CliUsageError,
   isPortFree,
   findFreePort,
   getPidUsingPort,
@@ -32,9 +36,12 @@ export {
   isZombieOfProject,
   resolveCompanionPort,
   resolveDevServerPort,
-  resolveAllPorts
+  resolveAllPorts,
+  resolvePortPrecedence,
+  resolveDebugPort,
+  bindServerWithRetry,
 } from "./port.js";
-export type { DevServerPortResult, PortPlan } from "./port.js";
+export type { DevServerPortResult, PortPlan, PortPrecedenceResult, CompanionStatusInfo } from "./port.js";
 import { WebProxyLauncher } from "./launcher/WebProxyLauncher.js";
 import { ElectronCdpLauncher } from "./launcher/ElectronCdpLauncher.js";
 
@@ -72,73 +79,6 @@ export function validateSafeUrl(urlStr: string): string {
   } catch (e: any) {
     throw new Error(`[HoverSource] Security Error: Invalid Target URL: ${e.message}`);
   }
-}
-
-function parseLongOption(arg: string, args: Record<string, string | boolean>): void {
-  const eqIdx = arg.indexOf("=");
-  if (eqIdx === -1) {
-    args[arg.slice(2)] = true;
-  } else {
-    const key = arg.slice(2, eqIdx);
-    const value = arg.slice(eqIdx + 1);
-    args[key] = value;
-  }
-}
-
-function parseShortOption(arg: string, args: Record<string, string | boolean>, argv: string[], indexRef: { index: number }): void {
-  const char = arg.slice(1);
-  const eqIdx = char.indexOf("=");
-  const optionChar = eqIdx === -1 ? char : char.slice(0, eqIdx);
-  const val = eqIdx === -1 ? undefined : char.slice(eqIdx + 1);
-
-  const optionMap: Record<string, string> = {
-    p: "port",
-    t: "target",
-    e: "exec",
-    r: "root"
-  };
-
-  const simpleFlags: Record<string, string> = {
-    d: "dashboard",
-    h: "help",
-    v: "vue",
-    s: "solid",
-    a: "angular"
-  };
-
-  if (optionChar in simpleFlags) {
-    args[simpleFlags[optionChar]] = true;
-  } else if (optionChar in optionMap) {
-    const key = optionMap[optionChar];
-    if (val === undefined) {
-      const nextArg = argv[indexRef.index + 1];
-      if (nextArg !== undefined && !nextArg.startsWith("-")) {
-        indexRef.index++;
-        args[key] = nextArg;
-      }
-    } else {
-      args[key] = val;
-    }
-  }
-}
-
-// Helper to parse arguments
-function getArgs() {
-  const args: Record<string, string | boolean> = {};
-  let subcommand: string | undefined;
-  const indexRef = { index: 2 };
-
-  for (; indexRef.index < process.argv.length; indexRef.index++) {
-    const arg = process.argv[indexRef.index];
-    if (arg.startsWith("--")) {
-      parseLongOption(arg, args);
-    } else if (arg.startsWith("-")) {
-      parseShortOption(arg, args, process.argv, indexRef);
-    } else if (!subcommand) {
-      subcommand = arg; // e.g. "start", "dev"
-    }
-  }
-  return { args, subcommand };
 }
 
 /**
@@ -314,220 +254,49 @@ function openBrowser(url: string) {
 }
 // On-disk patching functions moved to patcher/ReactRuntimePatcher.ts and utils/patchState.ts
 
-function patchSingleFileForDebugPort(
-  fullPath: string,
-  projectRoot: string,
-  oldPort: number,
-  newPort: number,
-  patchedFiles: { path: string; originalContent: string }[]
-): void {
-  try {
-    const content = fs.readFileSync(fullPath, "utf-8");
-    const searchStr = `--remote-debugging-port=${oldPort}`;
-    if (content.includes(searchStr)) {
-      const newContent = content.replaceAll(searchStr, `--remote-debugging-port=${newPort}`);
-      fs.writeFileSync(fullPath, newContent, "utf-8");
-      recordPatchState(fullPath, content);
-      patchedFiles.push({ path: fullPath, originalContent: content });
-      console.log(`[HoverSource] Temporarily patched debug port ${oldPort} -> ${newPort} in ${path.relative(projectRoot, fullPath)}`);
-    }
-  } catch (err) {
-    console.debug(`[HoverSource] Failed to patch file ${fullPath}:`, err);
-  }
-}
-
-function findAndPatchDebugPort(projectRoot: string, oldPort: number, newPort: number): { restore: () => void } | undefined {
-  const dirsToSearch = [
-    path.join(projectRoot, "scripts"),
-    projectRoot
-  ];
-
-  const patchedFiles: { path: string; originalContent: string }[] = [];
-
-  for (const dir of dirsToSearch) {
-    if (!fs.existsSync(dir)) continue;
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      const fullPath = path.join(dir, file);
-      const stat = fs.statSync(fullPath);
-      if (stat.isFile() && (file.endsWith(".js") || file.endsWith(".mjs") || file.endsWith(".ts") || file.endsWith(".json"))) {
-        patchSingleFileForDebugPort(fullPath, projectRoot, oldPort, newPort, patchedFiles);
-      }
-    }
-  }
-
-  if (patchedFiles.length === 0) return undefined;
-
-  return {
-    restore: () => {
-      for (const pf of patchedFiles) {
-        try {
-          fs.writeFileSync(pf.path, pf.originalContent, "utf-8");
-          removePatchState(pf.path);
-          console.log(`[HoverSource] Restored original port configuration in ${path.relative(projectRoot, pf.path)}`);
-        } catch (err) {
-          console.debug(`[HoverSource] Failed to restore file ${pf.path}:`, err);
-        }
-      }
-    }
-  };
-}
-
-async function checkDebugPortInUse(debugPort: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(true));
-    server.once("listening", () => {
-      server.close();
-      resolve(false);
-    });
-    server.listen(debugPort, "127.0.0.1");
-  });
-}
-
-function warnDebugPortInUse(debugPort: number, pid?: number, procName?: string) {
-  console.warn(`\n\x1b[33m[HoverSource] ⚠️  WARNING: Debug port ${debugPort} is already in use by another process!\x1b[0m`);
-  if (pid) {
-    console.warn(`\x1b[33m[HoverSource] Process: ${procName || "Unknown"} (PID: ${pid})\x1b[0m`);
-  } else {
-    console.warn(`\x1b[33m[HoverSource] Could not identify the process holding the port.\x1b[0m`);
-  }
-  console.warn(`\x1b[33m[HoverSource] Electron will fail to bind to it, and the HoverSource overlay will not appear.\x1b[0m`);
-}
-
-async function handleTerminationOption(pid: number, debugPort: number, autoResolve: boolean): Promise<boolean> {
-  let shouldKill = autoResolve;
-  if (shouldKill) {
-    console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically terminating process ${pid}...`);
-  } else {
-    const answer = await askQuestion(`\x1b[36m[HoverSource] Would you like to terminate this process to free port ${debugPort}? (y/N): \x1b[0m`);
-    shouldKill = answer.trim().toLowerCase() === "y";
-  }
-
-  if (shouldKill) {
-    console.log(`[HoverSource] Terminating process ${pid}...`);
-    const success = await killProcess(pid, debugPort);
-    if (success) {
-      console.log(`[HoverSource] Process terminated successfully. Port ${debugPort} is now free.`);
-      // Wait a brief moment for OS to release the socket
-      await new Promise((r) => setTimeout(r, 700));
-      return true;
-    } else {
-      console.error(`[HoverSource] Failed to terminate process. You may need to run as administrator or close it manually.`);
-    }
-  }
-  return false;
-}
-
-async function handlePatchOption(
-  debugPort: number,
-  projectRoot: string,
-  autoResolve: boolean
-): Promise<{ newDebugPort: number; patchRestorer?: () => void } | null> {
-  let shouldPatch = autoResolve;
-  if (shouldPatch) {
-    console.log(`[HoverSource] autoResolvePortConflicts is enabled. Automatically patching debug port to ${debugPort + 1}...`);
-  } else {
-    const portAnswer = await askQuestion(`\x1b[36m[HoverSource] Port ${debugPort} is blocked. Try changing your app's debug port to ${debugPort + 1} temporarily? (y/N): \x1b[0m`);
-    shouldPatch = portAnswer.trim().toLowerCase() === "y";
-  }
-
-  if (shouldPatch) {
-    const newDebugPort = await findFreePort(debugPort + 1);
-    const patchResult = findAndPatchDebugPort(projectRoot, debugPort, newDebugPort);
-    if (patchResult) {
-      return { newDebugPort, patchRestorer: patchResult.restore };
-    } else {
-      console.warn(`\x1b[33m[HoverSource] ⚠️ Could not locate any hardcoded references to port ${debugPort} in your scripts/ folder or root.\x1b[0m`);
-    }
-  }
-  return null;
-}
-
-async function attemptInteractiveResolve(
-  pid: number | undefined,
-  debugPort: number,
-  projectRoot: string,
-  autoResolve: boolean
-): Promise<{ resolvedDebugPort: number; patchRestorer?: () => void }> {
-  let portFreed = false;
-  if (pid) {
-    portFreed = await handleTerminationOption(pid, debugPort, autoResolve);
-  }
-
-  if (!portFreed) {
-    const patch = await handlePatchOption(debugPort, projectRoot, autoResolve);
-    if (patch) {
-      return { resolvedDebugPort: patch.newDebugPort, patchRestorer: patch.patchRestorer };
-    }
-  }
-  return { resolvedDebugPort: debugPort };
-}
-
-export async function resolveDebugPortConflicts(
-  debugPort: number,
-  projectRoot: string,
-  autoResolve: boolean,
-  args: any
-): Promise<{ resolvedDebugPort: number; patchRestorer?: () => void }> {
-  const isDebugPortInUse = await checkDebugPortInUse(debugPort);
-  if (!isDebugPortInUse) {
-    return { resolvedDebugPort: debugPort };
-  }
-
-  const pid = await getPidUsingPort(debugPort);
-  const procName = pid ? await getProcessName(pid) : undefined;
-  warnDebugPortInUse(debugPort, pid, procName);
-
-  let currentDebugPort = debugPort;
-  let patchRestorer: (() => void) | undefined;
-
-  const isInteractive = (process.stdout.isTTY && process.stdin.isTTY) || autoResolve;
-  if (isInteractive) {
-    const result = await attemptInteractiveResolve(pid, debugPort, projectRoot, autoResolve);
-    currentDebugPort = result.resolvedDebugPort;
-    patchRestorer = result.patchRestorer;
-  }
-
-  if (currentDebugPort === debugPort) {
-    console.warn(`\x1b[33m[HoverSource] Proceeding with port ${currentDebugPort} anyway. Overlay connection might fail.\x1b[0m\n`);
-    console.warn(`\x1b[33m[HoverSource] To fix: close the process using port ${currentDebugPort}, or pass --debug-port=<free-port>.\x1b[0m`);
-  }
-
-  return { resolvedDebugPort: currentDebugPort, patchRestorer };
-}
-
-export async function runProxyMode(targetUrl: string, serverPort: number, args: any): Promise<void> {
+export async function runProxyMode(
+  targetUrl: string,
+  serverPort: number,
+  args: any,
+  options?: { proxyPort?: number; excludePorts?: number[] }
+): Promise<void> {
   let targetPort = 3000;
   try {
     targetPort = Number.parseInt(new URL(targetUrl).port || "3000", 10);
   } catch (err) {
     console.debug("[HoverSource] Failed to parse target port:", err);
   }
-  const requestedProxyPort = Number.parseInt((args["proxy-port"] as string) || String(10000 + targetPort), 10);
-  const proxyPort = await findFreePort(requestedProxyPort);
-  if (proxyPort !== requestedProxyPort) {
-    console.log(`[HoverSource] Proxy port ${requestedProxyPort} in use, using ${proxyPort} instead.`);
+  const requestedProxyPort =
+    options?.proxyPort ??
+    (args["proxy-port"] ? Number.parseInt(String(args["proxy-port"]), 10) : 10000 + targetPort);
+  const excludePorts = options?.excludePorts ?? [serverPort, targetPort];
+  const initialProxyPort = await findFreePort(requestedProxyPort, excludePorts);
+  if (initialProxyPort !== requestedProxyPort) {
+    console.log(`[HoverSource] Proxy port ${requestedProxyPort} in use, using ${initialProxyPort} instead.`);
   }
   const overlayScriptUrl = "/hoversource/hoversource-overlay.js";
   const useHttps = targetUrl.toLowerCase().startsWith("https:");
 
-  console.log(`[HoverSource] Proxy mode: ${targetUrl} → ${useHttps ? "https" : "http"}://localhost:${proxyPort}`);
   try {
-    await startProxy({
-      targetUrl,
-      proxyPort,
-      companionPort: serverPort,
-      overlayScriptUrl,
-      useHttps,
-    });
-    console.log(`[HoverSource] Proxy ready. Opening ${useHttps ? "https" : "http"}://localhost:${proxyPort} in your browser...`);
-    openBrowser(`${useHttps ? "https" : "http"}://localhost:${proxyPort}`);
+    const { port: boundProxyPort } = await bindServerWithRetry(
+      (port) =>
+        startProxy({
+          targetUrl,
+          proxyPort: port,
+          companionPort: serverPort,
+          overlayScriptUrl,
+          useHttps,
+        }),
+      { initialPort: initialProxyPort, excludePorts }
+    );
+    console.log(`[HoverSource] Proxy mode: ${targetUrl} → ${useHttps ? "https" : "http"}://localhost:${boundProxyPort}`);
+    console.log(`[HoverSource] Proxy ready. Opening ${useHttps ? "https" : "http"}://localhost:${boundProxyPort} in your browser...`);
+    openBrowser(`${useHttps ? "https" : "http"}://localhost:${boundProxyPort}`);
   } catch (err: any) {
     const isAddrInUse = err?.code === "EADDRINUSE";
-    console.error(`[HoverSource] Proxy failed to start on port ${proxyPort}.`);
+    console.error(`[HoverSource] Proxy failed to start on port ${initialProxyPort}.`);
     if (isAddrInUse) {
-      console.error(`[HoverSource] Port ${proxyPort} is in use. Pass --proxy-port=<port> or close the process using it.`);
+      console.error(`[HoverSource] Port ${initialProxyPort} is in use. Pass --proxy-port=<port> or close the process using it.`);
     } else {
       console.error(`[HoverSource] Error: ${err?.message || err}`);
     }
@@ -688,17 +457,25 @@ export async function handleExecMode(
   projectRoot: string,
   debugPort: number,
   serverPort: number,
-  args: Record<string, string | boolean>
+  args: Record<string, string | boolean>,
+  overrides?: {
+    resolvedExec?: { execCommand: string; isElectron: boolean };
+    devPort?: number;
+    proxyPort?: number;
+    autoResolve?: boolean;
+  }
 ) {
-  let resolved = { execCommand: execArg, isElectron: false };
-  if (subcommand) {
-    const resolvedSub = resolveSubcommand(subcommand, projectRoot);
-    if (!resolvedSub) {
-      process.exit(1);
+  let resolved = overrides?.resolvedExec ?? { execCommand: execArg, isElectron: false };
+  if (!overrides?.resolvedExec) {
+    if (subcommand) {
+      const resolvedSub = resolveSubcommand(subcommand, projectRoot);
+      if (!resolvedSub) {
+        process.exit(1);
+      }
+      resolved = resolvedSub;
+    } else {
+      resolved.isElectron = determineIfElectron(execArg, projectRoot);
     }
-    resolved = resolvedSub;
-  } else {
-    resolved.isElectron = determineIfElectron(execArg, projectRoot);
   }
 
   const launcher = resolved.isElectron
@@ -710,6 +487,9 @@ export async function handleExecMode(
     projectRoot,
     serverPort,
     debugPort,
+    devPort: overrides?.devPort,
+    proxyPort: overrides?.proxyPort,
+    autoResolve: overrides?.autoResolve,
     args
   });
 }
@@ -745,26 +525,40 @@ async function checkTargetUrlUp(targetUrl: string): Promise<boolean> {
   });
 }
 
+async function startCompanionServerWithRetry(
+  initialPort: number,
+  projectRoot: string,
+  debugPort: number,
+  excludePorts: number[] = []
+): Promise<number> {
+  const { port } = await bindServerWithRetry(
+    (portToBind) =>
+      new Promise<http.Server>((resolve, reject) => {
+        const srv = startCompanionServer({ port: portToBind, projectRoot, debugPort });
+        const onListening = () => {
+          srv.off("error", onError);
+          resolve(srv);
+        };
+        const onError = (err: Error) => {
+          srv.off("listening", onListening);
+          reject(err);
+        };
+        srv.once("listening", onListening);
+        srv.once("error", onError);
+      }),
+    { initialPort, excludePorts }
+  );
+  return port;
+}
+
 async function handleRestartSubcommand(requestedPort: number, projectRoot: string, debugPort: number): Promise<void> {
   console.log(`[HoverSource] Restarting companion server on port ${requestedPort}...`);
-  // Send shutdown request to the running server
-  const shutdownUrl = `http://127.0.0.1:${requestedPort}/shutdown`;
-  const req = http.get(shutdownUrl, (res) => {
-    res.resume();
-    console.log(`[HoverSource] Sent shutdown request to running instance on port ${requestedPort}.`);
+  const candidatePort = await resolveCompanionPort({
+    requestedPort,
+    projectRoot,
+    conflictPolicy: "takeover",
   });
-  req.on("error", () => {
-    console.log(`[HoverSource] No running instance found on port ${requestedPort}.`);
-  });
-  req.setTimeout(1000, () => {
-    req.destroy();
-  });
-  
-  // Wait a brief moment for the old process to exit, then start a new one
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  
-  const serverPort = await resolveCompanionPort(requestedPort);
-  await startCompanionServer({ port: serverPort, projectRoot, debugPort });
+  const serverPort = await startCompanionServerWithRetry(candidatePort, projectRoot, debugPort);
   console.log(`[HoverSource] Companion server restarted on port ${serverPort}.`);
 }
 
@@ -801,11 +595,37 @@ async function handleTargetOrExec(
   }
 }
 
-async function main() {
-  setupConsoleMonkeypatch();
-  restoreLeftoverPatches();
+function parsePortFlag(raw: string | boolean | undefined, flagName: string): number | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (typeof raw !== "string" || !/^\d+$/.test(raw.trim())) {
+    console.error(`[HoverSource] Invalid ${flagName} value: "${String(raw)}". Expected an integer between 1 and 65535.`);
+    process.exit(2);
+  }
+  const parsed = Number.parseInt(raw.trim(), 10);
+  if (parsed < 1 || parsed > 65535) {
+    console.error(`[HoverSource] Invalid ${flagName} value: ${parsed}. Port must be between 1 and 65535.`);
+    process.exit(2);
+  }
+  return parsed;
+}
 
-  const { args, subcommand } = getArgs();
+function extractUrlPort(urlStr: string): number {
+  const parsed = new URL(validateSafeUrl(urlStr));
+  if (parsed.port) {
+    return Number.parseInt(parsed.port, 10);
+  }
+  return parsed.protocol === "https:" ? 443 : 80;
+}
+
+async function main() {
+  const { args, subcommand, positionals } = parseCliArgs(process.argv.slice(2));
+  setupConsoleMonkeypatch({
+    stderrOnly: Boolean(args.json),
+    noColor: Boolean(args["no-color"] || args.json),
+  });
+  restoreLeftoverPatches();
 
   if (args.help || args.h) {
     showHelp();
@@ -813,14 +633,51 @@ async function main() {
   }
 
   const projectRoot = validateSafePath(path.resolve(String(args.root || args.r || ".")));
-  const requestedPort = Number.parseInt(String(args.port || args.p || 7300), 10);
-  const debugPort = Number.parseInt(String(args["debug-port"] || 9222), 10);
+  const mergedConfig = loadMergedConfig(projectRoot);
+  let portPrefs;
+  try {
+    portPrefs = resolvePortPrecedence(args, mergedConfig);
+  } catch (err) {
+    if (err instanceof CliUsageError) {
+      console.error(err.message);
+      process.exit(err.exitCode);
+    }
+    throw err;
+  }
 
-  // Check if start script exists in package.json to avoid conflict
+  const requestedPort = portPrefs.companionPort;
+  const debugPort = portPrefs.debugPort;
+
+  const targetArg = (args.target || args.t) as string | undefined;
+  const execArg = (args.exec || args.e || subcommand) as string | undefined;
+
+  if (subcommand === "config") {
+    const code = await runConfigCommand({
+      positionals,
+      args,
+      projectRoot,
+      requestedPort,
+    });
+    process.exitCode = code;
+    return;
+  }
+
+  if (subcommand === "dashboard" || (!targetArg && !execArg && Boolean(args.dashboard || args.d))) {
+    const result = await runDashboardCommand({
+      requestedPort,
+      projectRoot,
+      debugPort,
+      json: Boolean(args.json),
+      noOpen: Boolean(args["no-open"]),
+    });
+    if (!result.keepAlive) {
+      process.exit(result.exitCode);
+    }
+    return;
+  }
+
   const hasStartScript = checkHasStartScript(projectRoot);
 
-  // суб-команда Start
-  // subcommand Restart
   if (subcommand === "restart") {
     await handleRestartSubcommand(requestedPort, projectRoot, debugPort);
     return;
@@ -828,30 +685,96 @@ async function main() {
 
   if (subcommand === "start" && !hasStartScript) {
     console.log(`[HoverSource] Starting companion server...`);
-    const serverPort = await resolveCompanionPort(requestedPort);
-    await startCompanionServer({ port: serverPort, projectRoot, debugPort });
+    const candidatePort = await resolveCompanionPort({
+      requestedPort,
+      projectRoot,
+      conflictPolicy: portPrefs.companionConflict,
+    });
+    const serverPort = await startCompanionServerWithRetry(candidatePort, projectRoot, debugPort);
     console.log(`[HoverSource] Companion server running on port ${serverPort}.`);
-    
+
     if (args.dashboard || args.d) {
       openBrowser(`http://localhost:${serverPort}/dashboard`);
     }
     return;
   }
 
-  const targetArg = (args.target || args.t) as string | undefined;
-  const execArg = (args.exec || args.e || subcommand) as string | undefined;
-
   if (!targetArg && !execArg) {
     showHelp();
     return;
   }
 
+  let resolvedExec: { execCommand: string; isElectron: boolean } | undefined;
+  if (!targetArg && execArg) {
+    if (subcommand) {
+      resolvedExec = resolveSubcommand(subcommand, projectRoot);
+      if (!resolvedExec) {
+        process.exit(1);
+      }
+    } else {
+      resolvedExec = {
+        execCommand: execArg,
+        isElectron: determineIfElectron(execArg, projectRoot),
+      };
+    }
+  }
+
+  const expectedDevPort =
+    portPrefs.devPort ??
+    (targetArg
+      ? extractUrlPort(targetArg)
+      : resolvedExec
+        ? detectDevServerPort(projectRoot, resolvedExec.execCommand)
+        : undefined);
+
+  const resolvedDebugPort = resolvedExec?.isElectron
+    ? await resolveDebugPort({
+        debugPort,
+        projectRoot,
+        excludePorts: expectedDevPort !== undefined ? [expectedDevPort] : [],
+      })
+    : debugPort;
+
+  const excludeForCompanion = [expectedDevPort, resolvedDebugPort].filter(
+    (p): p is number => p !== undefined
+  );
+
   console.log(`[HoverSource] Starting...`);
-  const serverPort = await resolveCompanionPort(requestedPort);
-  await startCompanionServer({ port: serverPort, projectRoot, debugPort });
+  const candidatePort = await resolveCompanionPort({
+    requestedPort,
+    projectRoot,
+    excludePorts: excludeForCompanion,
+    conflictPolicy: portPrefs.companionConflict,
+  });
+  const serverPort = await startCompanionServerWithRetry(
+    candidatePort,
+    projectRoot,
+    resolvedDebugPort,
+    excludeForCompanion
+  );
   console.log(`[HoverSource] Companion server running on port ${serverPort}.`);
 
-  await handleTargetOrExec(targetArg, execArg, serverPort, projectRoot, debugPort, args, subcommand);
+  if (targetArg) {
+    const safeTarget = validateSafeUrl(targetArg);
+    const isTargetUp = await checkTargetUrlUp(safeTarget);
+    if (!isTargetUp) {
+      console.warn(`\x1b[33m[HoverSource] ⚠️  WARNING: Target server at ${safeTarget} is not responding.\x1b[0m`);
+      console.warn(`[HoverSource] If your dev server starts slowly, HoverSource will automatically retry requests.`);
+    }
+    await runProxyMode(safeTarget, serverPort, args, {
+      proxyPort: portPrefs.proxyPort,
+      excludePorts: [serverPort, expectedDevPort, resolvedDebugPort].filter(
+        (p): p is number => p !== undefined
+      ),
+    });
+  } else if (execArg) {
+    await handleExecMode(execArg, subcommand, projectRoot, resolvedDebugPort, serverPort, args, {
+      resolvedExec,
+      devPort: expectedDevPort,
+      proxyPort: portPrefs.proxyPort,
+      autoResolve: portPrefs.autoResolve,
+    });
+  }
 }
 
 function showHelp() {
@@ -861,6 +784,8 @@ Usage: hs [subcommand] [options]
 Subcommands:
   start                  Start the companion server only.
   restart                Restart the running companion server.
+  dashboard              Open the HoverSource Dashboard (reuses running server or starts one).
+  config <action>        Inspect or modify settings: list|show|get|set|reset|delete
   dev, start, etc.       Any package.json script name to execute with HoverSource overlay.
 
 Options:
@@ -868,7 +793,14 @@ Options:
   -t, --target=<url>      Direct target dev server URL to proxy (e.g. http://localhost:3000)
   -e, --exec=<command>    Command to launch target app (e.g. "npm run dev", "electron .")
   -r, --root=<path>       Project root directory (default: current directory)
-  -d, --dashboard         Automatically open the HoverSource Dashboard in your browser
+  -d, --dashboard         Open the HoverSource Dashboard (standalone or with a running command)
+  --no-open               Do not automatically open the browser when running dashboard
+  --global                Target global ~/.hoversourcerc (for hs config)
+  --local                 Target project .hoversourcerc (for hs config)
+  --merged                Read merged effective config (for hs config list|show|get)
+  --dry-run               Preview config changes without writing disk (for hs config)
+  -y, --yes               Confirm destructive config actions non-interactively
+  --json                  Emit machine-readable JSON output to stdout
   -h, --help              Show this help message
   --debug-port=<port>     CDP Remote debugging port for Electron (default: 9222)
   --proxy-port=<port>     Explicit port to bind HoverSource reverse proxy server

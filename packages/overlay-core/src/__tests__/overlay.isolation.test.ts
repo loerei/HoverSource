@@ -522,11 +522,11 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
     // Re-entrant copyToClipboard + drawTooltip("", ...) hint preservation
     await activeEngine!.copyToClipboard("first");
     const hint = shadow.querySelector(".hoversource-shortcut-hint")!;
-    expect(hint.textContent).toContain("Copied successfully for AI!");
+    expect(hint.textContent).toContain("Copied metadata");
 
     activeEngine!.drawTooltip("", new PointerEvent("pointermove", { clientX: 30, clientY: 30 }));
     await activeEngine!.copyToClipboard("second");
-    expect(hint.textContent).toContain("Copied successfully for AI!");
+    expect(hint.textContent).toContain("Copied metadata");
 
     await vi.advanceTimersByTimeAsync(1500);
     expect(hint.textContent).toBe("Original Hint");

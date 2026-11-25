@@ -12,14 +12,14 @@
 
 ---
 
-If you use AI coding agents to tweak frontend UI, you already know the pain. You try describing a button or a card with words, your agent burns half your token quota digging through the codebase, and then edits the wrong component anyway.
+Finding which component, file, and CSS rule rendered an element usually means grepping across dozens of files or interrupting a teammate who knows the codebase.
 
-Hover on what you want changed, press `Alt + C`, paste to your agent.
+HoverSource attaches to your running web or Electron app so you can hover any element to see its source file, line/column, and CSS origin live. Press `Alt + C` to copy the exact path, computed styles, and layout context, whether you are onboarding onto an unfamiliar codebase, debugging CSS overrides, or handing coordinates to a coding agent.
 
 ## What It Does
 
 - **Inspector & Design modes**: Hover over components to view file paths, component names, and CSS line numbers. Or press `Alt + X` to drag a targeting crosshair and get pixel-perfect CSS placement offsets.
-- **Copy AI-ready metadata (`Alt + C` / `Alt + Shift + C`)**: Copies the exact file, line, column, computed styles, CSS origins, and parent layout context to your clipboard. Pressing `Alt + Shift + C` copies the full ancestor layer stack and an HTML skeleton of the target element.
+- **Copy source and style context (`Alt + C` / `Alt + Shift + C`)**: Copies the exact file, line, column, computed styles, CSS origins, and parent layout context to your clipboard. Pressing `Alt + Shift + C` copies the full ancestor layer stack and an HTML skeleton of the target element.
 - **Freeze state (`Alt + P`)**: Locks dropdowns, tooltips, and popovers in place so you can hover and inspect them without them vanishing.
 - **Live Presets, Field Filters & macOS Shortcuts**: Toggle metadata fields inline (`Alt + Ctrl + D`), switch named global shortcut/theme presets (with optional per-repo binding) from the Dashboard or `hs config preset`, and sync changes in realtime over SSE or CDP. Supports `Cmd`, physical-key `Option` matching, and `⌥`/`⌃`/`⌘` labels on macOS.
 - **CSP, Shadow DOM & Trusted Types**: Renders overlay UI inside an isolated `#hoversource-host` Shadow DOM without `innerHTML` or inline event attributes, tunnels Electron companion RPCs over persistent CDP `Runtime.addBinding` sessions, and strips `<meta>` CSP tags in the web reverse proxy. Supports Windows, macOS, and Linux.

@@ -115,6 +115,11 @@ describe("overlay lifecycle & pre-<body> DOM readiness", () => {
         activeEngine = null;
         delete globalThis.__HoverSourceInitialized__;
         delete globalThis.__HOVERSOURCE_VANILLA_PATCHED__;
+        delete globalThis.__HOVERSOURCE_PROXY__;
+        delete globalThis.__HOVERSOURCE_PORT__;
+        delete globalThis.__hoversourceBridgeCall;
+        delete globalThis.__hoversourceBridgeResolve;
+        delete globalThis.__hoversourceBridgeReject;
         if (originalDocument === undefined) {
             delete globalThis.document;
         }
@@ -339,5 +344,93 @@ describe("overlay lifecycle & pre-<body> DOM readiness", () => {
         });
         activeEngine?.destroy();
         expect(disconnectSpy).toHaveBeenCalled();
+    });
+    function createMockEventSourceHarness() {
+        const instances = [];
+        const MockEventSource = vi.fn(function (url) {
+            const listeners = new Map();
+            const close = vi.fn();
+            const instance = {
+                url,
+                listeners,
+                close,
+                emit(type, data) {
+                    for (const cb of listeners.get(type) ?? []) {
+                        cb({ type, data });
+                    }
+                },
+                addEventListener(type, cb) {
+                    if (!listeners.has(type))
+                        listeners.set(type, new Set());
+                    listeners.get(type).add(cb);
+                },
+                removeEventListener(type, cb) {
+                    listeners.get(type)?.delete(cb);
+                },
+            };
+            instances.push(instance);
+            return instance;
+        });
+        return { MockEventSource, instances };
+    }
+    it("subscribes to SSE /events in HTTP and proxy modes, updates config on 'config' events, and closes EventSource on destroy", async () => {
+        vi.resetModules();
+        const doc = createMockDocument(createMockElement("body"), "complete");
+        vi.stubGlobal("document", doc);
+        setupGlobalEventStubs();
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ config: { theme: "dark", maxTraversalDepth: 32 } }),
+        }));
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => { });
+        vi.spyOn(console, "log").mockImplementation(() => { });
+        const { MockEventSource, instances } = createMockEventSourceHarness();
+        vi.stubGlobal("EventSource", MockEventSource);
+        globalThis.__HOVERSOURCE_PORT__ = 7412;
+        globalThis.__HoverSourceInitialized__ = true;
+        const { OverlayEngine } = await import("../overlay.js");
+        activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 500 });
+        expect(activeEngine).not.toBeNull();
+        expect(MockEventSource).toHaveBeenCalledTimes(1);
+        expect(instances[0].url).toBe("http://127.0.0.1:7412/events");
+        // Malformed payload is safely ignored
+        instances[0].emit("config", "{not-json");
+        expect(warnSpy).toHaveBeenCalled();
+        expect(activeEngine.getConfig().theme).toBe("dark");
+        // Valid SSE config payload updates engine config and re-renders styles
+        instances[0].emit("config", JSON.stringify({ theme: "light", maxTraversalDepth: 50 }));
+        expect(activeEngine.getConfig().theme).toBe("light");
+        expect(activeEngine.getConfig().maxTraversalDepth).toBe(50);
+        activeEngine?.destroy();
+        expect(instances[0].close).toHaveBeenCalledTimes(1);
+        // Proxy mode subscribes to /hoversource/events
+        globalThis.__HOVERSOURCE_PROXY__ = true;
+        activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 500 });
+        expect(MockEventSource).toHaveBeenCalledTimes(2);
+        expect(instances[1].url).toBe("/hoversource/events");
+        instances[1].emit("config", JSON.stringify({ theme: "light", minimalModeByDefault: true }));
+        expect(activeEngine.getConfig().minimalModeByDefault).toBe(true);
+        activeEngine?.destroy();
+        expect(instances[1].close).toHaveBeenCalledTimes(1);
+    });
+    it("skips EventSource SSE subscription when strict CDP bridge (__hoversourceBridgeCall) is active", async () => {
+        vi.resetModules();
+        const doc = createMockDocument(createMockElement("body"), "complete");
+        vi.stubGlobal("document", doc);
+        setupGlobalEventStubs();
+        vi.spyOn(console, "log").mockImplementation(() => { });
+        const { MockEventSource } = createMockEventSourceHarness();
+        vi.stubGlobal("EventSource", MockEventSource);
+        globalThis.__hoversourceBridgeCall = vi.fn((raw) => {
+            const { id } = JSON.parse(raw);
+            queueMicrotask(() => {
+                globalThis.__hoversourceBridgeResolve(id, JSON.stringify({ config: { theme: "dark" } }));
+            });
+        });
+        globalThis.__HoverSourceInitialized__ = true;
+        const { OverlayEngine } = await import("../overlay.js");
+        activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 500 });
+        expect(activeEngine).not.toBeNull();
+        expect(MockEventSource).not.toHaveBeenCalled();
     });
 });

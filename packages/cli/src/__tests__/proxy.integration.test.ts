@@ -9,6 +9,7 @@ describe("Proxy Server Integration", () => {
   let companionServer: http.Server;
   let companionPort: number;
   let proxyPort: number;
+  const companionSseClients = new Set<http.ServerResponse>();
   const overlayScriptUrl = "/hoversource/hoversource-overlay.js";
 
   beforeAll(async () => {
@@ -99,6 +100,19 @@ describe("Proxy Server Integration", () => {
           "Content-Security-Policy-Report-Only": "default-src 'none'",
         });
         res.end(JSON.stringify({ config: "mock config" }));
+      } else if (req.url === "/events") {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+          "Content-Security-Policy": "default-src 'none'",
+          "Content-Security-Policy-Report-Only": "default-src 'none'",
+        });
+        res.flushHeaders();
+        companionSseClients.add(res);
+        req.on("close", () => {
+          companionSseClients.delete(res);
+        });
       } else {
         res.writeHead(404, { "Content-Type": "text/plain" });
         res.end("Not Found");
@@ -128,6 +142,12 @@ describe("Proxy Server Integration", () => {
   });
 
   afterAll(async () => {
+    for (const client of companionSseClients) {
+      try {
+        client.end();
+      } catch {}
+    }
+    companionSseClients.clear();
     await Promise.all([
       new Promise<void>((resolve) => targetServer.close(() => resolve())),
       new Promise<void>((resolve) => companionServer.close(() => resolve())),
@@ -275,5 +295,42 @@ describe("Proxy Server Integration", () => {
     const data = await resPromise;
     expect(data).toContain("upstream-hello");
     expect(data).toContain("echo:ping");
+  });
+
+  it("should stream /hoversource/events SSE frames without buffering and strip CSP headers", async () => {
+    const req = http.get(`http://127.0.0.1:${proxyPort}/hoversource/events`);
+    req.on("error", () => {});
+
+    const res = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      req.once("response", resolve);
+      req.once("error", reject);
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("text/event-stream");
+    expect(res.headers["cache-control"]).toBe("no-cache");
+    expect(res.headers["content-security-policy"]).toBeUndefined();
+    expect(res.headers["content-security-policy-report-only"]).toBeUndefined();
+
+    const waitForNextChunk = () =>
+      new Promise<string>((resolve) => {
+        res.once("data", (chunk: Buffer) => resolve(chunk.toString("utf-8")));
+      });
+
+    const firstChunkPromise = waitForNextChunk();
+    const frame1 = `event: config\ndata: ${JSON.stringify({ theme: "light" })}\n\n`;
+    for (const client of companionSseClients) {
+      client.write(frame1);
+    }
+    expect(await firstChunkPromise).toBe(frame1);
+
+    const secondChunkPromise = waitForNextChunk();
+    const frame2 = `event: config\ndata: ${JSON.stringify({ theme: "dark" })}\n\n`;
+    for (const client of companionSseClients) {
+      client.write(frame2);
+    }
+    expect(await secondChunkPromise).toBe(frame2);
+
+    req.destroy();
   });
 });

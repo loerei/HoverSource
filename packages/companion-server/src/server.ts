@@ -162,7 +162,61 @@ function handleConfigGet(req: http.IncomingMessage, res: http.ServerResponse, ur
   }));
 }
 
-function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, config: ServerConfig) {
+function broadcastConfigUpdate(
+  debugPort: number,
+  mergedConfig: HoverSourceConfig,
+  sseClients: Set<http.ServerResponse>,
+  errorLabel = "Broadcast failed:"
+): void {
+  const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(mergedConfig)} }, "*");`;
+  broadcastToTargets(debugPort, hotReloadScript).catch((e) =>
+    console.error(`[HoverSource] ${errorLabel}`, e)
+  );
+
+  const sseFrame = `event: config\ndata: ${JSON.stringify(mergedConfig)}\n\n`;
+  for (const client of sseClients) {
+    if (client.writableEnded || client.destroyed) {
+      sseClients.delete(client);
+      continue;
+    }
+    try {
+      client.write(sseFrame);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+function handleEvents(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  sseClients: Set<http.ServerResponse>
+) {
+  req.socket?.setTimeout?.(0);
+  res.setTimeout?.(0);
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+  });
+  res.flushHeaders?.();
+
+  sseClients.add(res);
+  const cleanup = () => {
+    sseClients.delete(res);
+  };
+  req.on("close", cleanup);
+  res.on("close", cleanup);
+  res.on("error", cleanup);
+}
+
+function handleConfigPost(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
   let body = "";
   req.on("data", (chunk) => {
     body += chunk;
@@ -208,10 +262,7 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
       console.log(`[HoverSource] Configuration delta merged and saved to: ${savedTo}`);
 
       // Broadcast configuration hot-reload trigger to active app pages
-      const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(fullyMerged)} }, "*");`;
-      broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
-        console.error("[HoverSource] Broadcast failed:", e)
-      );
+      broadcastConfigUpdate(config.debugPort, fullyMerged, sseClients, "Broadcast failed:");
 
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ success: true, savedTo, config: fullyMerged }));
@@ -226,7 +277,8 @@ function handleConfigDelete(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   url: URL,
-  config: ServerConfig
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
 ) {
   try {
     const target = url.searchParams.get("target");
@@ -251,10 +303,7 @@ function handleConfigDelete(
     }
 
     // Broadcast configuration hot-reload trigger to active app pages with the new merged config
-    const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(newConfig)} }, "*");`;
-    broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
-      console.error("[HoverSource] Broadcast failed on delete:", e)
-    );
+    broadcastConfigUpdate(config.debugPort, newConfig, sseClients, "Broadcast failed on delete:");
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ success: true, deletedFile, removedRecent: removeRecent || target === "custom", newConfig }));
@@ -264,13 +313,15 @@ function handleConfigDelete(
   }
 }
 
-function handleReloadConfig(req: http.IncomingMessage, res: http.ServerResponse, config: ServerConfig) {
+function handleReloadConfig(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
   try {
     const merged = loadMergedConfig(config.projectRoot);
-    const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(merged)} }, "*");`;
-    broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
-      console.error("[HoverSource] Broadcast failed on reload:", e)
-    );
+    broadcastConfigUpdate(config.debugPort, merged, sseClients, "Broadcast failed on reload:");
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ success: true, config: merged }));
@@ -479,7 +530,8 @@ function routeRequest(
   res: http.ServerResponse,
   url: URL,
   config: ServerConfig,
-  staticResolver: StaticContextResolver
+  staticResolver: StaticContextResolver,
+  sseClients: Set<http.ServerResponse>
 ): void {
   const path = url.pathname;
   const method = req.method;
@@ -490,6 +542,10 @@ function routeRequest(
   }
   if (path === "/status" && method === "GET") {
     handleStatus(req, res, config);
+    return;
+  }
+  if (path === "/events" && method === "GET") {
+    handleEvents(req, res, sseClients);
     return;
   }
   if (path === "/shutdown") {
@@ -512,14 +568,14 @@ function routeRequest(
     if (method === "GET") {
       handleConfigGet(req, res, url, config);
     } else if (method === "POST") {
-      handleConfigPost(req, res, config);
+      handleConfigPost(req, res, config, sseClients);
     } else if (method === "DELETE") {
-      handleConfigDelete(req, res, url, config);
+      handleConfigDelete(req, res, url, config, sseClients);
     }
     return;
   }
   if (path === "/reload-config" && method === "POST") {
-    handleReloadConfig(req, res, config);
+    handleReloadConfig(req, res, config, sseClients);
     return;
   }
   if (path === "/validate-line" && method === "GET") {
@@ -554,6 +610,16 @@ function routeRequest(
 
 export function startCompanionServer(config: ServerConfig): http.Server {
   const staticResolver = new StaticContextResolver();
+  const sseClients = new Set<http.ServerResponse>();
+  const closeSseClients = () => {
+    for (const client of sseClients) {
+      try {
+        client.end();
+      } catch {}
+    }
+    sseClients.clear();
+  };
+
   const server = http.createServer((req, res) => {
     // Set CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -567,8 +633,16 @@ export function startCompanionServer(config: ServerConfig): http.Server {
     }
 
     const url = new URL(req.url || "", `http://localhost:${config.port}`);
-    routeRequest(req, res, url, config, staticResolver);
+    routeRequest(req, res, url, config, staticResolver, sseClients);
   });
+
+  const originalClose = server.close.bind(server);
+  server.close = ((cb?: (err?: Error) => void) => {
+    closeSseClients();
+    return originalClose(cb);
+  }) as typeof server.close;
+
+  server.on("close", closeSseClients);
 
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {

@@ -25,6 +25,7 @@ export declare class OverlayEngine implements OverlayController {
     private freezeStyle;
     private freezeShadowStyle;
     private launchAbortController;
+    private configEventSource;
     private shortcutsAttached;
     private modeActivated;
     private listenersAttached;
@@ -40,6 +41,7 @@ export declare class OverlayEngine implements OverlayController {
     static destroyActive(): Promise<void>;
     private readonly handleWindowMessage;
     private init;
+    private initConfigEventStream;
     private handleConfigUpdate;
     private loadConfig;
     private initStyles;

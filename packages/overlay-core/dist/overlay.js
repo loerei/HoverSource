@@ -2,7 +2,7 @@ import { setupVanillaMonkeyPatch } from "./vanillaPatch.js";
 setupVanillaMonkeyPatch();
 import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
-import { companionRequestJson } from "./companionTransport.js";
+import { companionRequestJson, createCompanionConfigEventSource } from "./companionTransport.js";
 import { waitForDomBody } from "./domReady.js";
 import { initInspectorMutationObserver, disconnectInspectorMutationObserver } from "./inspector.js";
 import { createSafeFragmentFromHtml, setElementContentSafely, el } from "./safeDom.js";
@@ -27,6 +27,7 @@ export class OverlayEngine {
     freezeStyle = null;
     freezeShadowStyle = null;
     launchAbortController = null;
+    configEventSource = null;
     shortcutsAttached = false;
     modeActivated = false;
     listenersAttached = false;
@@ -123,6 +124,14 @@ export class OverlayEngine {
         globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
         globalThis.addEventListener("message", this.handleWindowMessage);
         this.listenersAttached = true;
+        this.initConfigEventStream();
+    }
+    initConfigEventStream() {
+        this.configEventSource = createCompanionConfigEventSource((parsed) => {
+            if (!this.isDestroyed) {
+                this.handleConfigUpdate(parsed);
+            }
+        });
     }
     handleConfigUpdate(newConfig) {
         console.log("[HoverSource] Live reloading config...", newConfig);
@@ -1222,6 +1231,13 @@ export class OverlayEngine {
         this.isDestroyed = true;
         this.launchAbortController?.abort();
         this.launchAbortController = null;
+        if (this.configEventSource) {
+            try {
+                this.configEventSource.close();
+            }
+            catch { }
+            this.configEventSource = null;
+        }
         disconnectInspectorMutationObserver();
         this.setFreezeMode(false);
         if (this.modeActivated) {

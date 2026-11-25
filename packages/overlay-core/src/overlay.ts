@@ -5,7 +5,7 @@ import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 import { OverlayController, InteractionMode } from "./modes/types.js";
 import { ParentVisualEffect } from "@hoversource/source-resolver";
-import { companionRequestJson } from "./companionTransport.js";
+import { companionRequestJson, createCompanionConfigEventSource } from "./companionTransport.js";
 import { waitForDomBody } from "./domReady.js";
 import { initInspectorMutationObserver, disconnectInspectorMutationObserver } from "./inspector.js";
 import { createSafeFragmentFromHtml, setElementContentSafely, el } from "./safeDom.js";
@@ -40,6 +40,7 @@ export class OverlayEngine implements OverlayController {
   private freezeShadowStyle: HTMLStyleElement | null = null;
 
   private launchAbortController: AbortController | null = null;
+  private configEventSource: EventSource | null = null;
   private shortcutsAttached = false;
   private modeActivated = false;
   private listenersAttached = false;
@@ -150,6 +151,15 @@ export class OverlayEngine implements OverlayController {
     globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
     globalThis.addEventListener("message", this.handleWindowMessage);
     this.listenersAttached = true;
+    this.initConfigEventStream();
+  }
+
+  private initConfigEventStream() {
+    this.configEventSource = createCompanionConfigEventSource((parsed) => {
+      if (!this.isDestroyed) {
+        this.handleConfigUpdate(parsed);
+      }
+    });
   }
 
   private handleConfigUpdate(newConfig: any) {
@@ -1324,6 +1334,13 @@ export class OverlayEngine implements OverlayController {
 
     this.launchAbortController?.abort();
     this.launchAbortController = null;
+
+    if (this.configEventSource) {
+      try {
+        this.configEventSource.close();
+      } catch {}
+      this.configEventSource = null;
+    }
 
     disconnectInspectorMutationObserver();
     this.setFreezeMode(false);

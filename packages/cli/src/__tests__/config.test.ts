@@ -358,4 +358,302 @@ describe("runConfigCommand", () => {
     expect(calls).toEqual(["GET /ping", "POST /reload-config"]);
     expect(JSON.parse(stdout.join("").trim()).reloaded).toBe(true);
   });
+
+  it("supports hs config preset list, save, use, bind (--clear), and delete with --json, --dry-run, and companion reload", async () => {
+    const calls: string[] = [];
+    const srv = http.createServer((req, res) => {
+      calls.push(`${req.method} ${req.url}`);
+      if (req.method === "GET" && req.url === "/ping") {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end("pong");
+        return;
+      }
+      if (req.method === "POST" && req.url === "/reload-config") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => srv.listen(0, "127.0.0.1", resolve));
+    cleanupServers.push(srv);
+    const port = (srv.address() as net.AddressInfo).port;
+
+    const stdout = captureStdout();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // Set global port & local theme before saving preset
+    fs.writeFileSync(
+      globalConfigPath,
+      JSON.stringify({ ports: { companion: 7400 }, autoResolvePortConflicts: true }),
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(projectRoot, ".hoversourcerc"),
+      JSON.stringify({ theme: "light", snappingThreshold: 30 }),
+      "utf-8"
+    );
+
+    // Dry-run save does not write or call reload
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "save", "studio"],
+        args: { "dry-run": true, json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    expect(JSON.parse(stdout.join("").trim()).dryRun).toBe(true);
+    expect(calls).toEqual([]);
+
+    // Live save triggers reload
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "save", "studio"],
+        args: { json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const saveOut = JSON.parse(stdout.join("").trim());
+    expect(saveOut.action).toBe("save");
+    expect(saveOut.name).toBe("studio");
+    expect(saveOut.preset.theme).toBe("light");
+    expect(saveOut.preset.ports).toBeUndefined();
+    expect(saveOut.reloaded).toBe(true);
+    expect(calls).toEqual(["GET /ping", "POST /reload-config"]);
+
+    // Use preset (dry-run then live)
+    calls.length = 0;
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "use", "studio"],
+        args: { "dry-run": true, json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    expect(JSON.parse(stdout.join("").trim()).dryRun).toBe(true);
+    expect(calls).toEqual([]);
+
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "use", "studio"],
+        args: { json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const useOut = JSON.parse(stdout.join("").trim());
+    expect(useOut.activePreset).toBe("studio");
+    expect(useOut.reloaded).toBe(true);
+    expect(calls).toEqual(["GET /ping", "POST /reload-config"]);
+
+    // Bind preset (dry-run, live, then --clear)
+    calls.length = 0;
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "bind", "studio"],
+        args: { "dry-run": true, json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    expect(JSON.parse(stdout.join("").trim()).dryRun).toBe(true);
+    expect(calls).toEqual([]);
+
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "bind", "studio"],
+        args: { json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const bindOut = JSON.parse(stdout.join("").trim());
+    expect(bindOut.boundPreset).toBe("studio");
+    expect(bindOut.reloaded).toBe(true);
+
+    // List presets
+    calls.length = 0;
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "list"],
+        args: { json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const listOut = JSON.parse(stdout.join("").trim());
+    expect(Object.keys(listOut.presets)).toEqual(["studio"]);
+    expect(listOut.activePreset).toBe("studio");
+    expect(listOut.boundPreset).toBe("studio");
+    expect(listOut.effectivePreset).toBe("studio");
+    expect(calls).toEqual([]);
+
+    // Clear binding
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "bind"],
+        args: { clear: true, json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const clearOut = JSON.parse(stdout.join("").trim());
+    expect(clearOut.boundPreset).toBeNull();
+    expect(clearOut.clear).toBe(true);
+    expect(clearOut.reloaded).toBe(true);
+
+    // Delete preset (dry-run then live)
+    calls.length = 0;
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "delete", "studio"],
+        args: { "dry-run": true, json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    expect(JSON.parse(stdout.join("").trim()).dryRun).toBe(true);
+    expect(calls).toEqual([]);
+
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "delete", "studio"],
+        args: { json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const delOut = JSON.parse(stdout.join("").trim());
+    expect(delOut.deleted).toBe(true);
+    expect(delOut.clearedActive).toBe(true);
+    expect(delOut.reloaded).toBe(true);
+    expect(calls).toEqual(["GET /ping", "POST /reload-config"]);
+
+    // Deleting missing preset does not trigger reload and returns deleted: false
+    calls.length = 0;
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "delete", "studio"],
+        args: { json: true },
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const missingDelOut = JSON.parse(stdout.join("").trim());
+    expect(missingDelOut.deleted).toBe(false);
+    expect(missingDelOut.reloaded).toBe(false);
+    expect(calls).toEqual([]);
+
+    // Human-readable preset list output
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "list"],
+        args: {},
+        projectRoot,
+        requestedPort: port,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Presets"));
+  });
+
+  it("rejects invalid preset CLI usage, unsafe names, unknown presets, and --merged mutations", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "unknown"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "save", "__proto__"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "save", "   "],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "use", "nonexistent"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "bind", "foo"],
+        args: { clear: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "bind"],
+        args: {},
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "preset", "save", "valid"],
+        args: { merged: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(2);
+  });
 });

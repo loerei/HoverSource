@@ -18,6 +18,11 @@ import {
   buildDeltaFromKeyValue,
   writeJsonAtomic,
   ConfigValidationError,
+  listPresets,
+  savePreset,
+  usePreset,
+  deletePreset,
+  bindRepoPreset,
 } from "../configStore.js";
 
 describe("configStore", () => {
@@ -72,6 +77,7 @@ describe("configStore", () => {
       altKey: true,
       ctrlKey: false,
       shiftKey: false,
+      metaKey: false,
     });
     expect((merged as unknown as Record<string, unknown>).recentProjects).toBeUndefined();
   });
@@ -317,5 +323,179 @@ describe("configStore", () => {
     const rawOnDisk = JSON.parse(fs.readFileSync(path.join(projectDir, ".hoversourcerc"), "utf-8"));
     expect(Object.prototype.hasOwnProperty.call(rawOnDisk.ports, "dev")).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(rawOnDisk.ports, "proxy")).toBe(false);
+  });
+
+  it("supports metaKey on shortcuts and layerPickerScroll plus toggleFilterPanel default and validation", () => {
+    expect(DEFAULT_CONFIG.shortcuts.toggleFilterPanel).toEqual({
+      key: "d",
+      altKey: true,
+      ctrlKey: true,
+      shiftKey: false,
+      metaKey: false,
+    });
+    expect(getConfigValueByPath(DEFAULT_CONFIG, "shortcuts.toggleFilterPanel.key")).toBe("d");
+    expect(getConfigValueByPath(DEFAULT_CONFIG, "shortcuts.toggleUI.metaKey")).toBe(false);
+
+    const valid = parseConfigDelta({
+      layerPickerScroll: { altKey: false, ctrlKey: false, shiftKey: false, metaKey: true },
+      shortcuts: {
+        toggleFilterPanel: { key: "k", altKey: false, ctrlKey: false, shiftKey: true, metaKey: true },
+      },
+    });
+    expect(valid.ok).toBe(true);
+
+    expect(parseConfigDelta({ shortcuts: { toggleFilterPanel: { metaKey: "yes" } } }).ok).toBe(false);
+    expect(parseConfigDelta({ layerPickerScroll: { metaKey: 1 } }).ok).toBe(false);
+
+    expect(buildDeltaFromKeyValue("shortcuts.toggleFilterPanel.metaKey", "true")).toEqual({
+      ok: true,
+      value: { shortcuts: { toggleFilterPanel: { metaKey: true } } },
+    });
+    expect(buildDeltaFromKeyValue("layerPickerScroll.metaKey", "true")).toEqual({
+      ok: true,
+      value: { layerPickerScroll: { metaKey: true } },
+    });
+
+    const saved = saveConfigDelta(
+      {
+        shortcuts: { toggleFilterPanel: { key: "f", metaKey: true, ctrlKey: false } },
+        layerPickerScroll: { metaKey: true },
+      },
+      "local",
+      projectDir,
+      null,
+      globalConfigPath
+    );
+    expect(saved.config.shortcuts.toggleFilterPanel).toEqual({
+      key: "f",
+      altKey: true,
+      ctrlKey: false,
+      shiftKey: false,
+      metaKey: true,
+    });
+    expect(saved.config.layerPickerScroll).toEqual({ metaKey: true });
+
+    // Legacy .hoversourcerc without metaKey or toggleFilterPanel still merges cleanly
+    fs.writeFileSync(
+      path.join(customDir, ".hoversourcerc"),
+      JSON.stringify({ shortcuts: { toggleUI: { key: "u", altKey: true, ctrlKey: false, shiftKey: false } } }),
+      "utf-8"
+    );
+    const legacyMerged = loadMergedConfig(customDir, globalConfigPath);
+    expect(legacyMerged.shortcuts.toggleUI.key).toBe("u");
+    expect(legacyMerged.shortcuts.toggleUI.metaKey).toBe(false);
+    expect(legacyMerged.shortcuts.toggleFilterPanel).toEqual(DEFAULT_CONFIG.shortcuts.toggleFilterPanel);
+  });
+
+  it("manages named presets CRUD, precedence (DEFAULT -> global -> preset -> local), and port isolation", () => {
+    saveConfigDelta(
+      {
+        theme: "light",
+        editor: "cursor",
+        autoResolvePortConflicts: true,
+        ports: { companion: 7450, debug: 9333, proxy: 8088 },
+      },
+      "global",
+      projectDir,
+      null,
+      globalConfigPath
+    );
+    registerRecentProject(projectDir, globalConfigPath);
+
+    // Save preset with explicit partial config; machine/port fields must be excluded
+    const savedFigma = savePreset(
+      "figma",
+      {
+        theme: "system",
+        minimalModeByDefault: true,
+        shortcuts: { toggleUI: { key: "k", metaKey: true, altKey: false } },
+        ports: { companion: 9999 },
+        autoResolvePortConflicts: false,
+      } as unknown as Record<string, unknown>,
+      projectDir,
+      globalConfigPath
+    );
+    expect(savedFigma.name).toBe("figma");
+    expect((savedFigma.preset as Record<string, unknown>).ports).toBeUndefined();
+    expect((savedFigma.preset as Record<string, unknown>).autoResolvePortConflicts).toBeUndefined();
+
+    // Activate preset and verify DEFAULT -> global -> preset precedence + port isolation
+    const used = usePreset("figma", projectDir, globalConfigPath);
+    expect(used.activePreset).toBe("figma");
+    expect(used.config.theme).toBe("system");
+    expect(used.config.minimalModeByDefault).toBe(true);
+    expect(used.config.editor).toBe("cursor");
+    expect(used.config.shortcuts.toggleUI).toEqual({
+      key: "k",
+      altKey: false,
+      ctrlKey: false,
+      shiftKey: false,
+      metaKey: true,
+    });
+    expect(used.config.ports?.companion).toBe(7450);
+    expect(used.config.ports?.debug).toBe(9333);
+    expect(used.config.ports?.proxy).toBe(8088);
+    expect(used.config.autoResolvePortConflicts).toBe(true);
+    expect((used.config as unknown as Record<string, unknown>).presets).toBeUndefined();
+    expect((used.config as unknown as Record<string, unknown>).activePreset).toBeUndefined();
+
+    // Snapshot current merged config into another preset
+    saveConfigDelta({ snappingThreshold: 40, theme: "dark" }, "local", projectDir, null, globalConfigPath);
+    const snap = savePreset("work", null, projectDir, globalConfigPath);
+    expect(snap.preset.snappingThreshold).toBe(40);
+    expect(snap.preset.theme).toBe("dark");
+    expect((snap.preset as Record<string, unknown>).ports).toBeUndefined();
+
+    // Bind repo to "figma" while local overrides theme to "light"
+    const bound = bindRepoPreset("figma", customDir, globalConfigPath);
+    expect(bound.boundPreset).toBe("figma");
+    saveConfigDelta({ theme: "light" }, "local", customDir, null, globalConfigPath);
+
+    const customMerged = loadMergedConfig(customDir, globalConfigPath);
+    expect(customMerged.minimalModeByDefault).toBe(true); // from bound preset "figma"
+    expect(customMerged.theme).toBe("light"); // explicit local override beats preset
+    expect(customMerged.ports?.companion).toBe(7450); // global port preserved
+
+    const listed = listPresets(customDir, globalConfigPath);
+    expect(Object.keys(listed.presets).sort()).toEqual(["figma", "work"]);
+    expect(listed.activePreset).toBe("figma");
+    expect(listed.boundPreset).toBe("figma");
+    expect(listed.effectivePreset).toBe("figma");
+
+    // Clear repo binding
+    const clearedBind = bindRepoPreset(null, customDir, globalConfigPath);
+    expect(clearedBind.boundPreset).toBeNull();
+    expect(listPresets(customDir, globalConfigPath).boundPreset).toBeNull();
+
+    // Delete active preset clears activePreset and falls back to global base
+    const deleted = deletePreset("figma", projectDir, globalConfigPath);
+    expect(deleted.deleted).toBe(true);
+    expect(deleted.clearedActive).toBe(true);
+    expect(listPresets(projectDir, globalConfigPath).activePreset).toBeNull();
+    expect(getRecentProjects(globalConfigPath)).toEqual([normalizeProjectPath(projectDir)]);
+
+    // Unknown preset names in global/local files degrade gracefully
+    fs.writeFileSync(
+      path.join(customDir, ".hoversourcerc"),
+      JSON.stringify({ preset: "does-not-exist", snappingThreshold: 22 }),
+      "utf-8"
+    );
+    const unknownFallback = loadMergedConfig(customDir, globalConfigPath);
+    expect(unknownFallback.snappingThreshold).toBe(22);
+    expect(unknownFallback.theme).toBe("light"); // global base
+  });
+
+  it("rejects unsafe prototype keys, empty/whitespace preset names, and unknown usePreset", () => {
+    for (const badName of ["", "   ", "__proto__", "constructor", "prototype"]) {
+      expect(() => savePreset(badName, { theme: "light" }, projectDir, globalConfigPath)).toThrow(
+        ConfigValidationError
+      );
+      expect(() => usePreset(badName, projectDir, globalConfigPath)).toThrow(ConfigValidationError);
+      expect(() => deletePreset(badName, projectDir, globalConfigPath)).toThrow(ConfigValidationError);
+      expect(() => bindRepoPreset(badName, projectDir, globalConfigPath)).toThrow(ConfigValidationError);
+    }
+
+    expect(() => usePreset("missing-preset", projectDir, globalConfigPath)).toThrow(ConfigValidationError);
+    expect(deletePreset("missing-preset", projectDir, globalConfigPath).deleted).toBe(false);
   });
 });

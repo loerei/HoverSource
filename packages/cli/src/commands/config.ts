@@ -1,15 +1,22 @@
 import fs from "node:fs";
 import http from "node:http";
 import {
+  bindRepoPreset,
   buildDeltaFromKeyValue,
+  ConfigValidationError,
   deleteConfigTarget,
+  deletePreset,
   getConfigForTarget,
   getConfigValueByPath,
   getGlobalConfigPath,
   getLocalConfigPath,
+  listPresets,
   loadMergedConfig,
   resetConfigTarget,
   saveConfigDelta,
+  savePreset,
+  usePreset,
+  validatePresetName,
   type HoverSourceConfig,
 } from "@hoversource/companion-server/config";
 import { askQuestion } from "../port.js";
@@ -130,6 +137,215 @@ async function confirmDestructiveAction(
   };
 }
 
+function tryValidatePresetName(rawName: string): string | null {
+  try {
+    return validatePresetName(rawName);
+  } catch (err) {
+    const message = err instanceof ConfigValidationError ? err.message : String(err);
+    console.error(`[HoverSource] ${message}`);
+    return null;
+  }
+}
+
+async function handlePresetCommand(
+  opts: ConfigCommandOptions,
+  isJson: boolean,
+  isDryRun: boolean
+): Promise<number> {
+  const presetAction = opts.positionals[2] ?? "list";
+  const globalPath = getGlobalConfigPath(opts.globalConfigPath);
+
+  if (presetAction === "list") {
+    const result = listPresets(opts.projectRoot, opts.globalConfigPath);
+    if (isJson) {
+      writeStdoutJson({ path: globalPath, ...result });
+    } else {
+      const names = Object.keys(result.presets);
+      console.log(`[HoverSource] Presets (${globalPath}):`);
+      if (names.length === 0) {
+        console.log("  (none)");
+      } else {
+        for (const name of names) {
+          const markers: string[] = [];
+          if (name === result.activePreset) markers.push("active");
+          if (name === result.boundPreset) markers.push("bound");
+          const suffix = markers.length > 0 ? ` (${markers.join(", ")})` : "";
+          console.log(`  - ${name}${suffix}`);
+        }
+      }
+    }
+    return 0;
+  }
+
+  if (presetAction === "save") {
+    const rawName = opts.positionals[3];
+    if (rawName === undefined) {
+      console.error("[HoverSource] Usage: hs config preset save <name>");
+      return 2;
+    }
+    const name = tryValidatePresetName(rawName);
+    if (!name) return 2;
+
+    if (isDryRun) {
+      if (isJson) {
+        writeStdoutJson({ dryRun: true, action: "save", name, path: globalPath });
+      } else {
+        console.log(`[HoverSource] Dry run: would save preset "${name}" to ${globalPath}`);
+      }
+      return 0;
+    }
+
+    const result = savePreset(name, null, opts.projectRoot, opts.globalConfigPath);
+    const reloaded = await notifyCompanionReload(opts.requestedPort, opts.reloadTimeoutMs);
+    if (isJson) {
+      writeStdoutJson({
+        action: "save",
+        name: result.name,
+        path: result.savedTo,
+        preset: result.preset,
+        reloaded,
+      });
+    } else {
+      console.log(
+        `[HoverSource] Saved preset "${result.name}" to ${result.savedTo}${reloaded ? " (companion reloaded)" : ""}`
+      );
+    }
+    return 0;
+  }
+
+  if (presetAction === "use") {
+    const rawName = opts.positionals[3];
+    if (rawName === undefined) {
+      console.error("[HoverSource] Usage: hs config preset use <name>");
+      return 2;
+    }
+    const name = tryValidatePresetName(rawName);
+    if (!name) return 2;
+
+    const { presets } = listPresets(opts.projectRoot, opts.globalConfigPath);
+    if (!Object.prototype.hasOwnProperty.call(presets, name)) {
+      console.error(`[HoverSource] Unknown preset "${name}".`);
+      return 2;
+    }
+
+    if (isDryRun) {
+      if (isJson) {
+        writeStdoutJson({ dryRun: true, action: "use", name, path: globalPath });
+      } else {
+        console.log(`[HoverSource] Dry run: would activate preset "${name}" in ${globalPath}`);
+      }
+      return 0;
+    }
+
+    const result = usePreset(name, opts.projectRoot, opts.globalConfigPath);
+    const reloaded = await notifyCompanionReload(opts.requestedPort, opts.reloadTimeoutMs);
+    if (isJson) {
+      writeStdoutJson({
+        action: "use",
+        activePreset: result.activePreset,
+        path: result.savedTo,
+        reloaded,
+      });
+    } else {
+      console.log(
+        `[HoverSource] Activated preset "${result.activePreset}" in ${result.savedTo}${reloaded ? " (companion reloaded)" : ""}`
+      );
+    }
+    return 0;
+  }
+
+  if (presetAction === "delete") {
+    const rawName = opts.positionals[3];
+    if (rawName === undefined) {
+      console.error("[HoverSource] Usage: hs config preset delete <name>");
+      return 2;
+    }
+    const name = tryValidatePresetName(rawName);
+    if (!name) return 2;
+
+    if (isDryRun) {
+      const { presets } = listPresets(opts.projectRoot, opts.globalConfigPath);
+      const exists = Object.prototype.hasOwnProperty.call(presets, name);
+      if (isJson) {
+        writeStdoutJson({ dryRun: true, action: "delete", name, exists, path: globalPath });
+      } else {
+        console.log(`[HoverSource] Dry run: would delete preset "${name}" from ${globalPath}`);
+      }
+      return 0;
+    }
+
+    const result = deletePreset(name, opts.projectRoot, opts.globalConfigPath);
+    const reloaded = result.deleted
+      ? await notifyCompanionReload(opts.requestedPort, opts.reloadTimeoutMs)
+      : false;
+    if (isJson) {
+      writeStdoutJson({
+        action: "delete",
+        name: result.name,
+        deleted: result.deleted,
+        clearedActive: result.clearedActive,
+        path: result.savedTo,
+        reloaded,
+      });
+    } else {
+      const msg = result.deleted
+        ? `Deleted preset "${result.name}"`
+        : `Preset "${result.name}" not found`;
+      console.log(`[HoverSource] ${msg} in ${result.savedTo}${reloaded ? " (companion reloaded)" : ""}`);
+    }
+    return 0;
+  }
+
+  if (presetAction === "bind") {
+    const isClear = Boolean(opts.args.clear);
+    const rawName = opts.positionals[3];
+    if ((isClear && rawName !== undefined) || (!isClear && rawName === undefined)) {
+      console.error("[HoverSource] Usage: hs config preset bind <name|--clear>");
+      return 2;
+    }
+
+    let name: string | null = null;
+    if (!isClear) {
+      name = tryValidatePresetName(rawName);
+      if (!name) return 2;
+    }
+
+    const localPath = getLocalConfigPath(opts.projectRoot);
+    if (isDryRun) {
+      if (isJson) {
+        writeStdoutJson({ dryRun: true, action: "bind", preset: name, clear: isClear, path: localPath });
+      } else {
+        const desc = isClear ? "clear preset binding" : `bind repo to preset "${name}"`;
+        console.log(`[HoverSource] Dry run: would ${desc} at ${localPath}`);
+      }
+      return 0;
+    }
+
+    const result = bindRepoPreset(name, opts.projectRoot, opts.globalConfigPath);
+    const reloaded = await notifyCompanionReload(opts.requestedPort, opts.reloadTimeoutMs);
+    if (isJson) {
+      writeStdoutJson({
+        action: "bind",
+        boundPreset: result.boundPreset,
+        clear: isClear,
+        path: result.savedTo,
+        reloaded,
+      });
+    } else {
+      const desc = isClear
+        ? "Cleared preset binding"
+        : `Bound repo to preset "${result.boundPreset}"`;
+      console.log(`[HoverSource] ${desc} at ${result.savedTo}${reloaded ? " (companion reloaded)" : ""}`);
+    }
+    return 0;
+  }
+
+  console.error(
+    `[HoverSource] Unknown preset action "${presetAction}". Usage: hs config preset <list|save|use|delete|bind> [options]`
+  );
+  return 2;
+}
+
 export async function runConfigCommand(opts: ConfigCommandOptions): Promise<number> {
   const hasGlobal = Boolean(opts.args.global);
   const hasLocal = Boolean(opts.args.local);
@@ -145,13 +361,22 @@ export async function runConfigCommand(opts: ConfigCommandOptions): Promise<numb
   const action = opts.positionals[1] ?? "list";
   const isJson = Boolean(opts.args.json);
   const isDryRun = Boolean(opts.args["dry-run"]);
-  const isReadAction = action === "list" || action === "show" || action === "get";
+  const presetSubAction = action === "preset" ? (opts.positionals[2] ?? "list") : undefined;
+  const isReadAction =
+    action === "list" ||
+    action === "show" ||
+    action === "get" ||
+    (action === "preset" && presetSubAction === "list");
 
   if (!isReadAction && hasMerged) {
     console.error(
       `[HoverSource] --merged is read-only and cannot be used with "${action}".`
     );
     return 2;
+  }
+
+  if (action === "preset") {
+    return handlePresetCommand(opts, isJson, isDryRun);
   }
 
   const scope: ConfigScope = hasGlobal
@@ -404,7 +629,7 @@ export async function runConfigCommand(opts: ConfigCommandOptions): Promise<numb
   }
 
   console.error(
-    `[HoverSource] Unknown config action "${action}". Usage: hs config <list|show|get|set|reset|delete> [options]`
+    `[HoverSource] Unknown config action "${action}". Usage: hs config <list|show|get|set|reset|delete|preset> [options]`
   );
   return 2;
 }

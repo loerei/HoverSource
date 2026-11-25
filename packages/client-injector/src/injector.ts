@@ -766,17 +766,11 @@ function handleSessionMessage(session: CdpSession, data: WebSocket.RawData): voi
   }
 
   if (msg.method === "Runtime.bindingCalled") {
-    try {
-      void handleBindingCalled(session, msg.params).catch((err) => {
-        console.warn(
-          `[HoverSource] Unexpected error in CDP bridge handler on ${session.target.url}: ${err instanceof Error ? err.message : String(err)}`
-        );
-      });
-    } catch (err) {
+    void handleBindingCalled(session, msg.params).catch((err) => {
       console.warn(
-        `[HoverSource] Unexpected synchronous error in CDP bridge handler on ${session.target.url}: ${err instanceof Error ? err.message : String(err)}`
+        `[HoverSource] Unexpected error in CDP bridge handler on ${session.target.url}: ${err instanceof Error ? err.message : String(err)}`
       );
-    }
+    });
   }
 }
 

@@ -137,12 +137,18 @@ function closeHttpServer(server) {
 
 function removeDirWithRetry(dirPath) {
   if (!fs.existsSync(dirPath)) return;
-  fs.rmSync(dirPath, {
-    recursive: true,
-    force: true,
-    maxRetries: 10,
-    retryDelay: 150,
-  });
+  try {
+    fs.rmSync(dirPath, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 150,
+    });
+  } catch (err) {
+    console.warn(
+      `[verify-csp-smoke] Warning: failed to remove temp dir ${dirPath}: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
 }
 
 async function terminateChild(child, name, cdpCloseFn) {

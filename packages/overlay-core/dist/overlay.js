@@ -2,14 +2,7 @@ import { setupVanillaMonkeyPatch } from "./vanillaPatch.js";
 setupVanillaMonkeyPatch();
 import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
-function getCompanionBaseUrl() {
-    const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
-    if (isProxy) {
-        return "/hoversource";
-    }
-    const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
-    return `http://127.0.0.1:${port}`;
-}
+import { companionRequestJson } from "./companionTransport.js";
 class OverlayEngine {
     config = null;
     container = null;
@@ -59,8 +52,7 @@ class OverlayEngine {
     }
     async loadConfig() {
         try {
-            const res = await fetch(`${getCompanionBaseUrl()}/config`);
-            const data = await res.json();
+            const data = await companionRequestJson("/config");
             this.config = data.config;
             console.log("[HoverSource] Configuration loaded from companion server:", this.config);
         }
@@ -730,8 +722,7 @@ class OverlayEngine {
         this.activeMode.activate(this);
     }
     openDashboardInBrowser() {
-        fetch(`${getCompanionBaseUrl()}/open-dashboard`)
-            .then(r => r.json())
+        companionRequestJson("/open-dashboard")
             .then(data => {
             if (data.success) {
                 console.log("[HoverSource] Triggered dashboard browser open.");
@@ -984,7 +975,7 @@ class OverlayEngine {
     getConfig() { return this.config; }
     async saveConfig(newConfig) {
         try {
-            const res = await fetch(`${getCompanionBaseUrl()}/config`, {
+            const data = await companionRequestJson("/config", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -994,7 +985,6 @@ class OverlayEngine {
                     target: "local"
                 })
             });
-            const data = await res.json();
             if (data.success && data.config) {
                 this.config = data.config;
             }
@@ -1033,13 +1023,12 @@ class OverlayEngine {
     }
 }
 globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
-    let url = `${getCompanionBaseUrl()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
+    let path = `/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
-        url += `&tagName=${encodeURIComponent(tagName)}`;
+        path += `&tagName=${encodeURIComponent(tagName)}`;
     if (classList)
-        url += `&classList=${encodeURIComponent(classList)}`;
-    fetch(url)
-        .then(r => r.json())
+        path += `&classList=${encodeURIComponent(classList)}`;
+    companionRequestJson(path)
         .then(data => {
         if (data.success) {
             console.log(`[HoverSource] Opened file in editor: ${file}`);

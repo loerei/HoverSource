@@ -5,15 +5,7 @@ import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 import { OverlayController, InteractionMode } from "./modes/types.js";
 import { ParentVisualEffect } from "@hoversource/source-resolver";
-
-function getCompanionBaseUrl() {
-  const isProxy = (globalThis as any).__HOVERSOURCE_PROXY__ === true;
-  if (isProxy) {
-    return "/hoversource";
-  }
-  const port = (globalThis as any).__HOVERSOURCE_PORT__ ?? 7300;
-  return `http://127.0.0.1:${port}`;
-}
+import { companionRequestJson } from "./companionTransport.js";
 
 class OverlayEngine implements OverlayController {
   private config: any = null;
@@ -77,8 +69,7 @@ class OverlayEngine implements OverlayController {
 
   private async loadConfig() {
     try {
-      const res = await fetch(`${getCompanionBaseUrl()}/config`);
-      const data = await res.json();
+      const data = await companionRequestJson("/config");
       this.config = data.config;
       console.log("[HoverSource] Configuration loaded from companion server:", this.config);
     } catch (e) {
@@ -770,8 +761,7 @@ class OverlayEngine implements OverlayController {
   }
 
   private openDashboardInBrowser() {
-    fetch(`${getCompanionBaseUrl()}/open-dashboard`)
-      .then(r => r.json())
+    companionRequestJson("/open-dashboard")
       .then(data => {
         if (data.success) {
           console.log("[HoverSource] Triggered dashboard browser open.");
@@ -1050,7 +1040,7 @@ class OverlayEngine implements OverlayController {
 
   public async saveConfig(newConfig: any): Promise<void> {
     try {
-      const res = await fetch(`${getCompanionBaseUrl()}/config`, {
+      const data = await companionRequestJson("/config", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -1060,7 +1050,6 @@ class OverlayEngine implements OverlayController {
           target: "local"
         })
       });
-      const data = await res.json();
       if (data.success && data.config) {
         this.config = data.config;
       }
@@ -1102,12 +1091,11 @@ class OverlayEngine implements OverlayController {
 }
 
 (globalThis as any).__HoverSourceOpen__ = (file: string, line: number, col: number, tagName?: string, classList?: string) => {
-  let url = `${getCompanionBaseUrl()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
-  if (tagName) url += `&tagName=${encodeURIComponent(tagName)}`;
-  if (classList) url += `&classList=${encodeURIComponent(classList)}`;
+  let path = `/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
+  if (tagName) path += `&tagName=${encodeURIComponent(tagName)}`;
+  if (classList) path += `&classList=${encodeURIComponent(classList)}`;
 
-  fetch(url)
-    .then(r => r.json())
+  companionRequestJson(path)
     .then(data => {
       if (data.success) {
         console.log(`[HoverSource] Opened file in editor: ${file}`);

@@ -1,6 +1,11 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { InspectorAdapter } from "./InspectorAdapter.js";
 import { inspectVisualContext } from "../inspector.js";
+afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+});
 beforeAll(() => {
     if (typeof globalThis.getComputedStyle === "undefined") {
         globalThis.getComputedStyle = vi.fn().mockImplementation((el) => {
@@ -214,5 +219,212 @@ describe("InspectorAdapter - Metadata Filtering", () => {
         expect(disabledFormatted).not.toContain("* **Layout Constraints**:");
         expect(disabledFormatted).not.toContain("overflow-y: auto");
         expect(disabledFormatted).not.toContain("scrollbar-gutter: stable");
+    });
+});
+async function flushMicrotasks(rounds = 30) {
+    for (let i = 0; i < rounds; i++) {
+        await Promise.resolve();
+    }
+}
+describe("InspectorAdapter - Companion Transport & /static-context Parity", () => {
+    it("routes fetchBackgroundValidation (/validate-line -> /static-context) through companionRequestJson and updates tooltip metadata", async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockImplementation(async (url) => {
+            if (url.includes("/validate-line")) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        corrected: { line: 24, column: 6 },
+                        correctedFile: "src/components/ButtonCorrected.tsx",
+                    }),
+                };
+            }
+            if (url.includes("/static-context")) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        comments: ["Primary action button"],
+                        attributes: { type: "submit" },
+                    }),
+                };
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const mockTooltipBox = {
+            querySelectorAll: vi.fn().mockReturnValue([]),
+        };
+        const mockController = {
+            getConfig: () => ({ minimalModeByDefault: false }),
+            isUIVisible: () => true,
+            drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
+            drawTooltip: vi.fn(),
+            clear: vi.fn(),
+            setFreezeMode: vi.fn(),
+            tooltipBox: mockTooltipBox,
+        };
+        const target = {
+            tagName: "BUTTON",
+            dataset: { hsSource: "src/components/Button.tsx:12:4" },
+            closest: (sel) => (sel === "[data-hs-source]" ? target : null),
+            classList: {
+                contains: () => false,
+                [Symbol.iterator]: function* () {
+                    yield "btn-primary";
+                },
+            },
+            className: "btn-primary",
+            parentElement: null,
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 40 }),
+        };
+        vi.stubGlobal("document", {
+            body: {},
+            documentElement: {},
+            elementsFromPoint: () => [target],
+        });
+        const adapter = new InspectorAdapter();
+        adapter.activate(mockController);
+        adapter.onPointerOver({ clientX: 10, clientY: 10 }, target);
+        await vi.advanceTimersByTimeAsync(50);
+        await flushMicrotasks();
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[0][0]).toContain("http://127.0.0.1:7300/validate-line?file=src%2Fcomponents%2FButton.tsx&line=12&column=4&tagName=button&classList=btn-primary");
+        expect(fetchMock.mock.calls[1][0]).toBe("http://127.0.0.1:7300/static-context?file=src%2Fcomponents%2FButtonCorrected.tsx&line=24&column=6&tagName=button&classList=btn-primary");
+        expect(adapter["currentSourceInfo"].staticMetadata).toEqual({
+            comments: ["Primary action button"],
+            attributes: { type: "submit" },
+        });
+        expect(mockController.drawTooltip).toHaveBeenCalledTimes(2);
+    });
+    it("routes fetchStaticHtmlResolution (/resolve-html-element -> /static-context) through companionRequestJson and updates tooltip metadata", async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn().mockImplementation(async (url) => {
+            if (url.includes("/resolve-html-element")) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        success: true,
+                        fileName: "index.html",
+                        lineNumber: 18,
+                        columnNumber: 5,
+                        framework: "Vanilla",
+                    }),
+                };
+            }
+            if (url.includes("/static-context")) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        comments: ["Hero section"],
+                    }),
+                };
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const mockTooltipBox = {
+            querySelectorAll: vi.fn().mockReturnValue([]),
+        };
+        const mockController = {
+            getConfig: () => ({ minimalModeByDefault: false }),
+            isUIVisible: () => true,
+            drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
+            drawTooltip: vi.fn(),
+            clear: vi.fn(),
+            setFreezeMode: vi.fn(),
+            tooltipBox: mockTooltipBox,
+        };
+        const target = {
+            tagName: "SECTION",
+            id: "hero",
+            classList: {
+                contains: () => false,
+                [Symbol.iterator]: function* () {
+                    yield "hero-banner";
+                },
+            },
+            className: "hero-banner",
+            parentElement: null,
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 300, height: 120 }),
+        };
+        vi.stubGlobal("document", {
+            body: {},
+            documentElement: {},
+            elementsFromPoint: () => [target],
+        });
+        const adapter = new InspectorAdapter();
+        adapter.activate(mockController);
+        adapter.onPointerOver({ clientX: 20, clientY: 20 }, target);
+        await vi.advanceTimersByTimeAsync(50);
+        await flushMicrotasks();
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[0][0]).toContain("http://127.0.0.1:7300/resolve-html-element?");
+        expect(fetchMock.mock.calls[1][0]).toBe("http://127.0.0.1:7300/static-context?file=index.html&line=18&column=5&tagName=section&classList=hero-banner");
+        expect(adapter["currentSourceInfo"].staticMetadata).toEqual({
+            comments: ["Hero section"],
+        });
+        expect(mockController.drawTooltip).toHaveBeenCalledTimes(3);
+    });
+    it("logs console.warn('[HoverSource] Static context fetch failed:', err) when /static-context rejects in fetchBackgroundValidation", async () => {
+        vi.useFakeTimers();
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => { });
+        const fetchMock = vi.fn().mockImplementation(async (url) => {
+            if (url.includes("/validate-line")) {
+                return {
+                    ok: true,
+                    json: async () => ({}),
+                };
+            }
+            if (url.includes("/static-context")) {
+                return {
+                    ok: false,
+                    status: 500,
+                    json: async () => ({}),
+                };
+            }
+            throw new Error(`Unexpected URL: ${url}`);
+        });
+        vi.stubGlobal("fetch", fetchMock);
+        const mockTooltipBox = {
+            querySelectorAll: vi.fn().mockReturnValue([]),
+        };
+        const mockController = {
+            getConfig: () => ({ minimalModeByDefault: false }),
+            isUIVisible: () => true,
+            drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
+            drawTooltip: vi.fn(),
+            clear: vi.fn(),
+            setFreezeMode: vi.fn(),
+            tooltipBox: mockTooltipBox,
+        };
+        const target = {
+            tagName: "BUTTON",
+            dataset: { hsSource: "src/components/Button.tsx:12:4" },
+            closest: (sel) => (sel === "[data-hs-source]" ? target : null),
+            classList: {
+                contains: () => false,
+                [Symbol.iterator]: function* () { },
+            },
+            className: "",
+            parentElement: null,
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 40 }),
+        };
+        vi.stubGlobal("document", {
+            body: {},
+            documentElement: {},
+            elementsFromPoint: () => [target],
+        });
+        const adapter = new InspectorAdapter();
+        adapter.activate(mockController);
+        adapter.onPointerOver({ clientX: 10, clientY: 10 }, target);
+        await vi.advanceTimersByTimeAsync(50);
+        await flushMicrotasks();
+        expect(warnSpy).toHaveBeenCalledWith("[HoverSource] Static context fetch failed:", expect.any(Error));
     });
 });

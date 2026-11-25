@@ -1,13 +1,6 @@
 import { SourceResolver } from "@hoversource/source-resolver";
 import { inspectVisualContext } from "../inspector.js";
-function getCompanionBaseUrl() {
-    const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
-    if (isProxy) {
-        return "/hoversource";
-    }
-    const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
-    return `http://127.0.0.1:${port}`;
-}
+import { companionRequestJson } from "../companionTransport.js";
 export class InspectorAdapter {
     id = "inspector";
     controller;
@@ -231,9 +224,8 @@ export class InspectorAdapter {
         }
     }
     fetchBackgroundValidation(info, target, e) {
-        const validateUrl = `${getCompanionBaseUrl()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
-        fetch(validateUrl)
-            .then(res => res.json())
+        const validatePath = `/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
+        companionRequestJson(validatePath)
             .then(data => {
             if (this.currentElement === target) {
                 let line = info.lineNumber || 1;
@@ -247,29 +239,7 @@ export class InspectorAdapter {
                 }
                 info.lineNumber = line;
                 info.columnNumber = col;
-                const classesToResolve = new Set();
-                if (info.visualContext) {
-                    info.visualContext.parentEffects.forEach((fx) => {
-                        fx.classList.forEach(cls => classesToResolve.add(cls));
-                    });
-                }
-                if (info.classList) {
-                    info.classList.forEach((cls) => classesToResolve.add(cls));
-                }
-                const classListParam = Array.from(classesToResolve).join(",");
-                const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
-                fetch(staticContextUrl)
-                    .then(res => res.json())
-                    .then(staticData => {
-                    if (staticData && this.currentElement === target) {
-                        info.staticMetadata = staticData;
-                        this.currentSourceInfo = info;
-                        if (this.controller.isUIVisible()) {
-                            this.renderTooltip(e);
-                        }
-                    }
-                })
-                    .catch(err => console.warn("[HoverSource] Static context fetch failed:", err));
+                this.fetchStaticContextForElement(info, target, e, line, col);
             }
         })
             .catch(err => console.warn("[HoverSource] Background line validation failed:", err));
@@ -293,9 +263,8 @@ export class InspectorAdapter {
             classList,
             attributes: JSON.stringify(attrs)
         });
-        const resolveUrl = `${getCompanionBaseUrl()}/resolve-html-element?${queryParams.toString()}`;
-        fetch(resolveUrl)
-            .then(res => res.json())
+        const resolvePath = `/resolve-html-element?${queryParams.toString()}`;
+        companionRequestJson(resolvePath)
             .then(data => {
             if (this.currentElement === target && data?.success && data?.fileName) {
                 info.fileName = data.fileName;
@@ -305,32 +274,34 @@ export class InspectorAdapter {
                 if (this.controller.isUIVisible()) {
                     this.renderTooltip(e);
                 }
-                const classesToResolve = new Set();
-                if (info.visualContext) {
-                    info.visualContext.parentEffects.forEach((fx) => {
-                        fx.classList.forEach(cls => classesToResolve.add(cls));
-                    });
-                }
-                if (info.classList) {
-                    info.classList.forEach((cls) => classesToResolve.add(cls));
-                }
-                const classListParam = Array.from(classesToResolve).join(",");
-                const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber}&column=${info.columnNumber}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
-                fetch(staticContextUrl)
-                    .then(res => res.json())
-                    .then(staticData => {
-                    if (staticData && this.currentElement === target) {
-                        info.staticMetadata = staticData;
-                        this.currentSourceInfo = info;
-                        if (this.controller.isUIVisible()) {
-                            this.renderTooltip(e);
-                        }
-                    }
-                })
-                    .catch(() => { });
+                this.fetchStaticContextForElement(info, target, e, info.lineNumber, info.columnNumber);
             }
         })
             .catch(() => { });
+    }
+    fetchStaticContextForElement(info, target, e, line, col) {
+        const classesToResolve = new Set();
+        if (info.visualContext) {
+            info.visualContext.parentEffects.forEach((fx) => {
+                fx.classList.forEach(cls => classesToResolve.add(cls));
+            });
+        }
+        if (info.classList) {
+            info.classList.forEach((cls) => classesToResolve.add(cls));
+        }
+        const classListParam = Array.from(classesToResolve).join(",");
+        const staticContextPath = `/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+        companionRequestJson(staticContextPath)
+            .then(staticData => {
+            if (staticData && this.currentElement === target) {
+                info.staticMetadata = staticData;
+                this.currentSourceInfo = info;
+                if (this.controller.isUIVisible()) {
+                    this.renderTooltip(e);
+                }
+            }
+        })
+            .catch(err => console.warn("[HoverSource] Static context fetch failed:", err));
     }
     getShortcutLabel(shortcut) {
         if (!shortcut)

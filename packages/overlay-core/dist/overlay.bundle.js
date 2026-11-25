@@ -1135,7 +1135,7 @@
     }
   }
 
-  // src/modes/InspectorAdapter.ts
+  // src/companionTransport.ts
   function getCompanionBaseUrl() {
     const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
     if (isProxy) {
@@ -1144,6 +1144,61 @@
     const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
     return `http://127.0.0.1:${port}`;
   }
+  async function companionRequestJson(path, init) {
+    const method = init?.method ?? "GET";
+    if (init?.signal?.aborted) {
+      throw init.signal.reason instanceof Error ? init.signal.reason : new Error(`Companion request ${method} ${path} aborted`);
+    }
+    const timeoutMs = Number.isFinite(init?.timeoutMs) && init.timeoutMs > 0 ? init.timeoutMs : 5e3;
+    const url = `${getCompanionBaseUrl()}${path}`;
+    const timeoutController = new AbortController();
+    const onAbort = () => {
+      const reason = init?.signal?.reason;
+      timeoutController.abort(
+        reason instanceof Error ? reason : new Error(`Companion request ${method} ${path} aborted`)
+      );
+    };
+    init?.signal?.addEventListener("abort", onAbort, { once: true });
+    const timer = setTimeout(() => {
+      const err = new Error(`Companion request ${method} ${path} timed out after ${timeoutMs}ms`);
+      timeoutController.abort(err);
+    }, timeoutMs);
+    let onTimeoutAbort;
+    const abortPromise = new Promise((_resolve, reject) => {
+      onTimeoutAbort = () => {
+        const reason = timeoutController.signal.reason;
+        reject(
+          reason instanceof Error ? reason : new Error(`Companion request ${method} ${path} aborted`, { cause: reason })
+        );
+      };
+      timeoutController.signal.addEventListener("abort", onTimeoutAbort, { once: true });
+    });
+    const fetchPromise = Promise.resolve().then(async () => {
+      const res = await fetch(url, {
+        method,
+        headers: init?.headers,
+        body: init?.body,
+        signal: timeoutController.signal
+      });
+      if (!res.ok) {
+        throw new Error(`Companion HTTP ${method} ${path} failed with status ${res.status}`);
+      }
+      return await res.json();
+    });
+    fetchPromise.catch(() => {
+    });
+    try {
+      return await Promise.race([fetchPromise, abortPromise]);
+    } finally {
+      clearTimeout(timer);
+      init?.signal?.removeEventListener("abort", onAbort);
+      if (onTimeoutAbort) {
+        timeoutController.signal.removeEventListener("abort", onTimeoutAbort);
+      }
+    }
+  }
+
+  // src/modes/InspectorAdapter.ts
   var InspectorAdapter = class {
     id = "inspector";
     controller;
@@ -1355,8 +1410,8 @@
       }
     }
     fetchBackgroundValidation(info, target, e) {
-      const validateUrl = `${getCompanionBaseUrl()}/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
-      fetch(validateUrl).then((res) => res.json()).then((data) => {
+      const validatePath = `/validate-line?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber || 1}&column=${info.columnNumber || 1}&tagName=${encodeURIComponent(info.tagName || "")}&classList=${encodeURIComponent((info.classList || []).join(","))}`;
+      companionRequestJson(validatePath).then((data) => {
         if (this.currentElement === target) {
           let line = info.lineNumber || 1;
           let col = info.columnNumber || 1;
@@ -1369,26 +1424,7 @@
           }
           info.lineNumber = line;
           info.columnNumber = col;
-          const classesToResolve = /* @__PURE__ */ new Set();
-          if (info.visualContext) {
-            info.visualContext.parentEffects.forEach((fx) => {
-              fx.classList.forEach((cls) => classesToResolve.add(cls));
-            });
-          }
-          if (info.classList) {
-            info.classList.forEach((cls) => classesToResolve.add(cls));
-          }
-          const classListParam = Array.from(classesToResolve).join(",");
-          const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
-          fetch(staticContextUrl).then((res) => res.json()).then((staticData) => {
-            if (staticData && this.currentElement === target) {
-              info.staticMetadata = staticData;
-              this.currentSourceInfo = info;
-              if (this.controller.isUIVisible()) {
-                this.renderTooltip(e);
-              }
-            }
-          }).catch((err) => console.warn("[HoverSource] Static context fetch failed:", err));
+          this.fetchStaticContextForElement(info, target, e, line, col);
         }
       }).catch((err) => console.warn("[HoverSource] Background line validation failed:", err));
     }
@@ -1411,8 +1447,8 @@
         classList,
         attributes: JSON.stringify(attrs)
       });
-      const resolveUrl = `${getCompanionBaseUrl()}/resolve-html-element?${queryParams.toString()}`;
-      fetch(resolveUrl).then((res) => res.json()).then((data) => {
+      const resolvePath = `/resolve-html-element?${queryParams.toString()}`;
+      companionRequestJson(resolvePath).then((data) => {
         if (this.currentElement === target && data?.success && data?.fileName) {
           info.fileName = data.fileName;
           info.lineNumber = data.lineNumber;
@@ -1421,30 +1457,32 @@
           if (this.controller.isUIVisible()) {
             this.renderTooltip(e);
           }
-          const classesToResolve = /* @__PURE__ */ new Set();
-          if (info.visualContext) {
-            info.visualContext.parentEffects.forEach((fx) => {
-              fx.classList.forEach((cls) => classesToResolve.add(cls));
-            });
-          }
-          if (info.classList) {
-            info.classList.forEach((cls) => classesToResolve.add(cls));
-          }
-          const classListParam = Array.from(classesToResolve).join(",");
-          const staticContextUrl = `${getCompanionBaseUrl()}/static-context?file=${encodeURIComponent(info.fileName)}&line=${info.lineNumber}&column=${info.columnNumber}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
-          fetch(staticContextUrl).then((res) => res.json()).then((staticData) => {
-            if (staticData && this.currentElement === target) {
-              info.staticMetadata = staticData;
-              this.currentSourceInfo = info;
-              if (this.controller.isUIVisible()) {
-                this.renderTooltip(e);
-              }
-            }
-          }).catch(() => {
-          });
+          this.fetchStaticContextForElement(info, target, e, info.lineNumber, info.columnNumber);
         }
       }).catch(() => {
       });
+    }
+    fetchStaticContextForElement(info, target, e, line, col) {
+      const classesToResolve = /* @__PURE__ */ new Set();
+      if (info.visualContext) {
+        info.visualContext.parentEffects.forEach((fx) => {
+          fx.classList.forEach((cls) => classesToResolve.add(cls));
+        });
+      }
+      if (info.classList) {
+        info.classList.forEach((cls) => classesToResolve.add(cls));
+      }
+      const classListParam = Array.from(classesToResolve).join(",");
+      const staticContextPath = `/static-context?file=${encodeURIComponent(info.fileName)}&line=${line}&column=${col}&tagName=${encodeURIComponent(info.componentName || info.tagName || "")}&classList=${encodeURIComponent(classListParam)}`;
+      companionRequestJson(staticContextPath).then((staticData) => {
+        if (staticData && this.currentElement === target) {
+          info.staticMetadata = staticData;
+          this.currentSourceInfo = info;
+          if (this.controller.isUIVisible()) {
+            this.renderTooltip(e);
+          }
+        }
+      }).catch((err) => console.warn("[HoverSource] Static context fetch failed:", err));
     }
     getShortcutLabel(shortcut) {
       if (!shortcut)
@@ -2997,14 +3035,6 @@ The following is NOT resolved automatically and requires your judgment:
 
   // src/overlay.ts
   setupVanillaMonkeyPatch();
-  function getCompanionBaseUrl2() {
-    const isProxy = globalThis.__HOVERSOURCE_PROXY__ === true;
-    if (isProxy) {
-      return "/hoversource";
-    }
-    const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
-    return `http://127.0.0.1:${port}`;
-  }
   var OverlayEngine = class _OverlayEngine {
     config = null;
     container = null;
@@ -3053,8 +3083,7 @@ The following is NOT resolved automatically and requires your judgment:
     }
     async loadConfig() {
       try {
-        const res = await fetch(`${getCompanionBaseUrl2()}/config`);
-        const data = await res.json();
+        const data = await companionRequestJson("/config");
         this.config = data.config;
         console.log("[HoverSource] Configuration loaded from companion server:", this.config);
       } catch (e) {
@@ -3706,7 +3735,7 @@ The following is NOT resolved automatically and requires your judgment:
       this.activeMode.activate(this);
     }
     openDashboardInBrowser() {
-      fetch(`${getCompanionBaseUrl2()}/open-dashboard`).then((r) => r.json()).then((data) => {
+      companionRequestJson("/open-dashboard").then((data) => {
         if (data.success) {
           console.log("[HoverSource] Triggered dashboard browser open.");
         } else {
@@ -3940,7 +3969,7 @@ The following is NOT resolved automatically and requires your judgment:
     }
     async saveConfig(newConfig) {
       try {
-        const res = await fetch(`${getCompanionBaseUrl2()}/config`, {
+        const data = await companionRequestJson("/config", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -3950,7 +3979,6 @@ The following is NOT resolved automatically and requires your judgment:
             target: "local"
           })
         });
-        const data = await res.json();
         if (data.success && data.config) {
           this.config = data.config;
         }
@@ -3998,12 +4026,12 @@ The following is NOT resolved automatically and requires your judgment:
     }
   };
   globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
-    let url = `${getCompanionBaseUrl2()}/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
+    let path = `/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
     if (tagName)
-      url += `&tagName=${encodeURIComponent(tagName)}`;
+      path += `&tagName=${encodeURIComponent(tagName)}`;
     if (classList)
-      url += `&classList=${encodeURIComponent(classList)}`;
-    fetch(url).then((r) => r.json()).then((data) => {
+      path += `&classList=${encodeURIComponent(classList)}`;
+    companionRequestJson(path).then((data) => {
       if (data.success) {
         console.log(`[HoverSource] Opened file in editor: ${file}`);
       } else {

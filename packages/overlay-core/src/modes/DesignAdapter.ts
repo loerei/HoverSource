@@ -888,7 +888,7 @@ export class DesignAdapter implements InteractionMode {
     const filters = config?.metadataFilter?.filters?.design;
     const isChecked = (key: string) => filters ? (filters[key] !== false) : true;
 
-    let lines: string[] = ["### HoverSource Design Placement Metadata"];
+    let lines: string[] = [];
 
     if (isChecked("compInfo")) {
       const lineColStr = p.line ? ` (Line: ${p.line}, Column: ${p.column})` : "";

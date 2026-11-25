@@ -185,7 +185,6 @@ When you press `Alt + C`, HoverSource copies a Markdown block to your clipboard.
 ### Single Element (`Alt + C`)
 
 ```markdown
-### HoverSource Component Metadata
 * **Component**: `ChatThreadView`
 * **Element**: `button.persona-card__action-button` ➔ [Source: `workspace.css` (Line: 60, Column: 1)]
 * **File Path**: `src/features/chat/ChatThreadView.tsx` (Line: 659, Column: 5)
@@ -213,7 +212,6 @@ When you press `Alt + C`, HoverSource copies a Markdown block to your clipboard.
 ### Multi-Layer Stack (`Alt + Shift + C`)
 
 ```markdown
-### HoverSource Component Metadata
 Found 3 layer(s), ordered from leaf (Layer 1) to root:
 
 #### Layer 1/3: `div` (div)
@@ -246,7 +244,6 @@ Found 3 layer(s), ordered from leaf (Layer 1) to root:
 ### Design Placement Metadata (`Alt + C` in Design Mode)
 
 ```markdown
-### HoverSource Design Placement Metadata
 * **Component**: `Card`
 * **Element**: `div#login-card.card`
 * **File Path**: `src/components/LoginCard.tsx` (Line: 122, Column: 5)

@@ -735,7 +735,7 @@ export class DesignAdapter {
         const config = this.controller.getConfig();
         const filters = config?.metadataFilter?.filters?.design;
         const isChecked = (key) => filters ? (filters[key] !== false) : true;
-        let lines = ["### HoverSource Design Placement Metadata"];
+        let lines = [];
         if (isChecked("compInfo")) {
             const lineColStr = p.line ? ` (Line: ${p.line}, Column: ${p.column})` : "";
             lines.push(`* **Component**: \`${p.component}\``, `* **Element**: \`${p.selector}\``, `* **File Path**: \`${p.filePath}\`${lineColStr}`, `* **Framework**: ${p.framework}`);

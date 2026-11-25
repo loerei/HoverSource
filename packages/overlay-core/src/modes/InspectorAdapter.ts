@@ -875,7 +875,7 @@ export class InspectorAdapter implements InteractionMode {
 
   private copyMetadata() {
     if (!this.currentSourceInfo || !this.currentElement) return;
-    const text = `### HoverSource Component Metadata\n` + this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
+    const text = this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
     this.controller.copyToClipboard(text);
   }
 
@@ -963,7 +963,6 @@ export class InspectorAdapter implements InteractionMode {
 
     let text = "";
     if (isChecked("layerSummary")) {
-      text += `### HoverSource Component Metadata\n`;
       text += `Found ${this.layerStack.length} layer(s), ordered from leaf (Layer 1) to root:\n\n`;
     }
     

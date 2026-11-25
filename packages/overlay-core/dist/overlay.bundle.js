@@ -2556,8 +2556,7 @@ ${attrList}`;
     copyMetadata() {
       if (!this.currentSourceInfo || !this.currentElement)
         return;
-      const text = `### HoverSource Component Metadata
-` + this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
+      const text = this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
       this.controller.copyToClipboard(text);
     }
     getElementAttributes(elNode) {
@@ -2629,8 +2628,6 @@ ${indent}</${tagName}>`;
       const isChecked = (key) => filters ? filters[key] !== false : true;
       let text = "";
       if (isChecked("layerSummary")) {
-        text += `### HoverSource Component Metadata
-`;
         text += `Found ${this.layerStack.length} layer(s), ordered from leaf (Layer 1) to root:
 
 `;
@@ -3378,7 +3375,7 @@ ${this.getMinifiedHTML(targetElToCopy)}
       const config = this.controller.getConfig();
       const filters = config?.metadataFilter?.filters?.design;
       const isChecked = (key) => filters ? filters[key] !== false : true;
-      let lines = ["### HoverSource Design Placement Metadata"];
+      let lines = [];
       if (isChecked("compInfo")) {
         const lineColStr = p.line ? ` (Line: ${p.line}, Column: ${p.column})` : "";
         lines.push(

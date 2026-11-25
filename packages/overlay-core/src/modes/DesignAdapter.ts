@@ -1,6 +1,7 @@
 import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js";
 import { SourceResolver } from "@hoversource/source-resolver";
 import { escapeHtml } from "../safeDom.js";
+import { DEFAULT_SHORTCUTS, formatShortcutLabel, isMacPlatform } from "../shortcuts.js";
 
 export type SnapBoundaryH = "Left-Edge" | "Right-Edge" | "Center-Axis";
 export type SnapBoundaryV = "Top-Edge" | "Bottom-Edge" | "Center-Axis";
@@ -704,9 +705,12 @@ export class DesignAdapter implements InteractionMode {
 
     const config = this.controller.getConfig();
     const shortcuts = config?.shortcuts;
-    const copyLabel = shortcuts?.copyMetadata?.key ? `Alt+${shortcuts.copyMetadata.key.toUpperCase()}` : "Alt+C";
-    const freezeLabel = shortcuts?.toggleFreeze?.key ? `Alt+${shortcuts.toggleFreeze.key.toUpperCase()}` : "Alt+P";
-    const modeLabel = shortcuts?.toggleMode?.key ? `Alt+${shortcuts.toggleMode.key.toUpperCase()}` : "Alt+X";
+    const isMac = isMacPlatform();
+    const copyLabel = formatShortcutLabel(shortcuts?.copyMetadata ?? DEFAULT_SHORTCUTS.copyMetadata, isMac);
+    const freezeLabel = formatShortcutLabel(shortcuts?.toggleFreeze ?? DEFAULT_SHORTCUTS.toggleFreeze, isMac);
+    const modeLabel = formatShortcutLabel(shortcuts?.toggleMode ?? DEFAULT_SHORTCUTS.toggleMode, isMac);
+    const uiLabel = formatShortcutLabel(shortcuts?.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI, isMac);
+    const filterLabel = formatShortcutLabel(shortcuts?.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel, isMac);
 
     // Calculate active placement coordinates
     const dotViewportX = (this.isSnappedH ? this.snapX : this.crosshairX) + this.dX;
@@ -726,8 +730,8 @@ export class DesignAdapter implements InteractionMode {
       ? info.fileName.split('/').pop()?.split('\\').pop() || "unknown"
       : "unknown";
 
-    const hintText = `Drag the Crosshair to position | Press ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze & Nudge"} | ${copyLabel} to Copy Design Metadata | ${modeLabel} to Switch Mode`;
-    const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+    const hintText = `Drag the Crosshair to position | Press ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze & Nudge"} | ${copyLabel} to Copy Design Metadata | ${filterLabel} for Filters | ${uiLabel} to Hide/Show | ${modeLabel} to Switch Mode`;
+    const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
 
     let vueHint = "";
     if (info.framework === "Vue" && !info.lineNumber) {
@@ -1076,7 +1080,10 @@ The following is NOT resolved automatically and requires your judgment:
   }
 
   public onConfigUpdate(newConfig: any): void {
-    this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
+    this.maxTraversalDepth = newConfig?.maxTraversalDepth ?? 32;
+    if (this.targetElement && this.controller.isUIVisible()) {
+      this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
+    }
   }
 
   public onUIVisibilityChanged(visible: boolean): void {

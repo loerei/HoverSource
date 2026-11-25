@@ -643,4 +643,104 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
       expect(spy).not.toHaveBeenCalled();
     }
   });
+
+  it("routes custom/macOS toggleFilterPanel and updates Inspector & Design tooltip footers immediately on HOVERSOURCE_CONFIG_CHANGED", async () => {
+    vi.useFakeTimers();
+    const spies = installInnerHtmlSpies();
+    vi.stubGlobal("navigator", {
+      platform: "Win32",
+      clipboard: { writeText: clipboardWriteMock },
+    });
+
+    activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 1000 });
+    expect(activeEngine).not.toBeNull();
+
+    const shadow = document.getElementById("hoversource-host")!.shadowRoot!;
+    const target = document.createElement("button");
+    target.setAttribute("data-hs-source", "App.tsx:10:2");
+    target.textContent = "Save";
+    document.body.appendChild(target);
+    vi.spyOn(document, "elementsFromPoint").mockReturnValue([target]);
+
+    // Trigger hover in Inspector mode (activeEngine starts in Inspector mode)
+    target.dispatchEvent(new PointerEvent("pointerover", { clientX: 15, clientY: 15, bubbles: true }));
+    await vi.advanceTimersByTimeAsync(60);
+
+    const tooltipBox = shadow.querySelector(".hoversource-tooltip") as HTMLElement;
+    expect(tooltipBox.textContent).toContain("Ctrl+Alt+D for Filters");
+    expect(tooltipBox.textContent).toContain("Alt+H to Hide/Show");
+    expect(tooltipBox.textContent).toContain("Alt+Shift+Scroll for Layers");
+
+    // Push config update with custom toggleFilterPanel & metaKey toggleUI via HOVERSOURCE_CONFIG_CHANGED
+    const updatedShortcuts = {
+      toggleUI: { key: "u", altKey: false, ctrlKey: false, shiftKey: false, metaKey: true },
+      toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+      toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+      copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+      copyAllLayers: { key: "c", altKey: true, ctrlKey: false, shiftKey: true, metaKey: false },
+      openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+      toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+      toggleFilterPanel: { key: "d", altKey: true, ctrlKey: false, shiftKey: false, metaKey: true },
+    };
+
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: window.location.origin,
+        source: window,
+        data: {
+          type: "HOVERSOURCE_CONFIG_CHANGED",
+          config: {
+            theme: "dark",
+            minimalModeByDefault: false,
+            shortcuts: updatedShortcuts,
+            layerPickerScroll: { altKey: true, shiftKey: false, ctrlKey: true, metaKey: false },
+          },
+        },
+      })
+    );
+
+    // Inspector tooltip should update immediately without re-hovering
+    expect(tooltipBox.textContent).toContain("Alt+Win+D for Filters");
+    expect(tooltipBox.textContent).toContain("Win+U to Hide/Show");
+    expect(tooltipBox.textContent).toContain("Ctrl+Alt+Scroll for Layers");
+
+    // Old Alt+Ctrl+D should no longer open filterPanel, whereas macOS Option+Cmd+D (e.key="∂", e.code="KeyD") should
+    const panel = shadow.querySelector(".hoversource-config-panel") as HTMLElement;
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", code: "KeyD", altKey: true, ctrlKey: true }));
+    expect(panel.style.display).toBe("none");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "∂", code: "KeyD", altKey: true, metaKey: true }));
+    expect(panel.style.display).toBe("block");
+
+    // Switch to Design Mode via Alt+X (using Option dead-key "≈" + KeyX)
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "≈", code: "KeyX", altKey: true }));
+    // Trigger freeze in Design Mode so tooltip renders
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "π", code: "KeyP", altKey: true }));
+    expect(tooltipBox.textContent).toContain("Design Mode");
+    expect(tooltipBox.textContent).toContain("Alt+Win+D for Filters");
+    expect(tooltipBox.textContent).toContain("Win+U to Hide/Show");
+
+    // Update shortcuts again via HOVERSOURCE_CONFIG_CHANGED while in Design Mode
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        origin: window.location.origin,
+        source: window,
+        data: {
+          type: "HOVERSOURCE_CONFIG_CHANGED",
+          config: {
+            theme: "dark",
+            shortcuts: {
+              ...updatedShortcuts,
+              toggleFilterPanel: { key: "f", altKey: true, ctrlKey: true, shiftKey: false, metaKey: false },
+            },
+          },
+        },
+      })
+    );
+    expect(tooltipBox.textContent).toContain("Ctrl+Alt+F for Filters");
+
+    for (const spy of spies) {
+      expect(spy).not.toHaveBeenCalled();
+    }
+  });
 });

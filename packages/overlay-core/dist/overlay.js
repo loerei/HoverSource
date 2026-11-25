@@ -6,6 +6,7 @@ import { companionRequestJson } from "./companionTransport.js";
 import { waitForDomBody } from "./domReady.js";
 import { initInspectorMutationObserver, disconnectInspectorMutationObserver } from "./inspector.js";
 import { createSafeFragmentFromHtml, setElementContentSafely, el } from "./safeDom.js";
+import { DEFAULT_SHORTCUTS, DEFAULT_LAYER_SCROLL_MODIFIERS, matchShortcut } from "./shortcuts.js";
 export { waitForDomBody };
 export class OverlayEngine {
     static launchEpoch = 0;
@@ -155,13 +156,16 @@ export class OverlayEngine {
             desnappingThreshold: 15,
             maxTraversalDepth: 32,
             shortcuts: {
-                toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-                toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-                toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-                copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-                openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-                toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
-            }
+                toggleUI: { ...DEFAULT_SHORTCUTS.toggleUI },
+                toggleMinimal: { ...DEFAULT_SHORTCUTS.toggleMinimal },
+                toggleFreeze: { ...DEFAULT_SHORTCUTS.toggleFreeze },
+                copyMetadata: { ...DEFAULT_SHORTCUTS.copyMetadata },
+                copyAllLayers: { ...DEFAULT_SHORTCUTS.copyAllLayers },
+                openDashboard: { ...DEFAULT_SHORTCUTS.openDashboard },
+                toggleMode: { ...DEFAULT_SHORTCUTS.toggleMode },
+                toggleFilterPanel: { ...DEFAULT_SHORTCUTS.toggleFilterPanel }
+            },
+            layerPickerScroll: { ...DEFAULT_LAYER_SCROLL_MODIFIERS }
         };
     }
     initStyles() {
@@ -588,43 +592,43 @@ export class OverlayEngine {
         this.shortcutsAttached = true;
     }
     handleModeShortcuts(e, shortcuts) {
-        const toggleModeShortcut = shortcuts.toggleMode ?? { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
-        if (this.matchShortcut(e, shortcuts.openDashboard)) {
+        const toggleModeShortcut = shortcuts.toggleMode ?? DEFAULT_SHORTCUTS.toggleMode;
+        if (matchShortcut(e, shortcuts.openDashboard ?? DEFAULT_SHORTCUTS.openDashboard)) {
             e.preventDefault();
             console.log("[HoverSource] Shortcut matched: openDashboard");
             this.openDashboardInBrowser();
         }
-        else if (this.matchShortcut(e, toggleModeShortcut)) {
+        else if (matchShortcut(e, toggleModeShortcut)) {
             e.preventDefault();
             this.switchMode();
         }
-        else if (this.matchShortcut(e, shortcuts.toggleMinimal)) {
+        else if (matchShortcut(e, shortcuts.toggleMinimal ?? DEFAULT_SHORTCUTS.toggleMinimal)) {
             e.preventDefault();
             this.activeMode.onShortcut('toggleMinimal');
         }
-        else if (this.matchShortcut(e, shortcuts.toggleFreeze)) {
+        else if (matchShortcut(e, shortcuts.toggleFreeze ?? DEFAULT_SHORTCUTS.toggleFreeze)) {
             e.preventDefault();
             this.activeMode.onShortcut('toggleFreeze');
         }
-        else if (this.matchShortcut(e, shortcuts.copyMetadata)) {
+        else if (matchShortcut(e, shortcuts.copyMetadata ?? DEFAULT_SHORTCUTS.copyMetadata)) {
             e.preventDefault();
             this.activeMode.onShortcut('copyMetadata');
         }
-        else if (this.matchShortcut(e, shortcuts.copyAllLayers ?? { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
+        else if (matchShortcut(e, shortcuts.copyAllLayers ?? DEFAULT_SHORTCUTS.copyAllLayers)) {
             e.preventDefault();
             this.activeMode.onShortcut('copyAllLayers');
         }
     }
     handleKeyDown = (e) => {
-        if (e.altKey && e.ctrlKey && e.key.toLowerCase() === "d") {
+        const shortcuts = this.config?.shortcuts;
+        if (matchShortcut(e, shortcuts?.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel)) {
             e.preventDefault();
             this.toggleFilterPanel();
             return;
         }
-        const shortcuts = this.config?.shortcuts;
         if (!shortcuts)
             return;
-        if (this.matchShortcut(e, shortcuts.toggleUI)) {
+        if (matchShortcut(e, shortcuts.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI)) {
             e.preventDefault();
             this.uiVisible = !this.uiVisible;
             if (this.container) {
@@ -890,19 +894,6 @@ export class OverlayEngine {
             .catch(e => {
             console.error("[HoverSource] Failed to request dashboard open:", e);
         });
-    }
-    matchShortcut(e, shortcut) {
-        if (!shortcut?.key)
-            return false;
-        if (!!e.altKey !== !!shortcut.altKey || !!e.ctrlKey !== !!shortcut.ctrlKey || !!e.shiftKey !== !!shortcut.shiftKey)
-            return false;
-        const targetKey = shortcut.key.toLowerCase();
-        const keyMatch = e.key.toLowerCase() === targetKey;
-        const codeMatch = e.code &&
-            (e.code.toLowerCase() === targetKey ||
-                e.code.toLowerCase() === `key${targetKey}` ||
-                e.code.toLowerCase() === `digit${targetKey}`);
-        return keyMatch || !!codeMatch;
     }
     isTyping(e) {
         const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;

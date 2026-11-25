@@ -1810,6 +1810,82 @@
     return element;
   }
 
+  // src/shortcuts.ts
+  var DEFAULT_SHORTCUTS = {
+    toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    copyAllLayers: { key: "c", altKey: true, ctrlKey: false, shiftKey: true, metaKey: false },
+    openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    toggleFilterPanel: { key: "d", altKey: true, ctrlKey: true, shiftKey: false, metaKey: false }
+  };
+  var DEFAULT_LAYER_SCROLL_MODIFIERS = {
+    altKey: true,
+    shiftKey: true,
+    ctrlKey: false,
+    metaKey: false
+  };
+  function isMacPlatform() {
+    if (typeof navigator === "undefined")
+      return false;
+    const nav = navigator;
+    const platform = nav.userAgentData?.platform || navigator.platform || "";
+    return /mac/i.test(platform);
+  }
+  function formatModifierLabel(mods, isMac = isMacPlatform()) {
+    if (!mods)
+      return "";
+    const parts = [];
+    if (isMac) {
+      if (mods.ctrlKey)
+        parts.push("\u2303");
+      if (mods.altKey)
+        parts.push("\u2325");
+      if (mods.shiftKey)
+        parts.push("\u21E7");
+      if (mods.metaKey)
+        parts.push("\u2318");
+      return parts.join("");
+    }
+    if (mods.ctrlKey)
+      parts.push("Ctrl");
+    if (mods.altKey)
+      parts.push("Alt");
+    if (mods.shiftKey)
+      parts.push("Shift");
+    if (mods.metaKey)
+      parts.push("Win");
+    return parts.join("+");
+  }
+  function formatShortcutLabel(shortcut, isMac = isMacPlatform()) {
+    if (!shortcut?.key)
+      return "";
+    const modLabel = formatModifierLabel(shortcut, isMac);
+    const keyLabel = shortcut.key.length === 1 ? shortcut.key.toUpperCase() : shortcut.key.charAt(0).toUpperCase() + shortcut.key.slice(1);
+    if (!modLabel)
+      return keyLabel;
+    return isMac ? `${modLabel}${keyLabel}` : `${modLabel}+${keyLabel}`;
+  }
+  function matchShortcut(e, shortcut) {
+    if (!shortcut?.key)
+      return false;
+    if (!!e.altKey !== !!shortcut.altKey || !!e.ctrlKey !== !!shortcut.ctrlKey || !!e.shiftKey !== !!shortcut.shiftKey || !!e.metaKey !== !!shortcut.metaKey) {
+      return false;
+    }
+    const targetKey = shortcut.key.toLowerCase();
+    const keyMatch = typeof e.key === "string" && e.key.toLowerCase() === targetKey;
+    const code = typeof e.code === "string" ? e.code.toLowerCase() : "";
+    const codeMatch = code.length > 0 && (code === targetKey || code === `key${targetKey}` || code === `digit${targetKey}`);
+    return keyMatch || !!codeMatch;
+  }
+  function matchScrollModifiers(e, mods) {
+    if (!mods)
+      return false;
+    return !!e.altKey === !!mods.altKey && !!e.ctrlKey === !!mods.ctrlKey && !!e.shiftKey === !!mods.shiftKey && !!e.metaKey === !!mods.metaKey;
+  }
+
   // src/modes/InspectorAdapter.ts
   var InspectorAdapter = class {
     id = "inspector";
@@ -1826,13 +1902,13 @@
     layerStack = [];
     activeLayerIndex = 0;
     layerPickerEnabled = true;
-    layerScrollModifiers = { altKey: true, shiftKey: true, ctrlKey: false };
+    layerScrollModifiers = { ...DEFAULT_LAYER_SCROLL_MODIFIERS };
     activate(controller) {
       this.controller = controller;
       const config = this.controller.getConfig();
       this.minimalMode = !!config?.minimalModeByDefault;
       this.layerPickerEnabled = config?.layerPickerEnabled !== false;
-      this.layerScrollModifiers = config?.layerPickerScroll ?? { altKey: true, shiftKey: true, ctrlKey: false };
+      this.layerScrollModifiers = config?.layerPickerScroll ?? { ...DEFAULT_LAYER_SCROLL_MODIFIERS };
       this.maxTraversalDepth = config?.maxTraversalDepth ?? 32;
       if (this.layerPickerEnabled) {
         window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
@@ -1943,9 +2019,11 @@
       }
     }
     onConfigUpdate(newConfig) {
-      this.minimalMode = !!newConfig.minimalModeByDefault;
-      this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
-      const newEnabled = newConfig.layerPickerEnabled !== false;
+      if (newConfig?.minimalModeByDefault !== void 0) {
+        this.minimalMode = !!newConfig.minimalModeByDefault;
+      }
+      this.maxTraversalDepth = newConfig?.maxTraversalDepth ?? 32;
+      const newEnabled = newConfig?.layerPickerEnabled !== false;
       if (newEnabled !== this.layerPickerEnabled) {
         this.layerPickerEnabled = newEnabled;
         if (newEnabled) {
@@ -1954,14 +2032,15 @@
           window.removeEventListener("wheel", this.handleAltScroll, { capture: true });
         }
       }
-      this.layerScrollModifiers = newConfig.layerPickerScroll ?? this.layerScrollModifiers;
-      this.renderTooltip({ clientX: 0, clientY: 0 });
+      this.layerScrollModifiers = newConfig?.layerPickerScroll ?? this.layerScrollModifiers;
+      if (this.currentElement && this.currentSourceInfo && this.controller.isUIVisible()) {
+        this.renderTooltip({ clientX: 0, clientY: 0 });
+      }
     }
     onUIVisibilityChanged(visible) {
     }
     handleAltScroll = (e) => {
-      const m = this.layerScrollModifiers;
-      if (!!e.altKey !== !!m.altKey || !!e.shiftKey !== !!m.shiftKey || !!e.ctrlKey !== !!m.ctrlKey)
+      if (!matchScrollModifiers(e, this.layerScrollModifiers))
         return;
       if (this.layerStack.length === 0)
         return;
@@ -2099,22 +2178,9 @@
         }
       }).catch((err) => console.warn("[HoverSource] Static context fetch failed:", err));
     }
-    getShortcutLabel(shortcut) {
-      if (!shortcut)
-        return "";
-      const parts = [];
-      if (shortcut.ctrlKey)
-        parts.push("Ctrl");
-      if (shortcut.altKey)
-        parts.push("Alt");
-      if (shortcut.shiftKey)
-        parts.push("Shift");
-      parts.push(shortcut.key.toUpperCase());
-      return parts.join("+");
-    }
     renderMinimalTooltip(element, info, labels) {
-      const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
-      const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
+      const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, filterLabel, uiLabel, scrollLabel, dbLabel, modeLabel } = labels;
+      const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${filterLabel} for Filters | ${uiLabel} to Hide/Show | ${scrollLabel} for Layers | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
       const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
       let vueHint = "";
       if (info.framework === "Vue" && !info.lineNumber) {
@@ -2300,7 +2366,7 @@
       return html;
     }
     renderDetailedTooltip(element, info, labels) {
-      const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
+      const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, filterLabel, uiLabel, scrollLabel, dbLabel, modeLabel } = labels;
       const computed = globalThis.getComputedStyle(element);
       const shadow = computed.boxShadow;
       const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
@@ -2320,7 +2386,7 @@
       html += this.renderVisualDetails(shadow, animation, info);
       html += this.renderParentEffects(info);
       html += this.renderStaticMetadata(info);
-      const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
+      const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${filterLabel} for Filters | ${uiLabel} to Hide/Show | ${scrollLabel} for Layers | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
       const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
       let vueHint = "";
       if (info.framework === "Vue" && !info.lineNumber) {
@@ -2351,12 +2417,17 @@
       const info = this.currentSourceInfo;
       const config = this.controller.getConfig();
       const shortcuts = config?.shortcuts;
-      const copyLabel = this.getShortcutLabel(shortcuts?.copyMetadata) || "[C]";
-      const copyAllLabel = this.getShortcutLabel(shortcuts?.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true }) || "[Alt+Shift+C]";
-      const minimalLabel = this.getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
-      const freezeLabel = this.getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
-      const dbLabel = this.getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
-      const modeLabel = this.getShortcutLabel(shortcuts?.toggleMode) || "[Alt+X]";
+      const isMac = isMacPlatform();
+      const copyLabel = formatShortcutLabel(shortcuts?.copyMetadata ?? DEFAULT_SHORTCUTS.copyMetadata, isMac);
+      const copyAllLabel = formatShortcutLabel(shortcuts?.copyAllLayers ?? DEFAULT_SHORTCUTS.copyAllLayers, isMac);
+      const minimalLabel = formatShortcutLabel(shortcuts?.toggleMinimal ?? DEFAULT_SHORTCUTS.toggleMinimal, isMac);
+      const freezeLabel = formatShortcutLabel(shortcuts?.toggleFreeze ?? DEFAULT_SHORTCUTS.toggleFreeze, isMac);
+      const filterLabel = formatShortcutLabel(shortcuts?.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel, isMac);
+      const uiLabel = formatShortcutLabel(shortcuts?.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI, isMac);
+      const dbLabel = formatShortcutLabel(shortcuts?.openDashboard ?? DEFAULT_SHORTCUTS.openDashboard, isMac);
+      const modeLabel = formatShortcutLabel(shortcuts?.toggleMode ?? DEFAULT_SHORTCUTS.toggleMode, isMac);
+      const scrollModLabel = formatModifierLabel(this.layerScrollModifiers, isMac);
+      const scrollLabel = scrollModLabel ? `${scrollModLabel}+Scroll` : "Scroll";
       const topLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M296.5 69.2C311.4 62.3 328.6 62.3 343.5 69.2L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L296.5 69.2z" /></svg>`;
       const chevronLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M112.1 154.4L276.4 230.3C304.1 243.1 336 243.1 363.7 230.3L528 154.4L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L112.1 154.4z" /></svg>`;
       const layerDots = this.layerStack.map((el2, i) => {
@@ -2368,21 +2439,9 @@
         const svgContent = i === 0 ? topLayerSvg : chevronLayerSvg;
         return `<div class="hs-layer-dot${isActive ? " hs-layer-dot--active" : ""}" style="z-index: ${zIndex}" title="Layer ${i + 1}: ${escapeHtml(label)}">${svgContent}</div>`;
       }).join("");
-      const scrollHint = (() => {
-        const m = this.layerScrollModifiers;
-        const parts = [];
-        if (m.ctrlKey)
-          parts.push("Ctrl");
-        if (m.altKey)
-          parts.push("Alt");
-        if (m.shiftKey)
-          parts.push("Shift");
-        parts.push("Scroll");
-        return parts.join("+");
-      })();
-      const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
+      const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${escapeHtml(scrollLabel)}</div>` : "";
       const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
-      const labels = { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel };
+      const labels = { copyLabel, copyAllLabel, freezeLabel, minimalLabel, filterLabel, uiLabel, scrollLabel, dbLabel, modeLabel };
       const innerHtml = this.minimalMode ? this.renderMinimalTooltip(element, info, labels) : this.renderDetailedTooltip(element, info, labels);
       const html = `<div class="hs-tooltip-content-wrapper"><div style="flex:1;min-width:0">${innerHtml}</div>${layerColumnHtml}</div>`;
       this.controller.drawTooltip(html, e);
@@ -3254,9 +3313,12 @@ ${this.getMinifiedHTML(targetElToCopy)}
       };
       const config = this.controller.getConfig();
       const shortcuts = config?.shortcuts;
-      const copyLabel = shortcuts?.copyMetadata?.key ? `Alt+${shortcuts.copyMetadata.key.toUpperCase()}` : "Alt+C";
-      const freezeLabel = shortcuts?.toggleFreeze?.key ? `Alt+${shortcuts.toggleFreeze.key.toUpperCase()}` : "Alt+P";
-      const modeLabel = shortcuts?.toggleMode?.key ? `Alt+${shortcuts.toggleMode.key.toUpperCase()}` : "Alt+X";
+      const isMac = isMacPlatform();
+      const copyLabel = formatShortcutLabel(shortcuts?.copyMetadata ?? DEFAULT_SHORTCUTS.copyMetadata, isMac);
+      const freezeLabel = formatShortcutLabel(shortcuts?.toggleFreeze ?? DEFAULT_SHORTCUTS.toggleFreeze, isMac);
+      const modeLabel = formatShortcutLabel(shortcuts?.toggleMode ?? DEFAULT_SHORTCUTS.toggleMode, isMac);
+      const uiLabel = formatShortcutLabel(shortcuts?.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI, isMac);
+      const filterLabel = formatShortcutLabel(shortcuts?.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel, isMac);
       const dotViewportX = (this.isSnappedH ? this.snapX : this.crosshairX) + this.dX;
       const dotViewportY = (this.isSnappedV ? this.snapY : this.crosshairY) + this.dY;
       const offsetH = this.getHorizontalOffset(dotViewportX);
@@ -3266,8 +3328,8 @@ ${this.getMinifiedHTML(targetElToCopy)}
       const hStatus = this.formatAnchorStatus(this.anchorHElement, selectorH, this.snapBoundaryH, offsetH);
       const vStatus = this.formatAnchorStatus(this.anchorVElement, selectorV, this.snapBoundaryV, offsetV);
       const fileBase = info.fileName ? info.fileName.split("/").pop()?.split("\\").pop() || "unknown" : "unknown";
-      const hintText = `Drag the Crosshair to position | Press ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze & Nudge"} | ${copyLabel} to Copy Design Metadata | ${modeLabel} to Switch Mode`;
-      const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${part.trim()}</span>`).join(" | ");
+      const hintText = `Drag the Crosshair to position | Press ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze & Nudge"} | ${copyLabel} to Copy Design Metadata | ${filterLabel} for Filters | ${uiLabel} to Hide/Show | ${modeLabel} to Switch Mode`;
+      const hintHtml = hintText.split("|").map((part) => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
       let vueHint = "";
       if (info.framework === "Vue" && !info.lineNumber) {
         vueHint = `
@@ -3520,7 +3582,10 @@ The following is NOT resolved automatically and requires your judgment:
       this.controller.copyToClipboard(text);
     }
     onConfigUpdate(newConfig) {
-      this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
+      this.maxTraversalDepth = newConfig?.maxTraversalDepth ?? 32;
+      if (this.targetElement && this.controller.isUIVisible()) {
+        this.renderTooltip({ clientX: 0, clientY: 0 });
+      }
     }
     onUIVisibilityChanged(visible) {
       if (this.svgOverlay) {
@@ -3811,13 +3876,16 @@ The following is NOT resolved automatically and requires your judgment:
         desnappingThreshold: 15,
         maxTraversalDepth: 32,
         shortcuts: {
-          toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-          copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-          openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
-        }
+          toggleUI: { ...DEFAULT_SHORTCUTS.toggleUI },
+          toggleMinimal: { ...DEFAULT_SHORTCUTS.toggleMinimal },
+          toggleFreeze: { ...DEFAULT_SHORTCUTS.toggleFreeze },
+          copyMetadata: { ...DEFAULT_SHORTCUTS.copyMetadata },
+          copyAllLayers: { ...DEFAULT_SHORTCUTS.copyAllLayers },
+          openDashboard: { ...DEFAULT_SHORTCUTS.openDashboard },
+          toggleMode: { ...DEFAULT_SHORTCUTS.toggleMode },
+          toggleFilterPanel: { ...DEFAULT_SHORTCUTS.toggleFilterPanel }
+        },
+        layerPickerScroll: { ...DEFAULT_LAYER_SCROLL_MODIFIERS }
       };
     }
     initStyles() {
@@ -4239,38 +4307,38 @@ The following is NOT resolved automatically and requires your judgment:
       this.shortcutsAttached = true;
     }
     handleModeShortcuts(e, shortcuts) {
-      const toggleModeShortcut = shortcuts.toggleMode ?? { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
-      if (this.matchShortcut(e, shortcuts.openDashboard)) {
+      const toggleModeShortcut = shortcuts.toggleMode ?? DEFAULT_SHORTCUTS.toggleMode;
+      if (matchShortcut(e, shortcuts.openDashboard ?? DEFAULT_SHORTCUTS.openDashboard)) {
         e.preventDefault();
         console.log("[HoverSource] Shortcut matched: openDashboard");
         this.openDashboardInBrowser();
-      } else if (this.matchShortcut(e, toggleModeShortcut)) {
+      } else if (matchShortcut(e, toggleModeShortcut)) {
         e.preventDefault();
         this.switchMode();
-      } else if (this.matchShortcut(e, shortcuts.toggleMinimal)) {
+      } else if (matchShortcut(e, shortcuts.toggleMinimal ?? DEFAULT_SHORTCUTS.toggleMinimal)) {
         e.preventDefault();
         this.activeMode.onShortcut("toggleMinimal");
-      } else if (this.matchShortcut(e, shortcuts.toggleFreeze)) {
+      } else if (matchShortcut(e, shortcuts.toggleFreeze ?? DEFAULT_SHORTCUTS.toggleFreeze)) {
         e.preventDefault();
         this.activeMode.onShortcut("toggleFreeze");
-      } else if (this.matchShortcut(e, shortcuts.copyMetadata)) {
+      } else if (matchShortcut(e, shortcuts.copyMetadata ?? DEFAULT_SHORTCUTS.copyMetadata)) {
         e.preventDefault();
         this.activeMode.onShortcut("copyMetadata");
-      } else if (this.matchShortcut(e, shortcuts.copyAllLayers ?? { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
+      } else if (matchShortcut(e, shortcuts.copyAllLayers ?? DEFAULT_SHORTCUTS.copyAllLayers)) {
         e.preventDefault();
         this.activeMode.onShortcut("copyAllLayers");
       }
     }
     handleKeyDown = (e) => {
-      if (e.altKey && e.ctrlKey && e.key.toLowerCase() === "d") {
+      const shortcuts = this.config?.shortcuts;
+      if (matchShortcut(e, shortcuts?.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel)) {
         e.preventDefault();
         this.toggleFilterPanel();
         return;
       }
-      const shortcuts = this.config?.shortcuts;
       if (!shortcuts)
         return;
-      if (this.matchShortcut(e, shortcuts.toggleUI)) {
+      if (matchShortcut(e, shortcuts.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI)) {
         e.preventDefault();
         this.uiVisible = !this.uiVisible;
         if (this.container) {
@@ -4539,16 +4607,6 @@ The following is NOT resolved automatically and requires your judgment:
       }).catch((e) => {
         console.error("[HoverSource] Failed to request dashboard open:", e);
       });
-    }
-    matchShortcut(e, shortcut) {
-      if (!shortcut?.key)
-        return false;
-      if (!!e.altKey !== !!shortcut.altKey || !!e.ctrlKey !== !!shortcut.ctrlKey || !!e.shiftKey !== !!shortcut.shiftKey)
-        return false;
-      const targetKey = shortcut.key.toLowerCase();
-      const keyMatch = e.key.toLowerCase() === targetKey;
-      const codeMatch = e.code && (e.code.toLowerCase() === targetKey || e.code.toLowerCase() === `key${targetKey}` || e.code.toLowerCase() === `digit${targetKey}`);
-      return keyMatch || !!codeMatch;
     }
     isTyping(e) {
       const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;

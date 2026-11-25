@@ -28,7 +28,6 @@ export declare class InspectorAdapter implements InteractionMode {
     private fetchBackgroundValidation;
     private fetchStaticHtmlResolution;
     private fetchStaticContextForElement;
-    private getShortcutLabel;
     private renderMinimalTooltip;
     private renderBasicStats;
     private renderVisualDetails;

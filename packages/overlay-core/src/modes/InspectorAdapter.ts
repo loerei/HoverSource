@@ -3,12 +3,24 @@ import { SourceResolver, ParentVisualEffect } from "@hoversource/source-resolver
 import { inspectVisualContext } from "../inspector.js";
 import { companionRequestJson } from "../companionTransport.js";
 import { escapeHtml } from "../safeDom.js";
+import {
+  DEFAULT_SHORTCUTS,
+  DEFAULT_LAYER_SCROLL_MODIFIERS,
+  ScrollModifierConfig,
+  formatModifierLabel,
+  formatShortcutLabel,
+  isMacPlatform,
+  matchScrollModifiers,
+} from "../shortcuts.js";
 
 interface TooltipLabels {
   copyLabel: string;
   copyAllLabel: string;
   freezeLabel: string;
   minimalLabel: string;
+  filterLabel: string;
+  uiLabel: string;
+  scrollLabel: string;
   dbLabel: string;
   modeLabel: string;
 }
@@ -31,14 +43,14 @@ export class InspectorAdapter implements InteractionMode {
   private layerStack: HTMLElement[] = [];
   private activeLayerIndex = 0;
   private layerPickerEnabled = true;
-  private layerScrollModifiers = { altKey: true, shiftKey: true, ctrlKey: false };
+  private layerScrollModifiers: ScrollModifierConfig = { ...DEFAULT_LAYER_SCROLL_MODIFIERS };
 
   public activate(controller: OverlayController): void {
     this.controller = controller;
     const config = this.controller.getConfig();
     this.minimalMode = !!config?.minimalModeByDefault;
     this.layerPickerEnabled = config?.layerPickerEnabled !== false;
-    this.layerScrollModifiers = config?.layerPickerScroll ?? { altKey: true, shiftKey: true, ctrlKey: false };
+    this.layerScrollModifiers = config?.layerPickerScroll ?? { ...DEFAULT_LAYER_SCROLL_MODIFIERS };
     this.maxTraversalDepth = config?.maxTraversalDepth ?? 32;
     if (this.layerPickerEnabled) {
       window.addEventListener("wheel", this.handleAltScroll, { capture: true, passive: false });
@@ -161,9 +173,11 @@ export class InspectorAdapter implements InteractionMode {
   }
 
   public onConfigUpdate(newConfig: any): void {
-    this.minimalMode = !!newConfig.minimalModeByDefault;
-    this.maxTraversalDepth = newConfig.maxTraversalDepth ?? 32;
-    const newEnabled = newConfig.layerPickerEnabled !== false;
+    if (newConfig?.minimalModeByDefault !== undefined) {
+      this.minimalMode = !!newConfig.minimalModeByDefault;
+    }
+    this.maxTraversalDepth = newConfig?.maxTraversalDepth ?? 32;
+    const newEnabled = newConfig?.layerPickerEnabled !== false;
     if (newEnabled !== this.layerPickerEnabled) {
       this.layerPickerEnabled = newEnabled;
       if (newEnabled) {
@@ -172,16 +186,17 @@ export class InspectorAdapter implements InteractionMode {
         window.removeEventListener("wheel", this.handleAltScroll, { capture: true } as any);
       }
     }
-    this.layerScrollModifiers = newConfig.layerPickerScroll ?? this.layerScrollModifiers;
-    this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
+    this.layerScrollModifiers = newConfig?.layerPickerScroll ?? this.layerScrollModifiers;
+    if (this.currentElement && this.currentSourceInfo && this.controller.isUIVisible()) {
+      this.renderTooltip({ clientX: 0, clientY: 0 } as PointerEvent);
+    }
   }
 
   public onUIVisibilityChanged(visible: boolean): void {
   }
 
   private readonly handleAltScroll = (e: WheelEvent): void => {
-    const m = this.layerScrollModifiers;
-    if (!!e.altKey !== !!m.altKey || !!e.shiftKey !== !!m.shiftKey || !!e.ctrlKey !== !!m.ctrlKey) return;
+    if (!matchScrollModifiers(e, this.layerScrollModifiers)) return;
     if (this.layerStack.length === 0) return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -354,23 +369,13 @@ export class InspectorAdapter implements InteractionMode {
       .catch(err => console.warn("[HoverSource] Static context fetch failed:", err));
   }
 
-  private getShortcutLabel(shortcut: any): string {
-    if (!shortcut) return "";
-    const parts = [];
-    if (shortcut.ctrlKey) parts.push("Ctrl");
-    if (shortcut.altKey) parts.push("Alt");
-    if (shortcut.shiftKey) parts.push("Shift");
-    parts.push(shortcut.key.toUpperCase());
-    return parts.join("+");
-  }
-
   private renderMinimalTooltip(
     element: HTMLElement,
     info: any,
     labels: TooltipLabels
   ): string {
-    const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
-    const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
+    const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, filterLabel, uiLabel, scrollLabel, dbLabel, modeLabel } = labels;
+    const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Detailed | ${filterLabel} for Filters | ${uiLabel} to Hide/Show | ${scrollLabel} for Layers | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
     const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
 
     let vueHint = "";
@@ -582,7 +587,7 @@ export class InspectorAdapter implements InteractionMode {
     info: any,
     labels: TooltipLabels
   ): string {
-    const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel } = labels;
+    const { copyLabel, copyAllLabel, freezeLabel, minimalLabel, filterLabel, uiLabel, scrollLabel, dbLabel, modeLabel } = labels;
     const computed = globalThis.getComputedStyle(element);
     const shadow = computed.boxShadow;
     const animation = computed.animationName === "none" ? null : `${computed.animationName} ${computed.animationDuration}`;
@@ -605,7 +610,7 @@ export class InspectorAdapter implements InteractionMode {
     html += this.renderParentEffects(info);
     html += this.renderStaticMetadata(info);
 
-    const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
+    const hintText = `Press ${copyLabel} to copy | ${copyAllLabel} to copy all | ${freezeLabel} to ${this.isFrozen ? "Unfreeze" : "Freeze"} | ${minimalLabel} for Minimal | ${filterLabel} for Filters | ${uiLabel} to Hide/Show | ${scrollLabel} for Layers | ${dbLabel} for Config | ${modeLabel} to Switch Mode`;
     const hintHtml = hintText.split("|").map(part => `<span style="white-space: nowrap;">${escapeHtml(part.trim())}</span>`).join(" | ");
 
     let vueHint = "";
@@ -639,13 +644,18 @@ export class InspectorAdapter implements InteractionMode {
     const info = this.currentSourceInfo;
     const config = this.controller.getConfig();
     const shortcuts = config?.shortcuts;
+    const isMac = isMacPlatform();
 
-    const copyLabel = this.getShortcutLabel(shortcuts?.copyMetadata) || "[C]";
-    const copyAllLabel = this.getShortcutLabel(shortcuts?.copyAllLayers || { key: "c", altKey: true, ctrlKey: false, shiftKey: true }) || "[Alt+Shift+C]";
-    const minimalLabel = this.getShortcutLabel(shortcuts?.toggleMinimal) || "[M]";
-    const freezeLabel = this.getShortcutLabel(shortcuts?.toggleFreeze) || "[F]";
-    const dbLabel = this.getShortcutLabel(shortcuts?.openDashboard) || "[Alt+D]";
-    const modeLabel = this.getShortcutLabel(shortcuts?.toggleMode) || "[Alt+X]";
+    const copyLabel = formatShortcutLabel(shortcuts?.copyMetadata ?? DEFAULT_SHORTCUTS.copyMetadata, isMac);
+    const copyAllLabel = formatShortcutLabel(shortcuts?.copyAllLayers ?? DEFAULT_SHORTCUTS.copyAllLayers, isMac);
+    const minimalLabel = formatShortcutLabel(shortcuts?.toggleMinimal ?? DEFAULT_SHORTCUTS.toggleMinimal, isMac);
+    const freezeLabel = formatShortcutLabel(shortcuts?.toggleFreeze ?? DEFAULT_SHORTCUTS.toggleFreeze, isMac);
+    const filterLabel = formatShortcutLabel(shortcuts?.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel, isMac);
+    const uiLabel = formatShortcutLabel(shortcuts?.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI, isMac);
+    const dbLabel = formatShortcutLabel(shortcuts?.openDashboard ?? DEFAULT_SHORTCUTS.openDashboard, isMac);
+    const modeLabel = formatShortcutLabel(shortcuts?.toggleMode ?? DEFAULT_SHORTCUTS.toggleMode, isMac);
+    const scrollModLabel = formatModifierLabel(this.layerScrollModifiers, isMac);
+    const scrollLabel = scrollModLabel ? `${scrollModLabel}+Scroll` : "Scroll";
 
     // Build layer column (always rendered, even for a single layer)
     const topLayerSvg = `<svg viewBox="64 60 512 260" width="18" height="9" style="display:block"><path class="hs-layer-shape" d="M296.5 69.2C311.4 62.3 328.6 62.3 343.5 69.2L562.1 170.2C570.6 174.1 576 182.6 576 192C576 201.4 570.6 209.9 562.1 213.8L343.5 314.8C328.6 321.7 311.4 321.7 296.5 314.8L77.9 213.8C69.4 209.8 64 201.3 64 192C64 182.7 69.4 174.1 77.9 170.2L296.5 69.2z" /></svg>`;
@@ -661,19 +671,10 @@ export class InspectorAdapter implements InteractionMode {
       const svgContent = i === 0 ? topLayerSvg : chevronLayerSvg;
       return `<div class="hs-layer-dot${isActive ? " hs-layer-dot--active" : ""}" style="z-index: ${zIndex}" title="Layer ${i + 1}: ${escapeHtml(label)}">${svgContent}</div>`;
     }).join("");
-    const scrollHint = (() => {
-      const m = this.layerScrollModifiers;
-      const parts: string[] = [];
-      if (m.ctrlKey) parts.push('Ctrl');
-      if (m.altKey) parts.push('Alt');
-      if (m.shiftKey) parts.push('Shift');
-      parts.push('Scroll');
-      return parts.join('+');
-    })();
-    const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${scrollHint}</div>` : "";
+    const layerHint = this.layerStack.length > 1 ? `<div class="hs-layer-hint">${escapeHtml(scrollLabel)}</div>` : "";
     const layerColumnHtml = `<div class="hs-layer-column">${layerDots}${layerHint}</div>`;
 
-    const labels: TooltipLabels = { copyLabel, copyAllLabel, freezeLabel, minimalLabel, dbLabel, modeLabel };
+    const labels: TooltipLabels = { copyLabel, copyAllLabel, freezeLabel, minimalLabel, filterLabel, uiLabel, scrollLabel, dbLabel, modeLabel };
 
     const innerHtml = this.minimalMode
       ? this.renderMinimalTooltip(element, info, labels)

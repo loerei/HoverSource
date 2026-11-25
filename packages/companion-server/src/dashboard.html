@@ -58,7 +58,7 @@
         <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-2">
           HoverSource Console
         </h1>
-        <p class="text-slate-400 text-xs mt-0.5">Unified controls with instant config targeting & file deletion</p>
+        <p class="text-slate-400 text-xs mt-0.5">Unified controls with named presets, live sync &amp; shortcut management</p>
       </div>
       <div class="flex items-center gap-2 text-xs text-slate-400 bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
@@ -66,25 +66,26 @@
       </div>
     </header>
 
-    <!-- Top Target Bar -->
-    <div class="glass-card rounded-xl p-4 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-20">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-3 flex-1">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Target Config:</span>
-        <div class="relative custom-dropdown target-dropdown flex-1 max-w-[280px]">
-          <button type="button" class="custom-dropdown-btn w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none flex justify-between items-center gap-2">
-            <span class="custom-dropdown-label truncate text-left">Global Preferences (~/.hoversourcerc)</span>
-            <svg class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200 dropdown-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-          </button>
-          <div class="custom-dropdown-menu hidden absolute left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50 py-1 backdrop-blur-md overflow-hidden max-h-60 overflow-y-auto"></div>
-        </div>
-        <label for="custom-path-input" class="sr-only">Workspace path</label>
-        <input id="custom-path-input" type="text" class="custom-path-input hidden bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-xs text-slate-300 flex-1 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="Workspace path...">
+    <!-- Top Presets Bar -->
+    <div class="glass-card rounded-xl p-4 mb-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 relative z-20">
+      <div class="flex flex-wrap items-center gap-3 flex-1">
+        <label for="preset-select" class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Preset:</label>
+        <select id="preset-select" class="preset-select bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none min-w-[200px]">
+          <option value="">Default (Global Base)</option>
+        </select>
+        <button id="save-preset-btn" type="button" class="save-preset-btn bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium px-3 py-1.5 rounded-lg transition-all text-xs active:scale-95">
+          Save As Preset
+        </button>
+        <button id="delete-preset-btn" type="button" class="delete-preset-btn text-red-400 hover:text-red-300 border border-red-950/80 bg-red-950/20 hover:bg-red-950/40 font-medium px-3 py-1.5 rounded-lg transition-all text-xs active:scale-95 flex items-center gap-1.5 disabled:opacity-40 disabled:pointer-events-none" title="Delete selected named preset">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-11V4a1 1 0 00-1-1h-2a1 1 0 00-1 1v3M4 7h16" /></svg>
+          Delete Preset
+        </button>
+        <label class="inline-flex items-center gap-2 text-xs text-slate-300 bg-slate-900/70 border border-slate-800 rounded-lg px-3 py-1.5 cursor-pointer select-none">
+          <input id="bind-repo-checkbox" type="checkbox" class="bind-repo-checkbox rounded text-blue-500 bg-slate-900 border-slate-700 h-3.5 w-3.5">
+          <span class="bind-repo-label">Bind to Current Repo</span>
+        </label>
       </div>
       <div class="flex items-center gap-2.5 self-end">
-        <button class="delete-btn text-red-400 hover:text-red-300 border border-red-950/80 bg-red-950/20 hover:bg-red-950/40 font-medium px-3.5 py-1.5 rounded-lg transition-all text-xs active:scale-95 flex items-center gap-1.5" title="Delete this target's .hoversourcerc file">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-11V4a1 1 0 00-1-1h-2a1 1 0 00-1 1v3M4 7h16" /></svg>
-          Delete Config File
-        </button>
         <button class="reset-btn bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium px-3.5 py-1.5 rounded-lg transition-all text-xs active:scale-95">
           Reset Defaults
         </button>
@@ -202,6 +203,7 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
               <label for="shortcut-toggleUI-key" class="sr-only">Toggle Tooltip UI Key</label>
               <input id="shortcut-toggleUI-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
@@ -216,6 +218,7 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
               <label for="shortcut-toggleMinimal-key" class="sr-only">Toggle Minimal Mode Key</label>
               <input id="shortcut-toggleMinimal-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
@@ -230,6 +233,7 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
               <label for="shortcut-toggleFreeze-key" class="sr-only">Toggle Freeze State Key</label>
               <input id="shortcut-toggleFreeze-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
@@ -244,6 +248,7 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
               <label for="shortcut-toggleMode-key" class="sr-only">Toggle Mode Key</label>
               <input id="shortcut-toggleMode-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
@@ -258,6 +263,7 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
               <label for="shortcut-copyMetadata-key" class="sr-only">Copy AI Metadata Key</label>
               <input id="shortcut-copyMetadata-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
@@ -272,6 +278,7 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
               <label for="shortcut-copyAllLayers-key" class="sr-only">Copy All Layers Specs Key</label>
               <input id="shortcut-copyAllLayers-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
@@ -286,8 +293,24 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
               <label for="shortcut-openDashboard-key" class="sr-only">Open Dashboard Key</label>
               <input id="shortcut-openDashboard-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
+            </div>
+          </div>
+          <!-- toggleFilterPanel -->
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 flex justify-between items-center gap-3">
+            <div>
+              <span class="text-xs font-medium text-slate-200">Toggle Filter Panel</span>
+              <p class="text-[10px] text-slate-500">Show/hide metadata filter panel</p>
+            </div>
+            <div class="flex items-center gap-1 shortcut-toggleFilterPanel">
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
+              <label for="shortcut-toggleFilterPanel-key" class="sr-only">Toggle Filter Panel Key</label>
+              <input id="shortcut-toggleFilterPanel-key" type="text" class="key-input w-10 bg-slate-900 border border-slate-700 text-center rounded py-0.5 text-xs text-blue-400 font-mono focus:outline-none uppercase">
             </div>
           </div>
           <!-- layerPickerScroll -->
@@ -300,6 +323,7 @@
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="alt">Alt</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="ctrl">Ctrl</button>
               <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="shift">Shift</button>
+              <button type="button" class="modifier-btn bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded text-[10px] border border-slate-700" data-modifier="meta">Win</button>
               <span class="inline-flex items-center justify-center w-10 bg-slate-950 border border-slate-800 rounded py-0.5 text-[10px] font-mono text-slate-500 select-none opacity-60">Scroll</span>
             </div>
           </div>
@@ -335,128 +359,54 @@
     </div>
   </div>
 
+  <!-- Save Preset Modal -->
+  <div id="preset-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-200">
+    <div class="glass-card max-w-md w-full mx-4 rounded-2xl p-6 shadow-2xl border border-slate-700/50 transform scale-95 transition-transform duration-200" id="preset-modal-content">
+      <h3 class="text-base font-bold text-slate-200 mb-2">Save As Preset</h3>
+      <p class="text-xs text-slate-400 leading-relaxed mb-4">
+        Save the current preferences and shortcuts as a named global preset. Machine and port settings stay excluded.
+      </p>
+      <label for="preset-name-input" class="sr-only">Preset name</label>
+      <input id="preset-name-input" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 mb-5" placeholder="e.g. figma, vscode-mac, laptop">
+      <div class="flex justify-end gap-3">
+        <button id="preset-cancel-btn" type="button" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold active:scale-95 transition-all">
+          Cancel
+        </button>
+        <button id="preset-confirm-btn" type="button" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold active:scale-95 transition-all shadow-lg shadow-blue-600/20">
+          Save Preset
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     const API_BASE = '';
     let loadedConfig = null;
+    let presetsState = { presets: {}, activePreset: null, repoBinding: null, effectivePreset: null };
+    let currentProjectPath = '';
 
-    class CustomDropdownWrapper {
-      constructor(container) {
-        if (!container) return;
-        this.container = container;
-        this.btn = container.querySelector('.custom-dropdown-btn');
-        this.label = container.querySelector('.custom-dropdown-label');
-        this.menu = container.querySelector('.custom-dropdown-menu');
-        this.chevron = container.querySelector('.dropdown-chevron');
-        
-        this._options = [];
-        this._value = '';
-        this._selectedIndex = -1;
-        this.onchange = null;
-        this.listeners = { change: [] };
-        
-        this.btn.onclick = (e) => {
-          e.stopPropagation();
-          // Close other dropdowns
-          document.querySelectorAll('.custom-dropdown-menu').forEach(m => {
-            if (m !== this.menu) m.classList.add('hidden');
-          });
-          document.querySelectorAll('.dropdown-chevron').forEach(c => {
-            if (c !== this.chevron) c.classList.remove('rotate-180');
-          });
-          
-          const isHidden = this.menu.classList.contains('hidden');
-          if (isHidden) {
-            this.menu.classList.remove('hidden');
-            this.chevron.classList.add('rotate-180');
-          } else {
-            this.menu.classList.add('hidden');
-            this.chevron.classList.remove('rotate-180');
-          }
-        };
-        
-        document.addEventListener('click', () => {
-          this.menu.classList.add('hidden');
-          this.chevron.classList.remove('rotate-180');
-        });
-      }
-      
-      get value() {
-        return this._value;
-      }
-      
-      set value(val) {
-        this._value = val;
-        let idx = this._options.findIndex(o => o.value === val);
-        if (idx !== -1) {
-          this._selectedIndex = idx;
-          this.label.textContent = this._options[idx].textContent;
+    function isMacPlatform() {
+      const platform = navigator.userAgentData?.platform || navigator.platform || '';
+      return /mac/i.test(platform);
+    }
+
+    const IS_MAC = isMacPlatform();
+    const MODIFIER_LABELS = IS_MAC
+      ? { alt: '⌥', ctrl: '⌃', shift: '⇧', meta: '⌘' }
+      : { alt: 'Alt', ctrl: 'Ctrl', shift: 'Shift', meta: 'Win' };
+    const MODIFIER_TITLES = IS_MAC
+      ? { alt: 'Option (⌥)', ctrl: 'Control (⌃)', shift: 'Shift (⇧)', meta: 'Command (⌘)' }
+      : { alt: 'Alt', ctrl: 'Ctrl', shift: 'Shift', meta: 'Win' };
+
+    function applyModifierLabels() {
+      document.querySelectorAll('.modifier-btn').forEach(btn => {
+        const mod = btn.dataset.modifier;
+        if (MODIFIER_LABELS[mod]) {
+          btn.textContent = MODIFIER_LABELS[mod];
+          btn.title = MODIFIER_TITLES[mod];
+          btn.setAttribute('aria-label', MODIFIER_TITLES[mod]);
         }
-      }
-      
-      get selectedIndex() {
-        return this._selectedIndex;
-      }
-      
-      set selectedIndex(idx) {
-        this._selectedIndex = idx;
-        if (idx >= 0 && idx < this._options.length) {
-          const opt = this._options[idx];
-          this._value = opt.value;
-          this.label.textContent = opt.textContent;
-        }
-      }
-      
-      get options() {
-        return this._options;
-      }
-      
-      addEventListener(event, cb) {
-        if (this.listeners[event]) {
-          this.listeners[event].push(cb);
-        }
-      }
-      
-      clear(defaultLabel = 'Select target...') {
-        this._options = [];
-        this.menu.innerHTML = '';
-        this._selectedIndex = -1;
-        this._value = '';
-        this.label.textContent = defaultLabel;
-      }
-      
-      addOption(value, text, path = '') {
-        const optObj = {
-          value: value,
-          textContent: text,
-          dataset: { path: path }
-        };
-        
-        this._options.push(optObj);
-        
-        const div = document.createElement('div');
-        div.className = 'px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white cursor-pointer truncate transition-colors border-b border-slate-800 last:border-0';
-        div.textContent = text;
-        
-        div.onclick = (e) => {
-          e.stopPropagation();
-          const oldValue = this._value;
-          this.value = value;
-          this._selectedIndex = this._options.indexOf(optObj);
-          this.label.textContent = text;
-          
-          this.menu.classList.add('hidden');
-          this.chevron.classList.remove('rotate-180');
-          
-          if (oldValue !== value) {
-            if (this.onchange) this.onchange();
-            if (this.listeners.change) {
-              this.listeners.change.forEach(cb => cb({ target: this }));
-            }
-          }
-        };
-        
-        this.menu.appendChild(div);
-      }
+      });
     }
 
     const DEFAULT_CONFIG = {
@@ -468,22 +418,34 @@
       snappingThreshold: 15,
       desnappingThreshold: 15,
       maxTraversalDepth: 32,
-      layerPickerScroll: { altKey: true, shiftKey: true, ctrlKey: false },
+      layerPickerScroll: { altKey: true, shiftKey: true, ctrlKey: false, metaKey: false },
       ports: {
         companion: 7300,
         debug: 9222,
         companionConflict: 'shift'
       },
       shortcuts: {
-        toggleUI: { key: 'h', altKey: true, ctrlKey: false, shiftKey: false },
-        toggleMinimal: { key: 'm', altKey: true, ctrlKey: false, shiftKey: false },
-        toggleFreeze: { key: 'p', altKey: true, ctrlKey: false, shiftKey: false },
-        copyMetadata: { key: 'c', altKey: true, ctrlKey: false, shiftKey: false },
-        copyAllLayers: { key: 'c', altKey: true, ctrlKey: false, shiftKey: true },
-        openDashboard: { key: 's', altKey: true, ctrlKey: false, shiftKey: false },
-        toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
+        toggleUI: { key: 'h', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        toggleMinimal: { key: 'm', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        toggleFreeze: { key: 'p', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        copyMetadata: { key: 'c', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        copyAllLayers: { key: 'c', altKey: true, ctrlKey: false, shiftKey: true, metaKey: false },
+        openDashboard: { key: 's', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        toggleMode: { key: 'x', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+        toggleFilterPanel: { key: 'd', altKey: true, ctrlKey: true, shiftKey: false, metaKey: false }
       }
     };
+
+    const SHORTCUT_NAMES = [
+      'toggleUI',
+      'toggleMinimal',
+      'toggleFreeze',
+      'copyMetadata',
+      'copyAllLayers',
+      'openDashboard',
+      'toggleMode',
+      'toggleFilterPanel'
+    ];
 
     // Selectors
     const themeSelect = document.querySelector('.theme-select');
@@ -499,200 +461,334 @@
     const proxyPortInput = document.getElementById('proxy-port-input');
     const devPortInput = document.getElementById('dev-port-input');
     const companionConflictSelect = document.getElementById('companion-conflict-select');
-    const saveTargetSelect = new CustomDropdownWrapper(document.querySelector('.target-dropdown'));
-    const customPathInput = document.querySelector('.custom-path-input');
+    const presetSelect = document.getElementById('preset-select');
+    const savePresetBtn = document.getElementById('save-preset-btn');
+    const deletePresetBtn = document.getElementById('delete-preset-btn');
+    const bindRepoCheckbox = document.getElementById('bind-repo-checkbox');
+    const bindRepoLabel = document.querySelector('.bind-repo-label');
     const saveBtns = document.querySelectorAll('.save-btn');
     const resetBtns = document.querySelectorAll('.reset-btn');
-    const deleteBtns = document.querySelectorAll('.delete-btn');
 
-    // Initial fetch to load target options
-    async function initDashboard() {
+    function extractRecordedKey(e) {
+      const code = typeof e.code === 'string' ? e.code : '';
+      const key = typeof e.key === 'string' ? e.key : '';
+      const isAlnumAscii = /^[a-z0-9]$/i.test(key);
+      if (e.altKey || !isAlnumAscii) {
+        const letterMatch = /^Key([A-Z])$/.exec(code);
+        if (letterMatch) return letterMatch[1].toLowerCase();
+        const digitMatch = /^Digit([0-9])$/.exec(code);
+        if (digitMatch) return digitMatch[1];
+      }
+      return key.length === 1 ? key.toLowerCase() : key;
+    }
+
+    function normalizeShortcut(shortcut, fallback) {
+      const src = shortcut || fallback || {};
+      const fb = fallback || {};
+      return {
+        key: src.key || fb.key || '',
+        altKey: !!(src.altKey ?? fb.altKey),
+        ctrlKey: !!(src.ctrlKey ?? fb.ctrlKey),
+        shiftKey: !!(src.shiftKey ?? fb.shiftKey),
+        metaKey: !!(src.metaKey ?? fb.metaKey)
+      };
+    }
+
+    function normalizeScrollMods(mods) {
+      const src = mods || DEFAULT_CONFIG.layerPickerScroll;
+      return {
+        altKey: !!src.altKey,
+        ctrlKey: !!src.ctrlKey,
+        shiftKey: !!src.shiftKey,
+        metaKey: !!src.metaKey
+      };
+    }
+
+    function extractPresetFields(cfg) {
+      return {
+        theme: cfg.theme,
+        minimalModeByDefault: cfg.minimalModeByDefault,
+        snappingThreshold: cfg.snappingThreshold,
+        desnappingThreshold: cfg.desnappingThreshold,
+        maxTraversalDepth: cfg.maxTraversalDepth,
+        shortcuts: cfg.shortcuts,
+        layerPickerScroll: cfg.layerPickerScroll
+      };
+    }
+
+    function extractMachineFields(cfg) {
+      return {
+        editor: cfg.editor,
+        autoResolvePortConflicts: cfg.autoResolvePortConflicts,
+        layerPickerEnabled: cfg.layerPickerEnabled,
+        ports: cfg.ports
+      };
+    }
+
+    function renderPresetControls() {
+      const presets = presetsState.presets || {};
+      const presetNames = Object.keys(presets).sort();
+      presetSelect.innerHTML = '';
+
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = 'Default (Global Base)';
+      presetSelect.appendChild(defaultOpt);
+
+      for (const name of presetNames) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        const tags = [];
+        if (name === presetsState.activePreset) tags.push('Active');
+        if (name === presetsState.repoBinding) tags.push('Repo Bound');
+        opt.textContent = tags.length > 0 ? `${name} (${tags.join(', ')})` : name;
+        presetSelect.appendChild(opt);
+      }
+
+      const targetSelection = presetsState.effectivePreset || presetsState.activePreset || '';
+      if (targetSelection && !Object.prototype.hasOwnProperty.call(presets, targetSelection)) {
+        const missingOpt = document.createElement('option');
+        missingOpt.value = targetSelection;
+        missingOpt.textContent = `${targetSelection} (Unresolved)`;
+        presetSelect.appendChild(missingOpt);
+      }
+      presetSelect.value = targetSelection;
+
+      const selectedPreset = presetSelect.value;
+      deletePresetBtn.disabled = !selectedPreset || !Object.prototype.hasOwnProperty.call(presets, selectedPreset);
+
+      if (currentProjectPath) {
+        const folderName = currentProjectPath.split('/').filter(Boolean).pop() || currentProjectPath;
+        bindRepoLabel.textContent = `Bind to Current Repo (${folderName})`;
+        bindRepoLabel.title = currentProjectPath;
+      } else {
+        bindRepoLabel.textContent = 'Bind to Current Repo';
+      }
+
+      const boundMatchesSelection = Boolean(presetsState.repoBinding && selectedPreset === presetsState.repoBinding);
+      bindRepoCheckbox.checked = boundMatchesSelection || Boolean(presetsState.repoBinding && !selectedPreset);
+      bindRepoCheckbox.disabled = !selectedPreset && !presetsState.repoBinding;
+    }
+
+    function applyConfigToUI(cfg) {
+      themeSelect.value = cfg.theme || 'dark';
+      minimalCheckbox.checked = !!cfg.minimalModeByDefault;
+      autoResolveCheckbox.checked = !!cfg.autoResolvePortConflicts;
+      layerPickerCheckbox.checked = cfg.layerPickerEnabled !== false;
+      editorSelect.value = cfg.editor || 'vscode';
+      snappingThresholdInput.value = cfg.snappingThreshold ?? 15;
+      desnappingThresholdInput.value = cfg.desnappingThreshold ?? 15;
+      maxDepthInput.value = cfg.maxTraversalDepth ?? 32;
+
+      const ports = cfg.ports || {};
+      companionPortInput.value = ports.companion ?? 7300;
+      debugPortInput.value = ports.debug ?? 9222;
+      proxyPortInput.value = ports.proxy ?? '';
+      devPortInput.value = ports.dev ?? '';
+      companionConflictSelect.value = ports.companionConflict || 'shift';
+
+      for (const name of SHORTCUT_NAMES) {
+        setupShortcutUI(name, normalizeShortcut(cfg.shortcuts?.[name], DEFAULT_CONFIG.shortcuts[name]));
+      }
+      setupScrollShortcutUI('layerPickerScroll', normalizeScrollMods(cfg.layerPickerScroll));
+    }
+
+    async function refreshDashboardState() {
       try {
-        const res = await fetch(`${API_BASE}/config`);
-        const data = await res.json();
-        
-        // Populate save target options dynamically
-        saveTargetSelect.clear('Select target...');
-        
-        // 1. Global Option
-        saveTargetSelect.addOption('global', 'Global Preferences (~/.hoversourcerc)');
+        const [cfgRes, presetsRes] = await Promise.all([
+          fetch(`${API_BASE}/config`),
+          fetch(`${API_BASE}/presets`)
+        ]);
+        const cfgData = await cfgRes.json();
+        const presetsData = await presetsRes.json();
 
-        // 2. Current Project Option
-        if (data.currentProject) {
-          const folderName = data.currentProject.split('/').pop();
-          saveTargetSelect.addOption('local', `Current Project: ${folderName} (${data.currentProject})`);
-        }
-
-        // 3. Recent Project Options
-        if (data.recentProjects && data.recentProjects.length > 0) {
-          data.recentProjects.forEach(proj => {
-            if (proj !== data.currentProject) {
-              const name = proj.split('/').pop();
-              saveTargetSelect.addOption('custom', `Recent Project: ${name} (${proj})`, proj);
-            }
-          });
-        }
-
-        // 4. Custom Path Option
-        saveTargetSelect.addOption('custom-input', 'Specify custom directory path...');
-
-        // Default to global
-        saveTargetSelect.value = 'global';
-        
-        saveTargetSelect.onchange = async () => {
-          const val = saveTargetSelect.value;
-          if (val === 'custom-input') {
-            customPathInput.classList.remove('hidden');
-            customPathInput.value = '';
-            customPathInput.focus();
-          } else {
-            customPathInput.classList.add('hidden');
-          }
-          await loadConfigForSelectedTarget();
+        loadedConfig = cfgData.config;
+        currentProjectPath = cfgData.currentProject || '';
+        presetsState = {
+          presets: presetsData.presets || {},
+          activePreset: presetsData.activePreset ?? null,
+          repoBinding: presetsData.repoBinding ?? null,
+          effectivePreset: presetsData.effectivePreset ?? null
         };
 
-        customPathInput.oninput = () => {
-          checkChanges();
-        };
-        customPathInput.onblur = async () => {
-          await loadConfigForSelectedTarget();
-        };
-
-        // Load config for the default target (global)
-        await loadConfigForSelectedTarget();
-
-        // Listen for changes
-        themeSelect.addEventListener('change', checkChanges);
-        minimalCheckbox.addEventListener('change', checkChanges);
-        autoResolveCheckbox.addEventListener('change', checkChanges);
-        layerPickerCheckbox.addEventListener('change', checkChanges);
-        editorSelect.addEventListener('change', checkChanges);
-        snappingThresholdInput.addEventListener('input', checkChanges);
-        desnappingThresholdInput.addEventListener('input', checkChanges);
-        maxDepthInput.addEventListener('input', checkChanges);
-        maxDepthInput.addEventListener('blur', () => {
-          let val = Number.parseInt(maxDepthInput.value, 10);
-          if (Number.isNaN(val)) val = 32;
-          if (val < 8) val = 8;
-          if (val > 100) val = 100;
-          maxDepthInput.value = val;
-          checkChanges();
-        });
-        companionPortInput.addEventListener('input', checkChanges);
-        debugPortInput.addEventListener('input', checkChanges);
-        proxyPortInput.addEventListener('input', checkChanges);
-        devPortInput.addEventListener('input', checkChanges);
-        companionConflictSelect.addEventListener('change', checkChanges);
-
+        renderPresetControls();
+        applyConfigToUI(loadedConfig);
+        checkChanges();
       } catch (e) {
-        console.error('Failed to init dashboard', e);
+        console.error('Failed to refresh dashboard state', e);
       }
     }
 
-    async function loadConfigForSelectedTarget() {
-      try {
-        const target = saveTargetSelect.value;
-        let url = `${API_BASE}/config?target=${target}`;
-        
-        if (target === 'custom') {
-          const selectedOpt = saveTargetSelect.options[saveTargetSelect.selectedIndex];
-          const path = selectedOpt.dataset.path || '';
-          url += `&customPath=${encodeURIComponent(path)}`;
-        } else if (target === 'custom-input') {
-          const path = customPathInput.value.trim();
-          if (path) {
-            url += `&customPath=${encodeURIComponent(path)}`;
+    async function initDashboard() {
+      applyModifierLabels();
+      await refreshDashboardState();
+
+      presetSelect.onchange = async () => {
+        const chosen = presetSelect.value || null;
+        try {
+          const res = await fetch(`${API_BASE}/presets/use`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: chosen })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            showToast(data.error || 'Failed to switch preset', true);
+            await refreshDashboardState();
+            return;
           }
-        }
-
-        const res = await fetch(url);
-        const data = await res.json();
-        loadedConfig = data.config;
-
-        // Apply config to UI
-        themeSelect.value = loadedConfig.theme || 'dark';
-        minimalCheckbox.checked = !!loadedConfig.minimalModeByDefault;
-        autoResolveCheckbox.checked = !!loadedConfig.autoResolvePortConflicts;
-        layerPickerCheckbox.checked = loadedConfig.layerPickerEnabled !== false;
-        editorSelect.value = loadedConfig.editor || 'vscode';
-        snappingThresholdInput.value = loadedConfig.snappingThreshold ?? 15;
-        desnappingThresholdInput.value = loadedConfig.desnappingThreshold ?? 15;
-        maxDepthInput.value = loadedConfig.maxTraversalDepth ?? 32;
-
-        const ports = loadedConfig.ports || {};
-        companionPortInput.value = ports.companion ?? 7300;
-        debugPortInput.value = ports.debug ?? 9222;
-        proxyPortInput.value = ports.proxy ?? '';
-        devPortInput.value = ports.dev ?? '';
-        companionConflictSelect.value = ports.companionConflict || 'shift';
-        
-        setupShortcutUI('toggleUI', loadedConfig.shortcuts.toggleUI);
-        setupShortcutUI('toggleMinimal', loadedConfig.shortcuts.toggleMinimal);
-        setupShortcutUI('toggleFreeze', loadedConfig.shortcuts.toggleFreeze);
-        setupShortcutUI('copyMetadata', loadedConfig.shortcuts.copyMetadata);
-        setupShortcutUI('copyAllLayers', loadedConfig.shortcuts.copyAllLayers || DEFAULT_CONFIG.shortcuts.copyAllLayers);
-        setupShortcutUI('openDashboard', loadedConfig.shortcuts.openDashboard);
-        setupShortcutUI('toggleMode', loadedConfig.shortcuts.toggleMode || DEFAULT_CONFIG.shortcuts.toggleMode);
-        setupScrollShortcutUI('layerPickerScroll', loadedConfig.layerPickerScroll || DEFAULT_CONFIG.layerPickerScroll);
-
-        // Toggle delete button visibility/state based on target
-        deleteBtns.forEach(btn => {
-          if (target === 'global') {
-            btn.classList.add('hidden');
+          if (presetsState.repoBinding && chosen && presetsState.repoBinding !== chosen) {
+            showToast(`Active preset set to "${chosen}" (repo bound to "${presetsState.repoBinding}")`);
           } else {
-            btn.classList.remove('hidden');
-            if (data.configExists) {
-              btn.disabled = false;
-              btn.classList.remove('opacity-40', 'pointer-events-none', 'cursor-not-allowed');
-            } else {
-              btn.disabled = true;
-              btn.classList.add('opacity-40', 'pointer-events-none', 'cursor-not-allowed');
+            showToast(chosen ? `Activated preset "${chosen}"` : 'Switched to Global Base');
+          }
+          await refreshDashboardState();
+        } catch (e) {
+          console.error('Failed to switch preset', e);
+          showToast('Failed to switch preset', true);
+        }
+      };
+
+      bindRepoCheckbox.onchange = async () => {
+        const shouldBind = bindRepoCheckbox.checked;
+        const targetPreset = shouldBind ? (presetSelect.value || null) : null;
+        if (shouldBind && !targetPreset) {
+          bindRepoCheckbox.checked = false;
+          showToast('Select a named preset before binding to the repo', true);
+          return;
+        }
+        try {
+          const res = await fetch(`${API_BASE}/presets/bind`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: targetPreset })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            showToast(data.error || 'Failed to update repo preset binding', true);
+            await refreshDashboardState();
+            return;
+          }
+          showToast(targetPreset ? `Bound current repo to "${targetPreset}"` : 'Cleared repo preset binding');
+          await refreshDashboardState();
+        } catch (e) {
+          console.error('Failed to update repo binding', e);
+          showToast('Failed to update repo preset binding', true);
+        }
+      };
+
+      savePresetBtn.onclick = () => {
+        showSavePresetModal(async (presetName) => {
+          const uiConfig = getConfigFromUI();
+          const saveRes = await fetch(`${API_BASE}/presets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: presetName, config: extractPresetFields(uiConfig) })
+          });
+          const saveData = await saveRes.json().catch(() => ({}));
+          if (!saveRes.ok) {
+            showToast(saveData.error || 'Failed to save preset', true);
+            return false;
+          }
+          const useRes = await fetch(`${API_BASE}/presets/use`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: saveData.name || presetName })
+          });
+          if (!useRes.ok) {
+            const useData = await useRes.json().catch(() => ({}));
+            showToast(useData.error || 'Saved preset, but failed to activate it', true);
+          } else {
+            showToast(`Saved and activated preset "${saveData.name || presetName}"`);
+          }
+          await refreshDashboardState();
+          return true;
+        });
+      };
+
+      deletePresetBtn.onclick = () => {
+        const name = presetSelect.value;
+        if (!name) return;
+        showConfirm(`Delete preset "${name}"? This removes it from global presets.`, async () => {
+          try {
+            const res = await fetch(`${API_BASE}/presets?name=${encodeURIComponent(name)}`, {
+              method: 'DELETE'
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              showToast(data.error || 'Failed to delete preset', true);
+              return;
             }
+            showToast(`Deleted preset "${name}"`);
+            await refreshDashboardState();
+          } catch (e) {
+            console.error('Error deleting preset', e);
+            showToast('Failed to delete preset', true);
           }
         });
+      };
 
+      // Listen for changes
+      themeSelect.addEventListener('change', checkChanges);
+      minimalCheckbox.addEventListener('change', checkChanges);
+      autoResolveCheckbox.addEventListener('change', checkChanges);
+      layerPickerCheckbox.addEventListener('change', checkChanges);
+      editorSelect.addEventListener('change', checkChanges);
+      snappingThresholdInput.addEventListener('input', checkChanges);
+      desnappingThresholdInput.addEventListener('input', checkChanges);
+      maxDepthInput.addEventListener('input', checkChanges);
+      maxDepthInput.addEventListener('blur', () => {
+        let val = Number.parseInt(maxDepthInput.value, 10);
+        if (Number.isNaN(val)) val = 32;
+        if (val < 8) val = 8;
+        if (val > 100) val = 100;
+        maxDepthInput.value = val;
         checkChanges();
-
-      } catch (e) {
-        console.error('Failed to load config for selected target', e);
-      }
+      });
+      companionPortInput.addEventListener('input', checkChanges);
+      debugPortInput.addEventListener('input', checkChanges);
+      proxyPortInput.addEventListener('input', checkChanges);
+      devPortInput.addEventListener('input', checkChanges);
+      companionConflictSelect.addEventListener('change', checkChanges);
     }
 
     function setupShortcutUI(name, shortcutObj) {
       const container = document.querySelector(`.shortcut-${name}`);
       if (!container) return;
-      
+
       const modBtns = container.querySelectorAll('.modifier-btn');
       modBtns.forEach(btn => {
         const mod = btn.dataset.modifier;
         const active = !!shortcutObj[`${mod}Key`];
         setBtnActive(btn, active);
-        
+
         btn.onclick = () => {
           const currentlyActive = btn.classList.contains('bg-blue-600');
           setBtnActive(btn, !currentlyActive);
           checkChanges();
         };
       });
-      
+
       const input = container.querySelector('.key-input');
       input.value = shortcutObj.key || '';
-      
+
       input.onkeydown = (e) => {
         e.preventDefault();
-        if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+        if (['Control', 'Shift', 'Alt', 'Meta', 'AltGraph'].includes(e.key)) {
           return;
         }
-        
+
         const altBtn = container.querySelector('[data-modifier="alt"]');
         const ctrlBtn = container.querySelector('[data-modifier="ctrl"]');
         const shiftBtn = container.querySelector('[data-modifier="shift"]');
-        
+        const metaBtn = container.querySelector('[data-modifier="meta"]');
+
         if (altBtn) setBtnActive(altBtn, e.altKey);
         if (ctrlBtn) setBtnActive(ctrlBtn, e.ctrlKey);
         if (shiftBtn) setBtnActive(shiftBtn, e.shiftKey);
-        
-        input.value = e.key;
+        if (metaBtn) setBtnActive(metaBtn, e.metaKey);
+
+        input.value = extractRecordedKey(e);
         checkChanges();
       };
     }
@@ -719,7 +815,12 @@
         const btn = container.querySelector(`.modifier-btn[data-modifier="${mod}"]`);
         return btn ? btn.classList.contains('bg-blue-600') : false;
       };
-      return { altKey: btnState('alt'), ctrlKey: btnState('ctrl'), shiftKey: btnState('shift') };
+      return {
+        altKey: btnState('alt'),
+        ctrlKey: btnState('ctrl'),
+        shiftKey: btnState('shift'),
+        metaKey: btnState('meta')
+      };
     }
 
     function setBtnActive(btn, active) {
@@ -734,7 +835,9 @@
 
     function getShortcutFromUI(name) {
       const container = document.querySelector(`.shortcut-${name}`);
-      if (!container) return DEFAULT_CONFIG.shortcuts[name] || { key: '', altKey: false, ctrlKey: false, shiftKey: false };
+      if (!container) {
+        return normalizeShortcut(DEFAULT_CONFIG.shortcuts[name], DEFAULT_CONFIG.shortcuts[name]);
+      }
       const btnState = (mod) => {
         const btn = container.querySelector(`.modifier-btn[data-modifier="${mod}"]`);
         return btn ? btn.classList.contains('bg-blue-600') : false;
@@ -743,7 +846,8 @@
         key: container.querySelector('.key-input').value || '',
         altKey: btnState('alt'),
         ctrlKey: btnState('ctrl'),
-        shiftKey: btnState('shift')
+        shiftKey: btnState('shift'),
+        metaKey: btnState('meta')
       };
     }
 
@@ -771,15 +875,10 @@
     }
 
     function getConfigFromUI() {
-      const shortcuts = {
-        toggleUI: getShortcutFromUI('toggleUI'),
-        toggleMinimal: getShortcutFromUI('toggleMinimal'),
-        toggleFreeze: getShortcutFromUI('toggleFreeze'),
-        copyMetadata: getShortcutFromUI('copyMetadata'),
-        copyAllLayers: getShortcutFromUI('copyAllLayers'),
-        openDashboard: getShortcutFromUI('openDashboard'),
-        toggleMode: getShortcutFromUI('toggleMode')
-      };
+      const shortcuts = {};
+      for (const name of SHORTCUT_NAMES) {
+        shortcuts[name] = getShortcutFromUI(name);
+      }
 
       const snapVal = Number.parseInt(snappingThresholdInput.value, 10);
       const deSnapVal = Number.parseInt(desnappingThresholdInput.value, 10);
@@ -806,33 +905,33 @@
       };
     }
 
+    function buildBaselineForCompare(cfg) {
+      const shortcuts = {};
+      for (const name of SHORTCUT_NAMES) {
+        shortcuts[name] = normalizeShortcut(cfg.shortcuts?.[name], DEFAULT_CONFIG.shortcuts[name]);
+      }
+      return {
+        theme: cfg.theme || 'dark',
+        minimalModeByDefault: !!cfg.minimalModeByDefault,
+        editor: cfg.editor || 'vscode',
+        autoResolvePortConflicts: !!cfg.autoResolvePortConflicts,
+        layerPickerEnabled: cfg.layerPickerEnabled !== false,
+        snappingThreshold: cfg.snappingThreshold ?? 15,
+        desnappingThreshold: cfg.desnappingThreshold ?? 15,
+        maxTraversalDepth: cfg.maxTraversalDepth ?? 32,
+        shortcuts,
+        layerPickerScroll: normalizeScrollMods(cfg.layerPickerScroll),
+        ports: normalizePortsForCompare(cfg.ports)
+      };
+    }
+
     function checkChanges() {
       if (!loadedConfig) return;
-      
+
       const current = getConfigFromUI();
-      const baseline = {
-        theme: loadedConfig.theme || 'dark',
-        minimalModeByDefault: !!loadedConfig.minimalModeByDefault,
-        editor: loadedConfig.editor || 'vscode',
-        autoResolvePortConflicts: !!loadedConfig.autoResolvePortConflicts,
-        layerPickerEnabled: loadedConfig.layerPickerEnabled !== false,
-        snappingThreshold: loadedConfig.snappingThreshold ?? 15,
-        desnappingThreshold: loadedConfig.desnappingThreshold ?? 15,
-        maxTraversalDepth: loadedConfig.maxTraversalDepth ?? 32,
-        shortcuts: {
-          toggleUI: loadedConfig.shortcuts?.toggleUI || DEFAULT_CONFIG.shortcuts.toggleUI,
-          toggleMinimal: loadedConfig.shortcuts?.toggleMinimal || DEFAULT_CONFIG.shortcuts.toggleMinimal,
-          toggleFreeze: loadedConfig.shortcuts?.toggleFreeze || DEFAULT_CONFIG.shortcuts.toggleFreeze,
-          copyMetadata: loadedConfig.shortcuts?.copyMetadata || DEFAULT_CONFIG.shortcuts.copyMetadata,
-          copyAllLayers: loadedConfig.shortcuts?.copyAllLayers || DEFAULT_CONFIG.shortcuts.copyAllLayers,
-          openDashboard: loadedConfig.shortcuts?.openDashboard || DEFAULT_CONFIG.shortcuts.openDashboard,
-          toggleMode: loadedConfig.shortcuts?.toggleMode || DEFAULT_CONFIG.shortcuts.toggleMode
-        },
-        layerPickerScroll: loadedConfig.layerPickerScroll || DEFAULT_CONFIG.layerPickerScroll,
-        ports: normalizePortsForCompare(loadedConfig.ports)
-      };
+      const baseline = buildBaselineForCompare(loadedConfig);
       const hasChanged = JSON.stringify(current) !== JSON.stringify(baseline);
-      
+
       saveBtns.forEach(btn => {
         if (hasChanged) {
           btn.disabled = false;
@@ -849,29 +948,7 @@
     // Reset UI to defaults
     resetBtns.forEach(btn => {
       btn.onclick = () => {
-        themeSelect.value = DEFAULT_CONFIG.theme;
-        minimalCheckbox.checked = DEFAULT_CONFIG.minimalModeByDefault;
-        autoResolveCheckbox.checked = DEFAULT_CONFIG.autoResolvePortConflicts;
-        layerPickerCheckbox.checked = DEFAULT_CONFIG.layerPickerEnabled;
-        editorSelect.value = DEFAULT_CONFIG.editor;
-        snappingThresholdInput.value = DEFAULT_CONFIG.snappingThreshold;
-        desnappingThresholdInput.value = DEFAULT_CONFIG.desnappingThreshold;
-        maxDepthInput.value = DEFAULT_CONFIG.maxTraversalDepth;
-        companionPortInput.value = DEFAULT_CONFIG.ports.companion;
-        debugPortInput.value = DEFAULT_CONFIG.ports.debug;
-        proxyPortInput.value = '';
-        devPortInput.value = '';
-        companionConflictSelect.value = DEFAULT_CONFIG.ports.companionConflict;
-        
-        setupShortcutUI('toggleUI', DEFAULT_CONFIG.shortcuts.toggleUI);
-        setupShortcutUI('toggleMinimal', DEFAULT_CONFIG.shortcuts.toggleMinimal);
-        setupShortcutUI('toggleFreeze', DEFAULT_CONFIG.shortcuts.toggleFreeze);
-        setupShortcutUI('copyMetadata', DEFAULT_CONFIG.shortcuts.copyMetadata);
-        setupShortcutUI('copyAllLayers', DEFAULT_CONFIG.shortcuts.copyAllLayers);
-        setupShortcutUI('openDashboard', DEFAULT_CONFIG.shortcuts.openDashboard);
-        setupShortcutUI('toggleMode', DEFAULT_CONFIG.shortcuts.toggleMode);
-        setupScrollShortcutUI('layerPickerScroll', DEFAULT_CONFIG.layerPickerScroll);
-        
+        applyConfigToUI(DEFAULT_CONFIG);
         checkChanges();
       };
     });
@@ -879,94 +956,84 @@
     // Save configuration
     saveBtns.forEach(btn => {
       btn.onclick = async () => {
-        const config = getConfigFromUI();
-        let target = saveTargetSelect.value;
-        let customPath = '';
-
-        if (target === 'custom') {
-          const selectedOpt = saveTargetSelect.options[saveTargetSelect.selectedIndex];
-          customPath = selectedOpt.dataset.path || '';
-        } else if (target === 'custom-input') {
-          target = 'custom';
-          customPath = customPathInput.value.trim();
-          if (!customPath) {
-            alert('Please enter a valid directory path.');
-            return;
-          }
-        }
+        const uiConfig = getConfigFromUI();
+        const activeName = presetSelect.value;
+        const hasNamedPreset = Boolean(
+          activeName && Object.prototype.hasOwnProperty.call(presetsState.presets || {}, activeName)
+        );
 
         try {
+          if (hasNamedPreset) {
+            const presetRes = await fetch(`${API_BASE}/presets`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: activeName, config: extractPresetFields(uiConfig) })
+            });
+            if (!presetRes.ok) {
+              const errData = await presetRes.json().catch(() => ({}));
+              showToast(errData.error || 'Failed to update preset', true);
+              return;
+            }
+
+            const baseline = buildBaselineForCompare(loadedConfig);
+            const machineChanged =
+              JSON.stringify(extractMachineFields(uiConfig)) !==
+              JSON.stringify(extractMachineFields(baseline));
+            if (machineChanged) {
+              const cfgRes = await fetch(`${API_BASE}/config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ config: extractMachineFields(uiConfig), target: 'global' })
+              });
+              if (!cfgRes.ok) {
+                const errData = await cfgRes.json().catch(() => ({}));
+                showToast(errData.error || 'Failed to save machine settings', true);
+                return;
+              }
+            }
+
+            showToast(`Updated preset "${activeName}"!`);
+            await refreshDashboardState();
+            return;
+          }
+
           const res = await fetch(`${API_BASE}/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ config, target, customPath })
+            body: JSON.stringify({ config: uiConfig, target: 'global' })
           });
-          
+
           if (res.ok) {
             showToast('Configuration saved successfully!');
-            await loadConfigForSelectedTarget();
+            await refreshDashboardState();
           } else {
             const errData = await res.json().catch(() => ({}));
-            const errMsg = errData.error || 'Failed to save configuration';
-            showToast(errMsg, true);
+            showToast(errData.error || 'Failed to save configuration', true);
           }
         } catch (e) {
           console.error('Error saving config', e);
+          showToast('Error saving configuration', true);
         }
       };
     });
 
-    // Delete configuration file
-    deleteBtns.forEach(btn => {
-      btn.onclick = async () => {
-        const target = saveTargetSelect.value;
-        let customPath = '';
+    function showSavePresetModal(onSubmit) {
+      const modal = document.getElementById('preset-modal');
+      const content = document.getElementById('preset-modal-content');
+      const input = document.getElementById('preset-name-input');
+      const cancelBtn = document.getElementById('preset-cancel-btn');
+      const confirmBtn = document.getElementById('preset-confirm-btn');
 
-        if (target === 'custom') {
-          const selectedOpt = saveTargetSelect.options[saveTargetSelect.selectedIndex];
-          customPath = selectedOpt.dataset.path || '';
-        } else if (target === 'custom-input') {
-          customPath = customPathInput.value.trim();
-        }
-
-        if (target === 'global') {
-          alert('Cannot delete global configuration.');
-          return;
-        }
-
-        const confirmMsg = `Are you sure you want to delete the configuration file for ${target === 'local' ? 'the current project' : (customPath || 'this target')}? This will revert it to global defaults.`;
-        
-        showConfirm(confirmMsg, async () => {
-          try {
-            const res = await fetch(`${API_BASE}/config?target=${target}&customPath=${encodeURIComponent(customPath)}`, {
-              method: 'DELETE'
-            });
-            const data = await res.json();
-            if (res.ok) {
-              showToast('Configuration deleted. Reverted to defaults.');
-              await initDashboard();
-            } else {
-              alert(`Failed to delete configuration: ${data.error || 'Unknown error'}`);
-            }
-          } catch (e) {
-            console.error('Error deleting config', e);
-          }
-        });
-      };
-    });
-
-    function showConfirm(message, onConfirm) {
-      const modal = document.getElementById('confirm-modal');
-      const content = document.getElementById('confirm-modal-content');
-      modal.querySelector('.confirm-modal-message').textContent = message;
-      
+      input.value = presetSelect.value || '';
       modal.classList.remove('hidden');
       setTimeout(() => {
         modal.classList.remove('opacity-0');
         content.classList.remove('scale-95');
         content.classList.add('scale-100');
+        input.focus();
+        input.select();
       }, 10);
-      
+
       const close = () => {
         modal.classList.add('opacity-0');
         content.classList.remove('scale-100');
@@ -975,15 +1042,58 @@
           modal.classList.add('hidden');
         }, 200);
       };
-      
+
+      const submit = async () => {
+        const name = input.value.trim();
+        if (!name) {
+          showToast('Please enter a preset name', true);
+          input.focus();
+          return;
+        }
+        const ok = await onSubmit(name);
+        if (ok) {
+          close();
+        }
+      };
+
+      cancelBtn.onclick = close;
+      confirmBtn.onclick = submit;
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          close();
+        }
+      };
+    }
+
+    function showConfirm(message, onConfirm) {
+      const modal = document.getElementById('confirm-modal');
+      const content = document.getElementById('confirm-modal-content');
+      modal.querySelector('.confirm-modal-message').textContent = message;
+
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        content.classList.remove('scale-95');
+        content.classList.add('scale-100');
+      }, 10);
+
+      const close = () => {
+        modal.classList.add('opacity-0');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
+        setTimeout(() => {
+          modal.classList.add('hidden');
+        }, 200);
+      };
+
       document.getElementById('confirm-cancel-btn').onclick = () => {
         close();
       };
-      
-      document.getElementById('confirm-action-btn').onclick = () => {
-        close();
-      };
-      
+
       document.getElementById('confirm-action-btn').onclick = () => {
         close();
         onConfirm();

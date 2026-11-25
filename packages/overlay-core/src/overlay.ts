@@ -5,10 +5,11 @@ import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 import { OverlayController, InteractionMode } from "./modes/types.js";
 import { ParentVisualEffect } from "@hoversource/source-resolver";
-import { companionRequestJson } from "./companionTransport.js";
+import { companionRequestJson, createCompanionConfigEventSource } from "./companionTransport.js";
 import { waitForDomBody } from "./domReady.js";
 import { initInspectorMutationObserver, disconnectInspectorMutationObserver } from "./inspector.js";
 import { createSafeFragmentFromHtml, setElementContentSafely, el } from "./safeDom.js";
+import { DEFAULT_SHORTCUTS, DEFAULT_LAYER_SCROLL_MODIFIERS, matchShortcut } from "./shortcuts.js";
 
 export { waitForDomBody };
 
@@ -39,6 +40,7 @@ export class OverlayEngine implements OverlayController {
   private freezeShadowStyle: HTMLStyleElement | null = null;
 
   private launchAbortController: AbortController | null = null;
+  private configEventSource: EventSource | null = null;
   private shortcutsAttached = false;
   private modeActivated = false;
   private listenersAttached = false;
@@ -149,6 +151,15 @@ export class OverlayEngine implements OverlayController {
     globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
     globalThis.addEventListener("message", this.handleWindowMessage);
     this.listenersAttached = true;
+    this.initConfigEventStream();
+  }
+
+  private initConfigEventStream() {
+    this.configEventSource = createCompanionConfigEventSource((parsed) => {
+      if (!this.isDestroyed) {
+        this.handleConfigUpdate(parsed);
+      }
+    });
   }
 
   private handleConfigUpdate(newConfig: any) {
@@ -185,13 +196,16 @@ export class OverlayEngine implements OverlayController {
       desnappingThreshold: 15,
       maxTraversalDepth: 32,
       shortcuts: {
-        toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-        toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-        toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-        copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-        openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-        toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
-      }
+        toggleUI: { ...DEFAULT_SHORTCUTS.toggleUI },
+        toggleMinimal: { ...DEFAULT_SHORTCUTS.toggleMinimal },
+        toggleFreeze: { ...DEFAULT_SHORTCUTS.toggleFreeze },
+        copyMetadata: { ...DEFAULT_SHORTCUTS.copyMetadata },
+        copyAllLayers: { ...DEFAULT_SHORTCUTS.copyAllLayers },
+        openDashboard: { ...DEFAULT_SHORTCUTS.openDashboard },
+        toggleMode: { ...DEFAULT_SHORTCUTS.toggleMode },
+        toggleFilterPanel: { ...DEFAULT_SHORTCUTS.toggleFilterPanel }
+      },
+      layerPickerScroll: { ...DEFAULT_LAYER_SCROLL_MODIFIERS }
     };
   }
 
@@ -625,41 +639,41 @@ export class OverlayEngine implements OverlayController {
   }
 
   private handleModeShortcuts(e: KeyboardEvent, shortcuts: any) {
-    const toggleModeShortcut = shortcuts.toggleMode ?? { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
+    const toggleModeShortcut = shortcuts.toggleMode ?? DEFAULT_SHORTCUTS.toggleMode;
 
-    if (this.matchShortcut(e, shortcuts.openDashboard)) {
+    if (matchShortcut(e, shortcuts.openDashboard ?? DEFAULT_SHORTCUTS.openDashboard)) {
       e.preventDefault();
       console.log("[HoverSource] Shortcut matched: openDashboard");
       this.openDashboardInBrowser();
-    } else if (this.matchShortcut(e, toggleModeShortcut)) {
+    } else if (matchShortcut(e, toggleModeShortcut)) {
       e.preventDefault();
       this.switchMode();
-    } else if (this.matchShortcut(e, shortcuts.toggleMinimal)) {
+    } else if (matchShortcut(e, shortcuts.toggleMinimal ?? DEFAULT_SHORTCUTS.toggleMinimal)) {
       e.preventDefault();
       this.activeMode.onShortcut('toggleMinimal');
-    } else if (this.matchShortcut(e, shortcuts.toggleFreeze)) {
+    } else if (matchShortcut(e, shortcuts.toggleFreeze ?? DEFAULT_SHORTCUTS.toggleFreeze)) {
       e.preventDefault();
       this.activeMode.onShortcut('toggleFreeze');
-    } else if (this.matchShortcut(e, shortcuts.copyMetadata)) {
+    } else if (matchShortcut(e, shortcuts.copyMetadata ?? DEFAULT_SHORTCUTS.copyMetadata)) {
       e.preventDefault();
       this.activeMode.onShortcut('copyMetadata');
-    } else if (this.matchShortcut(e, shortcuts.copyAllLayers ?? { key: "c", altKey: true, ctrlKey: false, shiftKey: true })) {
+    } else if (matchShortcut(e, shortcuts.copyAllLayers ?? DEFAULT_SHORTCUTS.copyAllLayers)) {
       e.preventDefault();
       this.activeMode.onShortcut('copyAllLayers');
     }
   }
 
   private readonly handleKeyDown = (e: KeyboardEvent) => {
-    if (e.altKey && e.ctrlKey && e.key.toLowerCase() === "d") {
+    const shortcuts = this.config?.shortcuts;
+    if (matchShortcut(e, shortcuts?.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel)) {
       e.preventDefault();
       this.toggleFilterPanel();
       return;
     }
 
-    const shortcuts = this.config?.shortcuts;
     if (!shortcuts) return;
 
-    if (this.matchShortcut(e, shortcuts.toggleUI)) {
+    if (matchShortcut(e, shortcuts.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI)) {
       e.preventDefault();
       this.uiVisible = !this.uiVisible;
       if (this.container) {
@@ -957,26 +971,32 @@ export class OverlayEngine implements OverlayController {
       });
   }
 
-  private matchShortcut(e: KeyboardEvent, shortcut: any): boolean {
-    if (!shortcut?.key) return false;
-    if (!!e.altKey !== !!shortcut.altKey || !!e.ctrlKey !== !!shortcut.ctrlKey || !!e.shiftKey !== !!shortcut.shiftKey) return false;
+  private static readonly NON_TEXT_INPUT_TYPES = new Set([
+    "checkbox",
+    "radio",
+    "button",
+    "submit",
+    "reset",
+    "range",
+    "color",
+    "file",
+    "image",
+  ]);
 
-    const targetKey = shortcut.key.toLowerCase();
-    const keyMatch = e.key.toLowerCase() === targetKey;
-    const codeMatch =
-      e.code &&
-      (e.code.toLowerCase() === targetKey ||
-        e.code.toLowerCase() === `key${targetKey}` ||
-        e.code.toLowerCase() === `digit${targetKey}`);
-
-    return keyMatch || !!codeMatch;
-  }
-
-  private isTyping(e: KeyboardEvent): boolean {
+  private isTyping(_e: KeyboardEvent): boolean {
     const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
     if (!activeEl) return false;
+    if (this.shadowRoot?.contains(activeEl)) return false;
     const tag = activeEl.tagName.toLowerCase();
-    return tag === "input" || tag === "textarea" || activeEl.hasAttribute("contenteditable");
+    if (tag === "input") {
+      const inputType = ((activeEl as HTMLInputElement).type || "text").toLowerCase();
+      return !OverlayEngine.NON_TEXT_INPUT_TYPES.has(inputType);
+    }
+    return (
+      tag === "textarea" ||
+      (activeEl as HTMLElement).isContentEditable === true ||
+      (activeEl.hasAttribute("contenteditable") && activeEl.getAttribute("contenteditable") !== "false")
+    );
   }
 
   private readonly handlePointerOver = (e: PointerEvent) => {
@@ -1335,6 +1355,13 @@ export class OverlayEngine implements OverlayController {
 
     this.launchAbortController?.abort();
     this.launchAbortController = null;
+
+    if (this.configEventSource) {
+      try {
+        this.configEventSource.close();
+      } catch {}
+      this.configEventSource = null;
+    }
 
     disconnectInspectorMutationObserver();
     this.setFreezeMode(false);

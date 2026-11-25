@@ -9,6 +9,49 @@ export function getCompanionBaseUrl() {
     const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
     return `http://127.0.0.1:${port}`;
 }
+/**
+ * Resolve the SSE endpoint URL for realtime companion config updates.
+ */
+export function getCompanionEventsUrl() {
+    return `${getCompanionBaseUrl()}/events`;
+}
+/**
+ * Subscribe to companion SSE config updates via EventSource when available and not in strict CDP bridge mode.
+ */
+export function createCompanionConfigEventSource(onConfig) {
+    if (typeof globalThis.__hoversourceBridgeCall === "function") {
+        return null;
+    }
+    const EventSourceCtor = globalThis.EventSource;
+    if (typeof EventSourceCtor !== "function") {
+        return null;
+    }
+    let es;
+    try {
+        es = new EventSourceCtor(getCompanionEventsUrl());
+    }
+    catch {
+        return null;
+    }
+    es.addEventListener("config", (event) => {
+        const rawData = event?.data;
+        if (typeof rawData !== "string" || !rawData)
+            return;
+        try {
+            const parsed = JSON.parse(rawData);
+            if (parsed && typeof parsed === "object") {
+                onConfig(parsed);
+            }
+        }
+        catch (err) {
+            console.warn("[HoverSource] Failed to parse SSE config update:", err);
+        }
+    });
+    es.addEventListener("error", () => {
+        // Suppress unhandled SSE errors when offline or blocked by CSP connect-src.
+    });
+    return es;
+}
 const pendingBridgeRequests = new Map();
 let bridgeSeq = 0;
 let bridgeInstanceNonce = null;

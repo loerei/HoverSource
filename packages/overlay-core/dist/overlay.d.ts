@@ -25,6 +25,7 @@ export declare class OverlayEngine implements OverlayController {
     private freezeStyle;
     private freezeShadowStyle;
     private launchAbortController;
+    private configEventSource;
     private shortcutsAttached;
     private modeActivated;
     private listenersAttached;
@@ -40,6 +41,7 @@ export declare class OverlayEngine implements OverlayController {
     static destroyActive(): Promise<void>;
     private readonly handleWindowMessage;
     private init;
+    private initConfigEventStream;
     private handleConfigUpdate;
     private loadConfig;
     private initStyles;
@@ -53,7 +55,7 @@ export declare class OverlayEngine implements OverlayController {
     private makePanelDraggable;
     private switchMode;
     private openDashboardInBrowser;
-    private matchShortcut;
+    private static readonly NON_TEXT_INPUT_TYPES;
     private isTyping;
     private readonly handlePointerOver;
     private readonly handlePointerMove;

@@ -494,3 +494,160 @@ describe("InspectorAdapter - Companion Transport & /static-context Parity", () =
         });
     });
 });
+describe("InspectorAdapter - Shortcut Footer Sync & Scroll Modifiers", () => {
+    it("renders all shortcuts including toggleUI, toggleFilterPanel, and layerPickerScroll in detailed & minimal footers and re-renders on onConfigUpdate", () => {
+        vi.useFakeTimers();
+        vi.stubGlobal("navigator", { platform: "Win32" });
+        let currentConfig = {
+            minimalModeByDefault: false,
+            layerPickerScroll: { altKey: true, shiftKey: true, ctrlKey: false, metaKey: false },
+            shortcuts: {
+                toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+                toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+                toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+                copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+                copyAllLayers: { key: "c", altKey: true, ctrlKey: false, shiftKey: true, metaKey: false },
+                openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+                toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+                toggleFilterPanel: { key: "d", altKey: true, ctrlKey: true, shiftKey: false, metaKey: false },
+            },
+        };
+        const mockTooltipBox = {
+            querySelectorAll: vi.fn().mockReturnValue([]),
+        };
+        const drawTooltipSpy = vi.fn();
+        const mockController = {
+            getConfig: () => currentConfig,
+            isUIVisible: () => true,
+            drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
+            drawTooltip: drawTooltipSpy,
+            clear: vi.fn(),
+            setFreezeMode: vi.fn(),
+            tooltipBox: mockTooltipBox,
+        };
+        const childEl = {
+            tagName: "SPAN",
+            classList: { contains: () => false, [Symbol.iterator]: function* () { } },
+            className: "",
+            parentElement: null,
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 50, height: 20 }),
+        };
+        const parentEl = {
+            tagName: "DIV",
+            classList: { contains: () => false, [Symbol.iterator]: function* () { } },
+            className: "",
+            parentElement: null,
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 40 }),
+        };
+        vi.stubGlobal("document", {
+            body: {},
+            documentElement: {},
+            elementsFromPoint: () => [childEl, parentEl],
+        });
+        const adapter = new InspectorAdapter();
+        adapter.activate(mockController);
+        adapter.onPointerOver({ clientX: 10, clientY: 10 }, childEl);
+        vi.advanceTimersByTime(50);
+        const detailedHtml = String(drawTooltipSpy.mock.calls[drawTooltipSpy.mock.calls.length - 1][0]);
+        expect(detailedHtml).toContain("Alt+C");
+        expect(detailedHtml).toContain("Alt+Shift+C");
+        expect(detailedHtml).toContain("Alt+P");
+        expect(detailedHtml).toContain("Alt+M");
+        expect(detailedHtml).toContain("Ctrl+Alt+D");
+        expect(detailedHtml).toContain("Alt+H");
+        expect(detailedHtml).toContain("Alt+Shift+Scroll");
+        expect(detailedHtml).toContain("Alt+S");
+        expect(detailedHtml).toContain("Alt+X");
+        // Toggle to minimal mode and verify minimal footer also contains all shortcuts
+        adapter.onShortcut("toggleMinimal");
+        const minimalHtml = String(drawTooltipSpy.mock.calls[drawTooltipSpy.mock.calls.length - 1][0]);
+        expect(minimalHtml).toContain("Ctrl+Alt+D");
+        expect(minimalHtml).toContain("Alt+H");
+        expect(minimalHtml).toContain("Alt+Shift+Scroll");
+        // Push live config update with metaKey shortcut and Mac platform
+        vi.stubGlobal("navigator", { platform: "MacIntel" });
+        currentConfig = {
+            ...currentConfig,
+            minimalModeByDefault: false,
+            layerPickerScroll: { altKey: false, shiftKey: false, ctrlKey: false, metaKey: true },
+            shortcuts: {
+                ...currentConfig.shortcuts,
+                toggleUI: { key: "u", altKey: false, ctrlKey: false, shiftKey: false, metaKey: true },
+                toggleFilterPanel: { key: "k", altKey: true, ctrlKey: false, shiftKey: false, metaKey: true },
+            },
+        };
+        adapter.onConfigUpdate(currentConfig);
+        const updatedHtml = String(drawTooltipSpy.mock.calls[drawTooltipSpy.mock.calls.length - 1][0]);
+        expect(updatedHtml).toContain("⌘U");
+        expect(updatedHtml).toContain("⌥⌘K");
+        expect(updatedHtml).toContain("⌘+Scroll");
+    });
+    it("enforces metaKey equality in layer picker wheel scroll handling", () => {
+        const wheelListeners = [];
+        vi.stubGlobal("window", {
+            addEventListener: vi.fn((type, cb) => {
+                if (type === "wheel")
+                    wheelListeners.push(cb);
+            }),
+            removeEventListener: vi.fn(),
+        });
+        const mockController = {
+            getConfig: () => ({
+                layerPickerScroll: { altKey: false, shiftKey: false, ctrlKey: false, metaKey: true },
+            }),
+            isUIVisible: () => true,
+            drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
+            drawTooltip: vi.fn(),
+            clear: vi.fn(),
+            setFreezeMode: vi.fn(),
+        };
+        const el1 = {
+            tagName: "SPAN",
+            classList: { contains: () => false, [Symbol.iterator]: function* () { } },
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 20, height: 20 }),
+        };
+        const el2 = {
+            tagName: "DIV",
+            classList: { contains: () => false, [Symbol.iterator]: function* () { } },
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 40, height: 40 }),
+        };
+        vi.stubGlobal("document", {
+            body: {},
+            documentElement: {},
+            elementsFromPoint: () => [el1, el2],
+        });
+        const adapter = new InspectorAdapter();
+        adapter.activate(mockController);
+        adapter.onPointerOver({ clientX: 5, clientY: 5 }, el1);
+        const wheelCb = wheelListeners[wheelListeners.length - 1];
+        const nonMatchingWheel = {
+            altKey: false,
+            shiftKey: false,
+            ctrlKey: false,
+            metaKey: false,
+            deltaY: 100,
+            preventDefault: vi.fn(),
+            stopImmediatePropagation: vi.fn(),
+        };
+        wheelCb(nonMatchingWheel);
+        expect(nonMatchingWheel.preventDefault).not.toHaveBeenCalled();
+        const matchingWheel = {
+            altKey: false,
+            shiftKey: false,
+            ctrlKey: false,
+            metaKey: true,
+            deltaY: 100,
+            clientX: 5,
+            clientY: 5,
+            preventDefault: vi.fn(),
+            stopImmediatePropagation: vi.fn(),
+        };
+        wheelCb(matchingWheel);
+        expect(matchingWheel.preventDefault).toHaveBeenCalled();
+        expect(mockController.drawHighlight).toHaveBeenLastCalledWith(el2, false);
+    });
+});

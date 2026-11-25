@@ -14,7 +14,9 @@ import {
 import {
   ShortcutKey,
   HoverSourceConfig,
+  PresetConfig,
   ConfigTarget,
+  ConfigValidationError,
   normalizeProjectPath,
   loadMergedConfig,
   getConfigForTarget,
@@ -25,6 +27,11 @@ import {
   parseConfigDelta,
   saveConfigDelta,
   deleteConfigTarget,
+  listPresets,
+  savePreset,
+  usePreset,
+  deletePreset,
+  bindRepoPreset,
 } from "./configStore.js";
 export { ShortcutKey, HoverSourceConfig, CompanionConflictPolicy, PortsConfig, normalizeProjectPath, loadMergedConfig } from "./configStore.js";
 
@@ -35,6 +42,7 @@ export interface ServerConfig {
   port: number;
   projectRoot: string;
   debugPort: number;
+  globalConfigPath?: string;
 }
 
 
@@ -133,12 +141,52 @@ function handleOpenDashboard(req: http.IncomingMessage, res: http.ServerResponse
   });
 }
 
+function sendJson(res: http.ServerResponse, statusCode: number, payload: unknown): void {
+  res.writeHead(statusCode, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(payload));
+}
+
+function readJsonBody(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  onParsed: (payload: any) => void,
+  allowEmpty = false
+): void {
+  let body = "";
+  req.on("data", (chunk) => {
+    body += chunk;
+  });
+  req.on("end", () => {
+    if (allowEmpty && body.trim() === "") {
+      onParsed({});
+      return;
+    }
+    let payload: any;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      sendJson(res, 400, { error: "Invalid JSON payload" });
+      return;
+    }
+    onParsed(payload);
+  });
+}
+
+function handlePresetError(res: http.ServerResponse, err: unknown, actionLabel: string): void {
+  if (err instanceof ConfigValidationError) {
+    sendJson(res, 400, { error: err.message, issues: err.issues });
+    return;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  sendJson(res, 500, { error: `Failed to ${actionLabel}: ${message}` });
+}
+
 function handleConfigGet(req: http.IncomingMessage, res: http.ServerResponse, url: URL, config: ServerConfig) {
-  registerRecentProject(config.projectRoot);
+  registerRecentProject(config.projectRoot, config.globalConfigPath);
   const queryTarget = url.searchParams.get("target");
   const customPath = url.searchParams.get("customPath");
 
-  const targetConfig = getConfigForTarget(queryTarget, customPath, config.projectRoot);
+  const targetConfig = getConfigForTarget(queryTarget, customPath, config.projectRoot, config.globalConfigPath);
 
   let configExists = false;
   let targetPath = "";
@@ -147,22 +195,75 @@ function handleConfigGet(req: http.IncomingMessage, res: http.ServerResponse, ur
   } else if (queryTarget === "custom" && customPath) {
     targetPath = getLocalConfigPath(customPath);
   } else if (queryTarget === "global") {
-    targetPath = getGlobalConfigPath();
+    targetPath = getGlobalConfigPath(config.globalConfigPath);
   }
   if (targetPath) {
     configExists = fs.existsSync(targetPath);
   }
 
-  res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({
+  sendJson(res, 200, {
     config: targetConfig,
     currentProject: normalizeProjectPath(config.projectRoot),
-    recentProjects: getRecentProjects(),
+    recentProjects: getRecentProjects(config.globalConfigPath),
     configExists
-  }));
+  });
 }
 
-function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, config: ServerConfig) {
+function broadcastConfigUpdate(
+  debugPort: number,
+  mergedConfig: HoverSourceConfig,
+  sseClients: Set<http.ServerResponse>,
+  errorLabel = "Broadcast failed:"
+): void {
+  const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(mergedConfig)} }, "*");`;
+  broadcastToTargets(debugPort, hotReloadScript).catch((e) =>
+    console.error(`[HoverSource] ${errorLabel}`, e)
+  );
+
+  const sseFrame = `event: config\ndata: ${JSON.stringify(mergedConfig)}\n\n`;
+  for (const client of sseClients) {
+    if (client.writableEnded || client.destroyed) {
+      sseClients.delete(client);
+      continue;
+    }
+    try {
+      client.write(sseFrame);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+function handleEvents(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  sseClients: Set<http.ServerResponse>
+) {
+  req.socket?.setTimeout?.(0);
+  res.setTimeout?.(0);
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+  });
+  res.flushHeaders?.();
+
+  sseClients.add(res);
+  const cleanup = () => {
+    sseClients.delete(res);
+  };
+  req.on("close", cleanup);
+  res.on("close", cleanup);
+  res.on("error", cleanup);
+}
+
+function handleConfigPost(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
   let body = "";
   req.on("data", (chunk) => {
     body += chunk;
@@ -203,21 +304,17 @@ function handleConfigPost(req: http.IncomingMessage, res: http.ServerResponse, c
         parsed.value,
         target as ConfigTarget,
         config.projectRoot,
-        customPath
+        customPath,
+        config.globalConfigPath
       );
       console.log(`[HoverSource] Configuration delta merged and saved to: ${savedTo}`);
 
       // Broadcast configuration hot-reload trigger to active app pages
-      const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(fullyMerged)} }, "*");`;
-      broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
-        console.error("[HoverSource] Broadcast failed:", e)
-      );
+      broadcastConfigUpdate(config.debugPort, fullyMerged, sseClients, "Broadcast failed:");
 
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ success: true, savedTo, config: fullyMerged }));
+      sendJson(res, 200, { success: true, savedTo, config: fullyMerged });
     } catch (e: any) {
-      res.writeHead(500, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: `Failed to save config: ${e.message}` }));
+      sendJson(res, 500, { error: `Failed to save config: ${e.message}` });
     }
   });
 }
@@ -226,7 +323,8 @@ function handleConfigDelete(
   req: http.IncomingMessage,
   res: http.ServerResponse,
   url: URL,
-  config: ServerConfig
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
 ) {
   try {
     const target = url.searchParams.get("target");
@@ -237,7 +335,13 @@ function handleConfigDelete(
     let newConfig: HoverSourceConfig;
 
     if (target === "local" || (target === "custom" && customPath)) {
-      const result = deleteConfigTarget(target, config.projectRoot, customPath, removeRecent);
+      const result = deleteConfigTarget(
+        target,
+        config.projectRoot,
+        customPath,
+        removeRecent,
+        config.globalConfigPath
+      );
       deletedFile = result.deletedFile;
       newConfig = result.newConfig;
       if (deletedFile) {
@@ -247,37 +351,173 @@ function handleConfigDelete(
         console.log(`[HoverSource] Configuration deleted at: ${deletedPath}`);
       }
     } else {
-      newConfig = loadMergedConfig(config.projectRoot);
+      newConfig = loadMergedConfig(config.projectRoot, config.globalConfigPath);
     }
 
     // Broadcast configuration hot-reload trigger to active app pages with the new merged config
-    const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(newConfig)} }, "*");`;
-    broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
-      console.error("[HoverSource] Broadcast failed on delete:", e)
-    );
+    broadcastConfigUpdate(config.debugPort, newConfig, sseClients, "Broadcast failed on delete:");
 
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ success: true, deletedFile, removedRecent: removeRecent || target === "custom", newConfig }));
+    sendJson(res, 200, { success: true, deletedFile, removedRecent: removeRecent || target === "custom", newConfig });
   } catch (e: any) {
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: `Failed to delete config: ${e.message}` }));
+    sendJson(res, 500, { error: `Failed to delete config: ${e.message}` });
   }
 }
 
-function handleReloadConfig(req: http.IncomingMessage, res: http.ServerResponse, config: ServerConfig) {
+function handleReloadConfig(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
   try {
-    const merged = loadMergedConfig(config.projectRoot);
-    const hotReloadScript = `window.postMessage({ type: "HOVERSOURCE_CONFIG_CHANGED", config: ${JSON.stringify(merged)} }, "*");`;
-    broadcastToTargets(config.debugPort, hotReloadScript).catch((e) =>
-      console.error("[HoverSource] Broadcast failed on reload:", e)
-    );
+    const merged = loadMergedConfig(config.projectRoot, config.globalConfigPath);
+    broadcastConfigUpdate(config.debugPort, merged, sseClients, "Broadcast failed on reload:");
 
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ success: true, config: merged }));
+    sendJson(res, 200, { success: true, config: merged });
   } catch (e: any) {
-    res.writeHead(500, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: `Failed to reload config: ${e.message}` }));
+    sendJson(res, 500, { error: `Failed to reload config: ${e.message}` });
   }
+}
+
+function handlePresetsGet(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig
+) {
+  try {
+    const listed = listPresets(config.projectRoot, config.globalConfigPath);
+    sendJson(res, 200, {
+      presets: listed.presets,
+      activePreset: listed.activePreset,
+      repoBinding: listed.boundPreset,
+      effectivePreset: listed.effectivePreset,
+    });
+  } catch (err) {
+    handlePresetError(res, err, "list presets");
+  }
+}
+
+function handlePresetsPost(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
+  readJsonBody(req, res, (payload) => {
+    try {
+      const name = payload?.name;
+      const presetData = payload?.config !== undefined ? payload.config : payload?.preset;
+      const result = savePreset(
+        name,
+        presetData as PresetConfig | null | undefined,
+        config.projectRoot,
+        config.globalConfigPath
+      );
+      const merged = loadMergedConfig(config.projectRoot, config.globalConfigPath);
+      broadcastConfigUpdate(config.debugPort, merged, sseClients, "Broadcast failed on preset save:");
+
+      sendJson(res, 200, {
+        success: true,
+        name: result.name,
+        preset: result.preset,
+        presets: result.presets,
+        savedTo: result.savedTo,
+        config: merged,
+      });
+    } catch (err) {
+      handlePresetError(res, err, "save preset");
+    }
+  });
+}
+
+function handlePresetsUse(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
+  readJsonBody(req, res, (payload) => {
+    try {
+      const name = payload?.name !== undefined ? payload.name : payload?.preset;
+      const result = usePreset(name, config.projectRoot, config.globalConfigPath);
+      broadcastConfigUpdate(config.debugPort, result.config, sseClients, "Broadcast failed on preset use:");
+
+      sendJson(res, 200, {
+        success: true,
+        activePreset: result.activePreset,
+        savedTo: result.savedTo,
+        config: result.config,
+      });
+    } catch (err) {
+      handlePresetError(res, err, "activate preset");
+    }
+  });
+}
+
+function handlePresetsDelete(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
+  const executeDelete = (name: unknown) => {
+    try {
+      const result = deletePreset(name as string, config.projectRoot, config.globalConfigPath);
+      if (result.deleted) {
+        broadcastConfigUpdate(config.debugPort, result.config, sseClients, "Broadcast failed on preset delete:");
+      }
+      sendJson(res, 200, {
+        success: true,
+        deleted: result.deleted,
+        name: result.name,
+        clearedActive: result.clearedActive,
+        savedTo: result.savedTo,
+        config: result.config,
+      });
+    } catch (err) {
+      handlePresetError(res, err, "delete preset");
+    }
+  };
+
+  if (url.searchParams.has("name")) {
+    executeDelete(url.searchParams.get("name"));
+    return;
+  }
+
+  readJsonBody(
+    req,
+    res,
+    (payload) => {
+      const name = payload?.name !== undefined ? payload.name : payload?.preset;
+      executeDelete(name);
+    },
+    true
+  );
+}
+
+function handlePresetsBind(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
+  readJsonBody(req, res, (payload) => {
+    try {
+      const name = payload?.name !== undefined ? payload.name : payload?.preset;
+      const result = bindRepoPreset(name, config.projectRoot, config.globalConfigPath);
+      broadcastConfigUpdate(config.debugPort, result.config, sseClients, "Broadcast failed on preset bind:");
+
+      sendJson(res, 200, {
+        success: true,
+        boundPreset: result.boundPreset,
+        savedTo: result.savedTo,
+        config: result.config,
+      });
+    } catch (err) {
+      handlePresetError(res, err, "bind repo preset");
+    }
+  });
 }
 
 interface RequestLocationParams {
@@ -426,7 +666,7 @@ function handleOpenInIde(req: http.IncomingMessage, res: http.ServerResponse, ur
   const tagNameParam = url.searchParams.get("tagName") || undefined;
   const classListParam = url.searchParams.get("classList") || undefined;
   
-  const activeConfig = loadMergedConfig(config.projectRoot);
+  const activeConfig = loadMergedConfig(config.projectRoot, config.globalConfigPath);
   const editor = url.searchParams.get("editor") || activeConfig.editor || "vscode";
 
   if (!fileParam) {
@@ -479,7 +719,8 @@ function routeRequest(
   res: http.ServerResponse,
   url: URL,
   config: ServerConfig,
-  staticResolver: StaticContextResolver
+  staticResolver: StaticContextResolver,
+  sseClients: Set<http.ServerResponse>
 ): void {
   const path = url.pathname;
   const method = req.method;
@@ -490,6 +731,10 @@ function routeRequest(
   }
   if (path === "/status" && method === "GET") {
     handleStatus(req, res, config);
+    return;
+  }
+  if (path === "/events" && method === "GET") {
+    handleEvents(req, res, sseClients);
     return;
   }
   if (path === "/shutdown") {
@@ -512,14 +757,36 @@ function routeRequest(
     if (method === "GET") {
       handleConfigGet(req, res, url, config);
     } else if (method === "POST") {
-      handleConfigPost(req, res, config);
+      handleConfigPost(req, res, config, sseClients);
     } else if (method === "DELETE") {
-      handleConfigDelete(req, res, url, config);
+      handleConfigDelete(req, res, url, config, sseClients);
     }
     return;
   }
   if (path === "/reload-config" && method === "POST") {
-    handleReloadConfig(req, res, config);
+    handleReloadConfig(req, res, config, sseClients);
+    return;
+  }
+  if (path === "/presets") {
+    if (method === "GET") {
+      handlePresetsGet(req, res, config);
+      return;
+    }
+    if (method === "POST") {
+      handlePresetsPost(req, res, config, sseClients);
+      return;
+    }
+    if (method === "DELETE") {
+      handlePresetsDelete(req, res, url, config, sseClients);
+      return;
+    }
+  }
+  if (path === "/presets/use" && method === "POST") {
+    handlePresetsUse(req, res, config, sseClients);
+    return;
+  }
+  if (path === "/presets/bind" && method === "POST") {
+    handlePresetsBind(req, res, config, sseClients);
     return;
   }
   if (path === "/validate-line" && method === "GET") {
@@ -554,6 +821,16 @@ function routeRequest(
 
 export function startCompanionServer(config: ServerConfig): http.Server {
   const staticResolver = new StaticContextResolver();
+  const sseClients = new Set<http.ServerResponse>();
+  const closeSseClients = () => {
+    for (const client of sseClients) {
+      try {
+        client.end();
+      } catch {}
+    }
+    sseClients.clear();
+  };
+
   const server = http.createServer((req, res) => {
     // Set CORS headers
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -567,8 +844,16 @@ export function startCompanionServer(config: ServerConfig): http.Server {
     }
 
     const url = new URL(req.url || "", `http://localhost:${config.port}`);
-    routeRequest(req, res, url, config, staticResolver);
+    routeRequest(req, res, url, config, staticResolver, sseClients);
   });
+
+  const originalClose = server.close.bind(server);
+  server.close = ((cb?: (err?: Error) => void) => {
+    closeSseClients();
+    return originalClose(cb);
+  }) as typeof server.close;
+
+  server.on("close", closeSseClients);
 
   server.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {

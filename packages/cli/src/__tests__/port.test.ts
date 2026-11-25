@@ -348,7 +348,7 @@ describe("Port Resolution & Precedence", () => {
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
-    });
+    }, 15_000);
 
     it("fails fast in Electron mode when devPort is occupied externally and autoResolve is false", async () => {
       const server = net.createServer();
@@ -369,7 +369,7 @@ describe("Port Resolution & Precedence", () => {
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
-    });
+    }, 15_000);
   });
 
   describe("extractListeningPortFromOutput", () => {

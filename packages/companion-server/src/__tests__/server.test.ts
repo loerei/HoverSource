@@ -344,7 +344,7 @@ describe("Companion Server /config and /reload-config routes", () => {
     expect(clearData.config.ports.dev).toBeUndefined();
   });
 
-  it("serves dashboard HTML containing all 5 port control IDs", async () => {
+  it("serves dashboard HTML containing all 5 port control IDs and upgraded preset/shortcut controls", async () => {
     const res = await fetch(`http://127.0.0.1:${testPort}/dashboard`);
     expect(res.status).toBe(200);
     const html = await res.text();
@@ -353,5 +353,480 @@ describe("Companion Server /config and /reload-config routes", () => {
     expect(html).toContain('id="proxy-port-input"');
     expect(html).toContain('id="dev-port-input"');
     expect(html).toContain('id="companion-conflict-select"');
+
+    // Preset bar replaces Target Config selector
+    expect(html).toContain('id="preset-select"');
+    expect(html).toContain('id="save-preset-btn"');
+    expect(html).toContain('id="delete-preset-btn"');
+    expect(html).toContain('id="bind-repo-checkbox"');
+    expect(html).not.toContain('Target Config:');
+    expect(html).not.toContain('id="custom-path-input"');
+
+    // toggleFilterPanel, metaKey toggle, macOS labels, and e.code recorder
+    expect(html).toContain('shortcut-toggleFilterPanel');
+    expect(html).toContain('id="shortcut-toggleFilterPanel-key"');
+    expect(html).toContain('data-modifier="meta"');
+    expect(html).toContain('⌘');
+    expect(html).toContain('⌥');
+    expect(html).toContain('/^Key([A-Z])$/');
+    expect(html).toContain('/^Digit([0-9])$/');
+  });
+});
+
+describe("Companion Server GET /events SSE stream", () => {
+  let tempDir: string;
+  let server: http.Server;
+  let testPort: number;
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hoversource-sse-srv-"));
+    server = startCompanionServer({
+      port: 0,
+      projectRoot: tempDir,
+      debugPort: 9222,
+    });
+    await new Promise<void>((resolve) => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once("listening", resolve);
+      }
+    });
+    testPort = (server.address() as { port: number }).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch {}
+        resolve();
+      });
+    });
+  });
+
+  function openSseClient(port: number) {
+    return new Promise<{
+      req: http.ClientRequest;
+      res: http.IncomingMessage;
+      nextEvent: (timeoutMs?: number) => Promise<{ event: string; data: any }>;
+      closed: Promise<void>;
+    }>((resolve, reject) => {
+      const req = http.get(`http://127.0.0.1:${port}/events`, (res) => {
+        let buffer = "";
+        const queue: Array<{ event: string; data: any }> = [];
+        const waiters: Array<(ev: { event: string; data: any }) => void> = [];
+
+        const closed = new Promise<void>((resolveClose) => {
+          res.on("end", resolveClose);
+          res.on("close", resolveClose);
+        });
+
+        res.on("data", (chunk: Buffer) => {
+          buffer += chunk.toString("utf-8");
+          let sepIdx = buffer.indexOf("\n\n");
+          while (sepIdx !== -1) {
+            const rawFrame = buffer.slice(0, sepIdx);
+            buffer = buffer.slice(sepIdx + 2);
+            let eventName = "message";
+            const dataLines: string[] = [];
+            for (const line of rawFrame.split("\n")) {
+              if (line.startsWith("event:")) {
+                eventName = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).trim());
+              }
+            }
+            if (dataLines.length > 0) {
+              const parsed = {
+                event: eventName,
+                data: JSON.parse(dataLines.join("\n")),
+              };
+              const waiter = waiters.shift();
+              if (waiter) {
+                waiter(parsed);
+              } else {
+                queue.push(parsed);
+              }
+            }
+            sepIdx = buffer.indexOf("\n\n");
+          }
+        });
+
+        const nextEvent = (timeoutMs = 2000) => {
+          const queued = queue.shift();
+          if (queued) return Promise.resolve(queued);
+          return new Promise<{ event: string; data: any }>((resWait, rejWait) => {
+            const timer = setTimeout(() => {
+              const idx = waiters.indexOf(onEvent);
+              if (idx !== -1) waiters.splice(idx, 1);
+              rejWait(new Error("Timed out waiting for SSE event"));
+            }, timeoutMs);
+            const onEvent = (ev: { event: string; data: any }) => {
+              clearTimeout(timer);
+              resWait(ev);
+            };
+            waiters.push(onEvent);
+          });
+        };
+
+        resolve({ req, res, nextEvent, closed });
+      });
+      req.on("error", reject);
+    });
+  }
+
+  it("streams event: config updates on POST /config, POST /reload-config, and DELETE /config", async () => {
+    const client = await openSseClient(testPort);
+    expect(client.res.statusCode).toBe(200);
+    expect(client.res.headers["content-type"]).toBe("text/event-stream");
+    expect(client.res.headers["cache-control"]).toBe("no-cache");
+    expect(client.res.headers["access-control-allow-origin"]).toBe("*");
+
+    const postRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "local", config: { theme: "light" } }),
+    });
+    expect(postRes.status).toBe(200);
+    const postEvent = await client.nextEvent();
+    expect(postEvent.event).toBe("config");
+    expect(postEvent.data.theme).toBe("light");
+
+    fs.writeFileSync(
+      path.join(tempDir, ".hoversourcerc"),
+      JSON.stringify({ theme: "system", maxTraversalDepth: 48 }),
+      "utf-8"
+    );
+    const reloadRes = await fetch(`http://127.0.0.1:${testPort}/reload-config`, {
+      method: "POST",
+    });
+    expect(reloadRes.status).toBe(200);
+    const reloadEvent = await client.nextEvent();
+    expect(reloadEvent.event).toBe("config");
+    expect(reloadEvent.data.theme).toBe("system");
+    expect(reloadEvent.data.maxTraversalDepth).toBe(48);
+
+    const deleteRes = await fetch(`http://127.0.0.1:${testPort}/config?target=local`, {
+      method: "DELETE",
+    });
+    expect(deleteRes.status).toBe(200);
+    const deleteEvent = await client.nextEvent();
+    expect(deleteEvent.event).toBe("config");
+    expect(deleteEvent.data.theme).toBe("dark");
+
+    client.req.destroy();
+    await client.closed;
+  });
+
+  it("removes closed clients and closes active SSE responses cleanly on server.close()", async () => {
+    const clientA = await openSseClient(testPort);
+    const clientB = await openSseClient(testPort);
+
+    clientA.req.on("error", () => {});
+    clientA.req.destroy();
+    await clientA.closed;
+
+    const postRes = await fetch(`http://127.0.0.1:${testPort}/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target: "local", config: { theme: "light" } }),
+    });
+    expect(postRes.status).toBe(200);
+    const eventB = await clientB.nextEvent();
+    expect(eventB.event).toBe("config");
+    expect(eventB.data.theme).toBe("light");
+
+    // Closing the server while clientB is still open must close SSE cleanly without hanging
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve());
+    });
+    await clientB.closed;
+  });
+});
+
+describe("Companion Server /presets* routes", () => {
+  let tempDir: string;
+  let globalConfigPath: string;
+  let server: http.Server;
+  let testPort: number;
+
+  function openSseClient(port: number) {
+    return new Promise<{
+      req: http.ClientRequest;
+      nextEvent: (timeoutMs?: number) => Promise<{ event: string; data: any }>;
+      closed: Promise<void>;
+    }>((resolve, reject) => {
+      const req = http.get(`http://127.0.0.1:${port}/events`, (res) => {
+        let buffer = "";
+        const queue: Array<{ event: string; data: any }> = [];
+        const waiters: Array<(ev: { event: string; data: any }) => void> = [];
+
+        const closed = new Promise<void>((resolveClose) => {
+          res.on("end", resolveClose);
+          res.on("close", resolveClose);
+        });
+
+        res.on("data", (chunk: Buffer) => {
+          buffer += chunk.toString("utf-8");
+          let sepIdx = buffer.indexOf("\n\n");
+          while (sepIdx !== -1) {
+            const rawFrame = buffer.slice(0, sepIdx);
+            buffer = buffer.slice(sepIdx + 2);
+            let eventName = "message";
+            const dataLines: string[] = [];
+            for (const line of rawFrame.split("\n")) {
+              if (line.startsWith("event:")) {
+                eventName = line.slice(6).trim();
+              } else if (line.startsWith("data:")) {
+                dataLines.push(line.slice(5).trim());
+              }
+            }
+            if (dataLines.length > 0) {
+              const parsed = {
+                event: eventName,
+                data: JSON.parse(dataLines.join("\n")),
+              };
+              const waiter = waiters.shift();
+              if (waiter) {
+                waiter(parsed);
+              } else {
+                queue.push(parsed);
+              }
+            }
+            sepIdx = buffer.indexOf("\n\n");
+          }
+        });
+
+        const nextEvent = (timeoutMs = 2000) => {
+          const queued = queue.shift();
+          if (queued) return Promise.resolve(queued);
+          return new Promise<{ event: string; data: any }>((resWait, rejWait) => {
+            const timer = setTimeout(() => {
+              const idx = waiters.indexOf(onEvent);
+              if (idx !== -1) waiters.splice(idx, 1);
+              rejWait(new Error("Timed out waiting for SSE event"));
+            }, timeoutMs);
+            const onEvent = (ev: { event: string; data: any }) => {
+              clearTimeout(timer);
+              resWait(ev);
+            };
+            waiters.push(onEvent);
+          });
+        };
+
+        resolve({ req, nextEvent, closed });
+      });
+      req.on("error", reject);
+    });
+  }
+
+  beforeAll(async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "hoversource-presets-srv-"));
+    globalConfigPath = path.join(tempDir, "global.hoversourcerc");
+    server = startCompanionServer({
+      port: 0,
+      projectRoot: tempDir,
+      debugPort: 9222,
+      globalConfigPath,
+    });
+    await new Promise<void>((resolve) => {
+      if (server.listening) {
+        resolve();
+      } else {
+        server.once("listening", resolve);
+      }
+    });
+    testPort = (server.address() as { port: number }).port;
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch {}
+        resolve();
+      });
+    });
+  });
+
+  it("supports GET /presets, POST /presets, POST /presets/use, POST /presets/bind, and DELETE /presets with SSE broadcasts", async () => {
+    const client = await openSseClient(testPort);
+
+    // 1. Initial GET /presets
+    const initRes = await fetch(`http://127.0.0.1:${testPort}/presets`);
+    expect(initRes.status).toBe(200);
+    expect(await initRes.json()).toEqual({
+      presets: {},
+      activePreset: null,
+      repoBinding: null,
+      effectivePreset: null,
+    });
+
+    // 2. POST /presets with supplied config (ports must be stripped by preset scope)
+    const saveRes = await fetch(`http://127.0.0.1:${testPort}/presets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "figma",
+        config: {
+          theme: "light",
+          minimalModeByDefault: true,
+          ports: { companion: 9999 },
+          shortcuts: {
+            toggleFilterPanel: { key: "k", altKey: false, ctrlKey: false, shiftKey: true, metaKey: true },
+          },
+        },
+      }),
+    });
+    expect(saveRes.status).toBe(200);
+    const saveData = await saveRes.json();
+    expect(saveData.success).toBe(true);
+    expect(saveData.name).toBe("figma");
+    expect(saveData.preset.theme).toBe("light");
+    expect(saveData.preset.ports).toBeUndefined();
+    const saveEvent = await client.nextEvent();
+    expect(saveEvent.event).toBe("config");
+
+    // 3. POST /presets/use activates "figma" and broadcasts merged config
+    const useRes = await fetch(`http://127.0.0.1:${testPort}/presets/use`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "figma" }),
+    });
+    expect(useRes.status).toBe(200);
+    const useData = await useRes.json();
+    expect(useData.success).toBe(true);
+    expect(useData.activePreset).toBe("figma");
+    expect(useData.config.theme).toBe("light");
+    expect(useData.config.minimalModeByDefault).toBe(true);
+    expect(useData.config.ports.companion).toBe(7300);
+    expect(useData.config.shortcuts.toggleFilterPanel).toEqual({
+      key: "k",
+      altKey: false,
+      ctrlKey: false,
+      shiftKey: true,
+      metaKey: true,
+    });
+    const useEvent = await client.nextEvent();
+    expect(useEvent.event).toBe("config");
+    expect(useEvent.data.theme).toBe("light");
+    expect(useEvent.data.shortcuts.toggleFilterPanel.metaKey).toBe(true);
+
+    // 4. Snapshot current merged config into "mac-snap" via POST /presets without config payload
+    const snapRes = await fetch(`http://127.0.0.1:${testPort}/presets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "mac-snap" }),
+    });
+    expect(snapRes.status).toBe(200);
+    const snapData = await snapRes.json();
+    expect(snapData.preset.theme).toBe("light");
+    expect(snapData.preset.ports).toBeUndefined();
+    await client.nextEvent();
+
+    // 5. POST /presets/bind binds current repo to "mac-snap", then GET /presets reflects repoBinding
+    const bindRes = await fetch(`http://127.0.0.1:${testPort}/presets/bind`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "mac-snap" }),
+    });
+    expect(bindRes.status).toBe(200);
+    const bindData = await bindRes.json();
+    expect(bindData.success).toBe(true);
+    expect(bindData.boundPreset).toBe("mac-snap");
+    await client.nextEvent();
+
+    const listAfterBind = await fetch(`http://127.0.0.1:${testPort}/presets`);
+    expect(listAfterBind.status).toBe(200);
+    const listed = await listAfterBind.json();
+    expect(Object.keys(listed.presets).sort()).toEqual(["figma", "mac-snap"]);
+    expect(listed.activePreset).toBe("figma");
+    expect(listed.repoBinding).toBe("mac-snap");
+    expect(listed.effectivePreset).toBe("mac-snap");
+
+    // 6. Clear repo binding via POST /presets/bind { name: null }
+    const unbindRes = await fetch(`http://127.0.0.1:${testPort}/presets/bind`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: null }),
+    });
+    expect(unbindRes.status).toBe(200);
+    expect((await unbindRes.json()).boundPreset).toBeNull();
+    await client.nextEvent();
+
+    // 7. DELETE /presets deletes active preset "figma" and broadcasts fallback to dark theme
+    const delRes = await fetch(`http://127.0.0.1:${testPort}/presets?name=figma`, {
+      method: "DELETE",
+    });
+    expect(delRes.status).toBe(200);
+    const delData = await delRes.json();
+    expect(delData.success).toBe(true);
+    expect(delData.deleted).toBe(true);
+    expect(delData.clearedActive).toBe(true);
+    expect(delData.config.theme).toBe("dark");
+    const delEvent = await client.nextEvent();
+    expect(delEvent.event).toBe("config");
+    expect(delEvent.data.theme).toBe("dark");
+
+    // 8. DELETE /presets via JSON body also works
+    const delBodyRes = await fetch(`http://127.0.0.1:${testPort}/presets`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "mac-snap" }),
+    });
+    expect(delBodyRes.status).toBe(200);
+    expect((await delBodyRes.json()).deleted).toBe(true);
+    await client.nextEvent();
+
+    client.req.destroy();
+    await client.closed;
+  });
+
+  it("rejects invalid preset names, unknown preset activation, and invalid preset fields with 400", async () => {
+    for (const badName of ["", "   ", "__proto__", "constructor", "prototype"]) {
+      const saveBad = await fetch(`http://127.0.0.1:${testPort}/presets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: badName, config: { theme: "light" } }),
+      });
+      expect(saveBad.status).toBe(400);
+
+      const useBad = await fetch(`http://127.0.0.1:${testPort}/presets/use`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: badName }),
+      });
+      expect(useBad.status).toBe(400);
+
+      const bindBad = await fetch(`http://127.0.0.1:${testPort}/presets/bind`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: badName }),
+      });
+      expect(bindBad.status).toBe(400);
+
+      const delBad = await fetch(`http://127.0.0.1:${testPort}/presets?name=${encodeURIComponent(badName)}`, {
+        method: "DELETE",
+      });
+      expect(delBad.status).toBe(400);
+    }
+
+    const unknownUse = await fetch(`http://127.0.0.1:${testPort}/presets/use`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "non-existent-preset" }),
+    });
+    expect(unknownUse.status).toBe(400);
+    expect((await unknownUse.json()).error).toContain("Unknown preset");
+
+    const invalidConfig = await fetch(`http://127.0.0.1:${testPort}/presets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "broken", config: { theme: "neon-pink" } }),
+    });
+    expect(invalidConfig.status).toBe(400);
   });
 });

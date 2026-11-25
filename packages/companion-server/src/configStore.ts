@@ -7,13 +7,19 @@ export interface ShortcutKey {
   altKey: boolean;
   ctrlKey: boolean;
   shiftKey: boolean;
+  metaKey?: boolean;
 }
+
+export type ShortcutConfig = ShortcutKey;
 
 export interface LayerPickerScroll {
   altKey: boolean;
   ctrlKey: boolean;
   shiftKey: boolean;
+  metaKey?: boolean;
 }
+
+export type ScrollModifiersConfig = LayerPickerScroll;
 
 export type ConfigTheme = "dark" | "light" | "system";
 export type ConfigEditor = "vscode" | "cursor" | "code";
@@ -48,6 +54,7 @@ export interface HoverSourceConfig {
     copyAllLayers: ShortcutKey;
     openDashboard: ShortcutKey;
     toggleMode: ShortcutKey;
+    toggleFilterPanel: ShortcutKey;
   };
   metadataFilter?: {
     panelPosition?: { x: number; y: number };
@@ -57,6 +64,54 @@ export interface HoverSourceConfig {
       design?: Record<string, boolean>;
     };
   };
+}
+
+export interface PresetConfig {
+  theme?: ConfigTheme;
+  minimalModeByDefault?: boolean;
+  snappingThreshold?: number;
+  desnappingThreshold?: number;
+  maxTraversalDepth?: number;
+  layerPickerScroll?: Partial<LayerPickerScroll>;
+  shortcuts?: Partial<Record<ShortcutAction, Partial<ShortcutKey>>>;
+  metadataFilter?: {
+    panelPosition?: { x?: number; y?: number };
+    filters?: Partial<Record<FilterCategory, Record<string, boolean>>>;
+  };
+}
+
+export interface PresetListResult {
+  presets: Record<string, PresetConfig>;
+  activePreset: string | null;
+  boundPreset: string | null;
+  effectivePreset: string | null;
+}
+
+export interface SavePresetResult {
+  name: string;
+  preset: PresetConfig;
+  savedTo: string;
+  presets: Record<string, PresetConfig>;
+}
+
+export interface UsePresetResult {
+  activePreset: string | null;
+  savedTo: string;
+  config: HoverSourceConfig;
+}
+
+export interface DeletePresetResult {
+  deleted: boolean;
+  name: string;
+  clearedActive: boolean;
+  savedTo: string;
+  config: HoverSourceConfig;
+}
+
+export interface BindRepoPresetResult {
+  boundPreset: string | null;
+  savedTo: string;
+  config: HoverSourceConfig;
 }
 
 export type ShortcutAction = keyof HoverSourceConfig["shortcuts"];
@@ -132,13 +187,14 @@ export const DEFAULT_CONFIG: HoverSourceConfig = {
     companionConflict: "shift",
   },
   shortcuts: {
-    toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-    toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-    toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-    copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-    copyAllLayers: { key: "c", altKey: true, ctrlKey: false, shiftKey: true },
-    openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-    toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false },
+    toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    copyAllLayers: { key: "c", altKey: true, ctrlKey: false, shiftKey: true, metaKey: false },
+    openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
+    toggleFilterPanel: { key: "d", altKey: true, ctrlKey: true, shiftKey: false, metaKey: false },
   },
   metadataFilter: {
     filters: {
@@ -183,9 +239,20 @@ const VALID_SHORTCUT_ACTIONS = new Set<string>([
   "copyAllLayers",
   "openDashboard",
   "toggleMode",
+  "toggleFilterPanel",
 ]);
-const VALID_SHORTCUT_FIELDS = new Set<string>(["key", "altKey", "ctrlKey", "shiftKey"]);
-const VALID_SCROLL_FIELDS = new Set<string>(["altKey", "ctrlKey", "shiftKey"]);
+const VALID_SHORTCUT_FIELDS = new Set<string>(["key", "altKey", "ctrlKey", "shiftKey", "metaKey"]);
+const VALID_SCROLL_FIELDS = new Set<string>(["altKey", "ctrlKey", "shiftKey", "metaKey"]);
+const PRESET_SCOPED_KEYS = new Set<string>([
+  "shortcuts",
+  "layerPickerScroll",
+  "theme",
+  "metadataFilter",
+  "minimalModeByDefault",
+  "snappingThreshold",
+  "desnappingThreshold",
+  "maxTraversalDepth",
+]);
 const VALID_FILTER_CATEGORIES = new Set<string>(["component", "layer", "design"]);
 const VALID_PORT_FIELDS = new Set<string>(["companion", "debug", "proxy", "dev", "companionConflict"]);
 const VALID_CONFLICT_POLICIES = new Set<string>(["shift", "takeover", "fail"]);
@@ -369,7 +436,7 @@ function validateShortcutDelta(
       } else {
         out.key = val;
       }
-    } else if (key === "altKey" || key === "ctrlKey" || key === "shiftKey") {
+    } else if (key === "altKey" || key === "ctrlKey" || key === "shiftKey" || key === "metaKey") {
       const parsed = validateBoolean(val, `${basePath}.${key}`, issues);
       if (parsed !== undefined) {
         out[key] = parsed;
@@ -397,7 +464,7 @@ function validateScrollDelta(
       continue;
     }
     const parsed = validateBoolean(raw[key], `layerPickerScroll.${key}`, issues);
-    if (parsed !== undefined && (key === "altKey" || key === "ctrlKey" || key === "shiftKey")) {
+    if (parsed !== undefined && (key === "altKey" || key === "ctrlKey" || key === "shiftKey" || key === "metaKey")) {
       out[key] = parsed;
     }
   }
@@ -874,21 +941,104 @@ function stripNullPortOverrides(container: Record<string, unknown>): void {
   }
 }
 
+function stripNonRuntimeKeys(raw: Record<string, unknown>): Record<string, unknown> {
+  const sanitized = { ...raw };
+  delete sanitized.recentProjects;
+  delete sanitized.presets;
+  delete sanitized.activePreset;
+  delete sanitized.preset;
+  return sanitized;
+}
+
+function readValidPresetName(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || DISALLOWED_PROTO_KEYS.has(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+export function validatePresetName(name: unknown): string {
+  if (typeof name !== "string") {
+    throw new ConfigValidationError("Preset name must be a string", [
+      { path: "preset", message: "Preset name must be a string" },
+    ]);
+  }
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    throw new ConfigValidationError("Preset name must not be empty", [
+      { path: "preset", message: "Preset name must not be empty" },
+    ]);
+  }
+  if (DISALLOWED_PROTO_KEYS.has(trimmed)) {
+    throw new ConfigValidationError(`Invalid preset name: ${trimmed}`, [
+      { path: "preset", message: `Invalid preset name: ${trimmed}` },
+    ]);
+  }
+  return trimmed;
+}
+
+function extractPresetFields(raw: Record<string, unknown>): PresetConfig {
+  const extracted: Record<string, unknown> = {};
+  for (const key of Object.keys(raw)) {
+    if (DISALLOWED_PROTO_KEYS.has(key) || !PRESET_SCOPED_KEYS.has(key)) {
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(raw, key) && raw[key] !== undefined) {
+      extracted[key] = structuredClone(raw[key]);
+    }
+  }
+  return extracted as PresetConfig;
+}
+
+function readPresetsMap(globalRaw: Record<string, unknown> | null): Record<string, PresetConfig> {
+  const result: Record<string, PresetConfig> = {};
+  if (!globalRaw || !isPlainObject(globalRaw.presets)) {
+    return result;
+  }
+  const rawPresets = globalRaw.presets;
+  for (const key of Object.keys(rawPresets)) {
+    const validName = readValidPresetName(key);
+    if (!validName) {
+      continue;
+    }
+    const candidate = rawPresets[key];
+    if (!isPlainObject(candidate)) {
+      continue;
+    }
+    result[validName] = extractPresetFields(candidate);
+  }
+  return result;
+}
+
 export function loadMergedConfig(projectRoot: string, globalConfigPath?: string): HoverSourceConfig {
   let config = cloneDefaultConfig();
 
   const globalPath = getGlobalConfigPath(globalConfigPath);
   const globalConfig = readConfigFromFile(globalPath);
   if (globalConfig) {
-    const sanitizedGlobal = { ...globalConfig };
-    delete sanitizedGlobal.recentProjects;
-    config = mergeDeep<HoverSourceConfig>(config, sanitizedGlobal);
+    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(globalConfig));
   }
 
   const localPath = getLocalConfigPath(projectRoot);
   const localConfig = readConfigFromFile(localPath);
+
+  const localPresetName = readValidPresetName(localConfig?.preset);
+  const globalActivePresetName = readValidPresetName(globalConfig?.activePreset);
+  const resolvedPresetName = localPresetName ?? globalActivePresetName;
+
+  if (resolvedPresetName && globalConfig) {
+    const presetsMap = readPresetsMap(globalConfig);
+    if (Object.prototype.hasOwnProperty.call(presetsMap, resolvedPresetName)) {
+      config = mergeDeep<HoverSourceConfig>(config, presetsMap[resolvedPresetName]);
+    }
+  }
+
   if (localConfig) {
-    config = mergeDeep<HoverSourceConfig>(config, localConfig);
+    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(localConfig));
   }
 
   stripNullPortOverrides(config as unknown as Record<string, unknown>);
@@ -906,21 +1056,19 @@ export function getConfigForTarget(
     const globalPath = getGlobalConfigPath(globalConfigPath);
     const raw = readConfigFromFile(globalPath);
     if (raw) {
-      const sanitized = { ...raw };
-      delete sanitized.recentProjects;
-      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, sanitized);
+      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
     }
   } else if (queryTarget === "local") {
     const localPath = getLocalConfigPath(defaultRoot);
     const raw = readConfigFromFile(localPath);
     if (raw) {
-      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, raw);
+      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
     }
   } else if (queryTarget === "custom" && customPath) {
     const customPathConfig = getLocalConfigPath(customPath);
     const raw = readConfigFromFile(customPathConfig);
     if (raw) {
-      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, raw);
+      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
     }
   } else {
     targetConfig = loadMergedConfig(defaultRoot, globalConfigPath);
@@ -1051,5 +1199,175 @@ export function deleteConfigTarget(
     deletedFile,
     removedRecent: shouldRemoveRecent,
     newConfig,
+  };
+}
+
+export function listPresets(projectRoot?: string, globalConfigPath?: string): PresetListResult {
+  const globalPath = getGlobalConfigPath(globalConfigPath);
+  const globalRaw = readConfigFromFile(globalPath);
+  const presets = readPresetsMap(globalRaw);
+  const activePreset = readValidPresetName(globalRaw?.activePreset);
+
+  let boundPreset: string | null = null;
+  if (projectRoot) {
+    const localRaw = readConfigFromFile(getLocalConfigPath(projectRoot));
+    boundPreset = readValidPresetName(localRaw?.preset);
+  }
+
+  return {
+    presets,
+    activePreset,
+    boundPreset,
+    effectivePreset: boundPreset ?? activePreset,
+  };
+}
+
+export function savePreset(
+  name: string,
+  presetData: PresetConfig | null | undefined,
+  projectRoot: string,
+  globalConfigPath?: string
+): SavePresetResult {
+  const validatedName = validatePresetName(name);
+  let normalizedPreset: PresetConfig;
+
+  if (presetData === null || presetData === undefined) {
+    const merged = loadMergedConfig(projectRoot, globalConfigPath);
+    normalizedPreset = extractPresetFields(merged as unknown as Record<string, unknown>);
+  } else {
+    if (!isPlainObject(presetData)) {
+      throw new ConfigValidationError("Preset config must be an object", [
+        { path: "preset", message: "Preset config must be an object" },
+      ]);
+    }
+    const filtered = extractPresetFields(presetData);
+    const parsed = parseConfigDelta(filtered);
+    if (!parsed.ok) {
+      throw new ConfigValidationError(parsed.error, parsed.issues);
+    }
+    normalizedPreset = structuredClone(parsed.value) as PresetConfig;
+  }
+
+  const globalPath = getGlobalConfigPath(globalConfigPath);
+  const globalRaw = readConfigFromFile(globalPath) ?? {};
+  const presets = readPresetsMap(globalRaw);
+  presets[validatedName] = normalizedPreset;
+  globalRaw.presets = presets;
+
+  writeJsonAtomic(globalPath, globalRaw);
+
+  return {
+    name: validatedName,
+    preset: normalizedPreset,
+    savedTo: globalPath,
+    presets,
+  };
+}
+
+export function usePreset(
+  name: string | null,
+  projectRoot: string,
+  globalConfigPath?: string
+): UsePresetResult {
+  const globalPath = getGlobalConfigPath(globalConfigPath);
+  const globalRaw = readConfigFromFile(globalPath) ?? {};
+
+  if (name === null) {
+    delete globalRaw.activePreset;
+    writeJsonAtomic(globalPath, globalRaw);
+    return {
+      activePreset: null,
+      savedTo: globalPath,
+      config: loadMergedConfig(projectRoot, globalConfigPath),
+    };
+  }
+
+  const validatedName = validatePresetName(name);
+  const presets = readPresetsMap(globalRaw);
+  if (!Object.prototype.hasOwnProperty.call(presets, validatedName)) {
+    throw new ConfigValidationError(`Unknown preset "${validatedName}"`, [
+      { path: "activePreset", message: `Unknown preset "${validatedName}"` },
+    ]);
+  }
+
+  globalRaw.activePreset = validatedName;
+  writeJsonAtomic(globalPath, globalRaw);
+
+  return {
+    activePreset: validatedName,
+    savedTo: globalPath,
+    config: loadMergedConfig(projectRoot, globalConfigPath),
+  };
+}
+
+export function deletePreset(
+  name: string,
+  projectRoot: string,
+  globalConfigPath?: string
+): DeletePresetResult {
+  const validatedName = validatePresetName(name);
+  const globalPath = getGlobalConfigPath(globalConfigPath);
+  const globalRaw = readConfigFromFile(globalPath);
+  const presets = readPresetsMap(globalRaw);
+
+  if (!globalRaw || !Object.prototype.hasOwnProperty.call(presets, validatedName)) {
+    return {
+      deleted: false,
+      name: validatedName,
+      clearedActive: false,
+      savedTo: globalPath,
+      config: loadMergedConfig(projectRoot, globalConfigPath),
+    };
+  }
+
+  delete presets[validatedName];
+  globalRaw.presets = presets;
+
+  let clearedActive = false;
+  if (readValidPresetName(globalRaw.activePreset) === validatedName) {
+    delete globalRaw.activePreset;
+    clearedActive = true;
+  }
+
+  writeJsonAtomic(globalPath, globalRaw);
+
+  return {
+    deleted: true,
+    name: validatedName,
+    clearedActive,
+    savedTo: globalPath,
+    config: loadMergedConfig(projectRoot, globalConfigPath),
+  };
+}
+
+export function bindRepoPreset(
+  presetName: string | null,
+  projectRoot: string,
+  globalConfigPath?: string
+): BindRepoPresetResult {
+  const localPath = getLocalConfigPath(projectRoot);
+
+  if (presetName === null) {
+    const localRaw = readConfigFromFile(localPath);
+    if (localRaw && Object.prototype.hasOwnProperty.call(localRaw, "preset")) {
+      delete localRaw.preset;
+      writeJsonAtomic(localPath, localRaw);
+    }
+    return {
+      boundPreset: null,
+      savedTo: localPath,
+      config: loadMergedConfig(projectRoot, globalConfigPath),
+    };
+  }
+
+  const validatedName = validatePresetName(presetName);
+  const localRaw = readConfigFromFile(localPath) ?? {};
+  localRaw.preset = validatedName;
+  writeJsonAtomic(localPath, localRaw);
+
+  return {
+    boundPreset: validatedName,
+    savedTo: localPath,
+    config: loadMergedConfig(projectRoot, globalConfigPath),
   };
 }

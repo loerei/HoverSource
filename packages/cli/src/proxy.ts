@@ -99,7 +99,13 @@ export function startProxy(options: ProxyOptions): Promise<void> {
       const companionReq = http.request(companionReqOpts, (companionRes) => {
         const responseHeaders = { ...companionRes.headers };
         // Ensure CSP is stripped from companion server responses just in case
-        stripCspHeaders(responseHeaders);
+        sanitizeUpstreamResponseHeaders(
+          responseHeaders,
+          targetUrl,
+          proxyPort,
+          !!useHttps,
+          req.headers.host
+        );
 
         if (isOverlayScript) {
           const chunks: Buffer[] = [];
@@ -114,16 +120,36 @@ export function startProxy(options: ProxyOptions): Promise<void> {
             res.end(bodyBuf);
           });
         } else {
+          const contentType = String(responseHeaders["content-type"] || "").toLowerCase();
+          const isEventStream =
+            rewrittenPath === "/events" || contentType.includes("text/event-stream");
+          if (isEventStream) {
+            req.socket?.setTimeout?.(0);
+            res.setTimeout?.(0);
+            companionRes.socket?.setTimeout?.(0);
+          }
           res.writeHead(companionRes.statusCode || 200, responseHeaders);
+          if (isEventStream) {
+            res.flushHeaders?.();
+          }
           companionRes.pipe(res, { end: true });
         }
       });
 
+      res.on("close", () => {
+        if (!res.writableEnded) {
+          companionReq.destroy();
+        }
+      });
+
       companionReq.on("error", (err) => {
+        if (res.writableEnded || res.destroyed) return;
         console.error(`[HoverSource Proxy] Failed to proxy request to companion server:`, err.message);
         if (!res.headersSent) {
           res.writeHead(502, { "Content-Type": "text/plain" });
           res.end(`HoverSource proxy: companion server upstream error.`);
+        } else {
+          res.end();
         }
       });
 

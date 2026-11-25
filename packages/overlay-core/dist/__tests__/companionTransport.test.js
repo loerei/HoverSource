@@ -2,6 +2,9 @@ import { describe, it, expect, expectTypeOf, vi, afterEach } from "vitest";
 import { companionRequestJson, getCompanionBaseUrl } from "../companionTransport.js";
 describe("companionTransport", () => {
     afterEach(() => {
+        delete globalThis.__hoversourceBridgeCall;
+        delete globalThis.__hoversourceBridgeResolve;
+        delete globalThis.__hoversourceBridgeReject;
         delete globalThis.__HOVERSOURCE_PROXY__;
         delete globalThis.__HOVERSOURCE_PORT__;
         vi.useRealTimers();
@@ -146,5 +149,165 @@ describe("companionTransport", () => {
             // @ts-expect-error timeoutMs must be a number
             companionRequestJson("/ping", { timeoutMs: "5000" });
         }
+    });
+    describe("CDP Runtime.addBinding bridge transport", () => {
+        it("routes requests through __hoversourceBridgeCall with CSPRNG nonce id and parses string JSON payload", async () => {
+            const fetchMock = vi.fn();
+            vi.stubGlobal("fetch", fetchMock);
+            let capturedPayload = null;
+            globalThis.__hoversourceBridgeCall = vi.fn((raw) => {
+                capturedPayload = JSON.parse(raw);
+            });
+            const pending = companionRequestJson("/config", {
+                method: "POST",
+                body: JSON.stringify({ target: "local" }),
+            });
+            expect(fetchMock).not.toHaveBeenCalled();
+            expect(capturedPayload).toEqual({
+                id: expect.stringMatching(/^[^:]+:\d+$/),
+                method: "POST",
+                path: "/config",
+                body: JSON.stringify({ target: "local" }),
+            });
+            const [nonce] = capturedPayload.id.split(":");
+            expect(nonce.length).toBeGreaterThan(0);
+            // Stale nonce resolve/reject must neither resolve nor reject the active request
+            globalThis.__hoversourceBridgeResolve("stale-nonce:1", "{}");
+            globalThis.__hoversourceBridgeReject("stale-nonce:1", "stale error");
+            globalThis.__hoversourceBridgeResolve(capturedPayload.id, JSON.stringify({ ok: true }));
+            await expect(pending).resolves.toEqual({ ok: true });
+        });
+        it("propagates __hoversourceBridgeReject error for active request, clears timer, and removes abort listener", async () => {
+            vi.useFakeTimers();
+            const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+            let activeId = "";
+            globalThis.__hoversourceBridgeCall = vi.fn((raw) => {
+                activeId = JSON.parse(raw).id;
+            });
+            const controller = new AbortController();
+            const activeListeners = new Set();
+            const origAdd = controller.signal.addEventListener.bind(controller.signal);
+            const origRemove = controller.signal.removeEventListener.bind(controller.signal);
+            vi.spyOn(controller.signal, "addEventListener").mockImplementation((t, l, o) => {
+                if (t === "abort" && l)
+                    activeListeners.add(l);
+                return origAdd(t, l, o);
+            });
+            vi.spyOn(controller.signal, "removeEventListener").mockImplementation((t, l, o) => {
+                if (t === "abort" && l)
+                    activeListeners.delete(l);
+                return origRemove(t, l, o);
+            });
+            const reqPromise = companionRequestJson("/config", {
+                method: "POST",
+                signal: controller.signal,
+            });
+            expect(activeListeners.size).toBe(1);
+            globalThis.__hoversourceBridgeReject(activeId, "Companion HTTP POST /config failed with status 500");
+            await expect(reqPromise).rejects.toThrow("Companion HTTP POST /config failed with status 500");
+            expect(clearTimeoutSpy).toHaveBeenCalled();
+            expect(vi.getTimerCount()).toBe(0);
+            expect(activeListeners.size).toBe(0);
+        });
+        it("rejects on malformed JSON payload in __hoversourceBridgeResolve and cleans up timer and listener", async () => {
+            vi.useFakeTimers();
+            const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
+            let activeId = "";
+            globalThis.__hoversourceBridgeCall = vi.fn((raw) => {
+                activeId = JSON.parse(raw).id;
+            });
+            const controller = new AbortController();
+            const removeSpy = vi.spyOn(controller.signal, "removeEventListener");
+            const reqPromise = companionRequestJson("/validate-line?file=a.ts", {
+                signal: controller.signal,
+            });
+            globalThis.__hoversourceBridgeResolve(activeId, "{invalid");
+            await expect(reqPromise).rejects.toThrow("Failed to parse companion bridge response for GET /validate-line?file=a.ts");
+            expect(clearTimeoutSpy).toHaveBeenCalled();
+            expect(vi.getTimerCount()).toBe(0);
+            expect(removeSpy).toHaveBeenCalledWith("abort", expect.any(Function));
+        });
+        it("rejects immediately on pre-aborted AbortSignal without invoking __hoversourceBridgeCall or fetch", async () => {
+            const fetchMock = vi.fn();
+            vi.stubGlobal("fetch", fetchMock);
+            const bridgeMock = vi.fn();
+            globalThis.__hoversourceBridgeCall = bridgeMock;
+            const controller = new AbortController();
+            controller.abort(new Error("pre-aborted bridge"));
+            await expect(companionRequestJson("/config", { signal: controller.signal })).rejects.toThrow("pre-aborted bridge");
+            expect(bridgeMock).not.toHaveBeenCalled();
+            expect(fetchMock).not.toHaveBeenCalled();
+        });
+        it("cancels mid-flight on caller AbortSignal in bridge mode and ignores late __hoversourceBridgeResolve", async () => {
+            let activeId = "";
+            globalThis.__hoversourceBridgeCall = vi.fn((raw) => {
+                activeId = JSON.parse(raw).id;
+            });
+            const controller = new AbortController();
+            const activeListeners = new Set();
+            const origAdd = controller.signal.addEventListener.bind(controller.signal);
+            const origRemove = controller.signal.removeEventListener.bind(controller.signal);
+            vi.spyOn(controller.signal, "addEventListener").mockImplementation((t, l, o) => {
+                if (t === "abort" && l)
+                    activeListeners.add(l);
+                return origAdd(t, l, o);
+            });
+            vi.spyOn(controller.signal, "removeEventListener").mockImplementation((t, l, o) => {
+                if (t === "abort" && l)
+                    activeListeners.delete(l);
+                return origRemove(t, l, o);
+            });
+            const reqPromise = companionRequestJson("/config", { signal: controller.signal });
+            expect(activeListeners.size).toBe(1);
+            controller.abort(new Error("bridge cancelled"));
+            await expect(reqPromise).rejects.toThrow("bridge cancelled");
+            expect(activeListeners.size).toBe(0);
+            // Late resolve for cancelled ID must be a safe no-op
+            expect(() => globalThis.__hoversourceBridgeResolve(activeId, "{}")).not.toThrow();
+        });
+        it("removes abort listener after completed CDP bridge call with non-aborted signal", async () => {
+            let activeId = "";
+            globalThis.__hoversourceBridgeCall = vi.fn((raw) => {
+                activeId = JSON.parse(raw).id;
+            });
+            const controller = new AbortController();
+            const activeListeners = new Set();
+            const origAdd = controller.signal.addEventListener.bind(controller.signal);
+            const origRemove = controller.signal.removeEventListener.bind(controller.signal);
+            vi.spyOn(controller.signal, "addEventListener").mockImplementation((t, l, o) => {
+                if (t === "abort" && l)
+                    activeListeners.add(l);
+                return origAdd(t, l, o);
+            });
+            const removeSpy = vi.spyOn(controller.signal, "removeEventListener").mockImplementation((t, l, o) => {
+                if (t === "abort" && l)
+                    activeListeners.delete(l);
+                return origRemove(t, l, o);
+            });
+            const reqPromise = companionRequestJson("/ping", { signal: controller.signal });
+            globalThis.__hoversourceBridgeResolve(activeId, JSON.stringify({ ok: true }));
+            await expect(reqPromise).resolves.toEqual({ ok: true });
+            expect(removeSpy).toHaveBeenCalledWith("abort", expect.any(Function));
+            expect(activeListeners.size).toBe(0);
+        });
+        it("cleans up timer and listener when __hoversourceBridgeCall throws synchronously", async () => {
+            vi.useFakeTimers();
+            globalThis.__hoversourceBridgeCall = vi.fn(() => {
+                throw new Error("sync binding throw");
+            });
+            const controller = new AbortController();
+            const removeSpy = vi.spyOn(controller.signal, "removeEventListener");
+            await expect(companionRequestJson("/config", { signal: controller.signal })).rejects.toThrow("sync binding throw");
+            expect(vi.getTimerCount()).toBe(0);
+            expect(removeSpy).toHaveBeenCalledWith("abort", expect.any(Function));
+        });
+        it("times out CDP bridge request after timeoutMs", async () => {
+            vi.useFakeTimers();
+            globalThis.__hoversourceBridgeCall = vi.fn();
+            const reqPromise = companionRequestJson("/config", { timeoutMs: 300 });
+            const assertion = expect(reqPromise).rejects.toThrow("Companion bridge request GET /config timed out after 300ms");
+            await vi.advanceTimersByTimeAsync(300);
+            await assertion;
+        });
     });
 });

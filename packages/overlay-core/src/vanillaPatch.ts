@@ -11,40 +11,44 @@ export function setupVanillaMonkeyPatch() {
   if ((globalThis as any).__HOVERSOURCE_VANILLA_PATCHED__) return;
   (globalThis as any).__HOVERSOURCE_VANILLA_PATCHED__ = true;
 
-  const originalCreateElement = document.createElement;
-  document.createElement = function (
-    this: Document,
-    tagName: string,
-    options?: ElementCreationOptions
-  ) {
-    const el = originalCreateElement.call(this, tagName, options);
-    const source = captureSourceLocation();
-    if (source && (el as any).dataset) {
-      (el as any).dataset.hsSource = source;
-    }
-    return el;
-  };
-
-  const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-  if (descriptor?.set) {
-    const originalSet = descriptor.set;
-    descriptor.set = function (this: Element, html: string) {
-      originalSet.call(this, html);
+  if (typeof document.createElement === "function") {
+    const originalCreateElement = document.createElement;
+    document.createElement = function (
+      this: Document,
+      tagName: string,
+      options?: ElementCreationOptions
+    ) {
+      const el = originalCreateElement.call(this, tagName, options);
       const source = captureSourceLocation();
-      if (source) {
-        if ((this as any).dataset) {
-          (this as any).dataset.hsSource = source;
-        }
-        if (this.children) {
-          for (const child of this.children) {
-            if ((child as any).dataset) {
-              (child as any).dataset.hsSource = source;
+      if (source && (el as any).dataset) {
+        (el as any).dataset.hsSource = source;
+      }
+      return el;
+    };
+  }
+
+  if (typeof Element !== "undefined" && Element?.prototype) {
+    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+    if (descriptor?.set) {
+      const originalSet = descriptor.set;
+      descriptor.set = function (this: Element, html: string) {
+        originalSet.call(this, html);
+        const source = captureSourceLocation();
+        if (source) {
+          if ((this as any).dataset) {
+            (this as any).dataset.hsSource = source;
+          }
+          if (this.children) {
+            for (const child of this.children) {
+              if ((child as any).dataset) {
+                (child as any).dataset.hsSource = source;
+              }
             }
           }
         }
-      }
-    };
-    Object.defineProperty(Element.prototype, "innerHTML", descriptor);
+      };
+      Object.defineProperty(Element.prototype, "innerHTML", descriptor);
+    }
   }
 }
 

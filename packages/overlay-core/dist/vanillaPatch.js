@@ -6,35 +6,39 @@ export function setupVanillaMonkeyPatch() {
     if (globalThis.__HOVERSOURCE_VANILLA_PATCHED__)
         return;
     globalThis.__HOVERSOURCE_VANILLA_PATCHED__ = true;
-    const originalCreateElement = document.createElement;
-    document.createElement = function (tagName, options) {
-        const el = originalCreateElement.call(this, tagName, options);
-        const source = captureSourceLocation();
-        if (source && el.dataset) {
-            el.dataset.hsSource = source;
-        }
-        return el;
-    };
-    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-    if (descriptor?.set) {
-        const originalSet = descriptor.set;
-        descriptor.set = function (html) {
-            originalSet.call(this, html);
+    if (typeof document.createElement === "function") {
+        const originalCreateElement = document.createElement;
+        document.createElement = function (tagName, options) {
+            const el = originalCreateElement.call(this, tagName, options);
             const source = captureSourceLocation();
-            if (source) {
-                if (this.dataset) {
-                    this.dataset.hsSource = source;
-                }
-                if (this.children) {
-                    for (const child of this.children) {
-                        if (child.dataset) {
-                            child.dataset.hsSource = source;
+            if (source && el.dataset) {
+                el.dataset.hsSource = source;
+            }
+            return el;
+        };
+    }
+    if (typeof Element !== "undefined" && Element?.prototype) {
+        const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+        if (descriptor?.set) {
+            const originalSet = descriptor.set;
+            descriptor.set = function (html) {
+                originalSet.call(this, html);
+                const source = captureSourceLocation();
+                if (source) {
+                    if (this.dataset) {
+                        this.dataset.hsSource = source;
+                    }
+                    if (this.children) {
+                        for (const child of this.children) {
+                            if (child.dataset) {
+                                child.dataset.hsSource = source;
+                            }
                         }
                     }
                 }
-            }
-        };
-        Object.defineProperty(Element.prototype, "innerHTML", descriptor);
+            };
+            Object.defineProperty(Element.prototype, "innerHTML", descriptor);
+        }
     }
 }
 function isOverlayFrame(line) {

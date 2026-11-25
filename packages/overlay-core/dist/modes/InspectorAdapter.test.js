@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeAll, afterEach } from "vitest";
 import { InspectorAdapter } from "./InspectorAdapter.js";
 import { inspectVisualContext } from "../inspector.js";
 afterEach(() => {
+    delete globalThis.__hoversourceBridgeCall;
+    delete globalThis.__hoversourceBridgeResolve;
+    delete globalThis.__hoversourceBridgeReject;
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -426,5 +429,68 @@ describe("InspectorAdapter - Companion Transport & /static-context Parity", () =
         await vi.advanceTimersByTimeAsync(50);
         await flushMicrotasks();
         expect(warnSpy).toHaveBeenCalledWith("[HoverSource] Static context fetch failed:", expect.any(Error));
+    });
+    it("routes /validate-line and /static-context through __hoversourceBridgeCall when CDP bridge is active", async () => {
+        vi.useFakeTimers();
+        const fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+        const bridgeCalls = [];
+        globalThis.__hoversourceBridgeCall = vi.fn((raw) => {
+            const payload = JSON.parse(raw);
+            bridgeCalls.push(payload);
+            if (payload.path.startsWith("/validate-line")) {
+                queueMicrotask(() => {
+                    globalThis.__hoversourceBridgeResolve(payload.id, JSON.stringify({ corrected: { line: 30, column: 8 } }));
+                });
+            }
+            else if (payload.path.startsWith("/static-context")) {
+                queueMicrotask(() => {
+                    globalThis.__hoversourceBridgeResolve(payload.id, JSON.stringify({ comments: ["Bridge comment"] }));
+                });
+            }
+        });
+        const mockTooltipBox = {
+            querySelectorAll: vi.fn().mockReturnValue([]),
+        };
+        const mockController = {
+            getConfig: () => ({ minimalModeByDefault: false }),
+            isUIVisible: () => true,
+            drawHighlight: vi.fn(),
+            drawParentHighlight: vi.fn(),
+            clearParentHighlights: vi.fn(),
+            drawTooltip: vi.fn(),
+            clear: vi.fn(),
+            setFreezeMode: vi.fn(),
+            tooltipBox: mockTooltipBox,
+        };
+        const target = {
+            tagName: "BUTTON",
+            dataset: { hsSource: "src/components/Button.tsx:12:4" },
+            closest: (sel) => (sel === "[data-hs-source]" ? target : null),
+            classList: {
+                contains: () => false,
+                [Symbol.iterator]: function* () { },
+            },
+            className: "",
+            parentElement: null,
+            getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 40 }),
+        };
+        vi.stubGlobal("document", {
+            body: {},
+            documentElement: {},
+            elementsFromPoint: () => [target],
+        });
+        const adapter = new InspectorAdapter();
+        adapter.activate(mockController);
+        adapter.onPointerOver({ clientX: 10, clientY: 10 }, target);
+        await vi.advanceTimersByTimeAsync(50);
+        await flushMicrotasks();
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(bridgeCalls).toHaveLength(2);
+        expect(bridgeCalls[0].path).toContain("/validate-line?");
+        expect(bridgeCalls[1].path).toContain("/static-context?");
+        expect(adapter["currentSourceInfo"].staticMetadata).toEqual({
+            comments: ["Bridge comment"],
+        });
     });
 });

@@ -3,7 +3,13 @@ setupVanillaMonkeyPatch();
 import { InspectorAdapter } from "./modes/InspectorAdapter.js";
 import { DesignAdapter } from "./modes/DesignAdapter.js";
 import { companionRequestJson } from "./companionTransport.js";
-class OverlayEngine {
+import { waitForDomBody } from "./domReady.js";
+import { initInspectorMutationObserver, disconnectInspectorMutationObserver } from "./inspector.js";
+export { waitForDomBody };
+export class OverlayEngine {
+    static launchEpoch = 0;
+    static activeInstance = null;
+    static activeLaunchPromise = null;
     config = null;
     container = null;
     outlineBox = null;
@@ -15,31 +21,103 @@ class OverlayEngine {
     uiVisible = true;
     isFrozen = false;
     freezeStyle = null;
+    launchAbortController = null;
+    shortcutsAttached = false;
+    modeActivated = false;
+    listenersAttached = false;
+    isDestroyed = false;
+    copyHintTimer = null;
+    copyHintTarget = null;
+    copyHintOriginalNodes = null;
     inspectorMode = new InspectorAdapter();
     designMode = new DesignAdapter();
     activeMode = this.inspectorMode;
     constructor() { }
-    static async launch() {
-        const engine = new OverlayEngine();
-        await engine.init();
-        return engine;
+    static async launch(options) {
+        const epoch = ++OverlayEngine.launchEpoch;
+        const prevInstance = OverlayEngine.activeInstance;
+        const prevPromise = OverlayEngine.activeLaunchPromise;
+        OverlayEngine.activeInstance = null;
+        OverlayEngine.activeLaunchPromise = null;
+        prevInstance?.launchAbortController?.abort();
+        prevInstance?.destroy();
+        let currentPromise;
+        currentPromise = (async () => {
+            try {
+                if (prevPromise) {
+                    const prior = await prevPromise.catch(() => null);
+                    prior?.destroy();
+                }
+                if (OverlayEngine.launchEpoch !== epoch) {
+                    return null;
+                }
+                const engine = new OverlayEngine();
+                OverlayEngine.activeInstance = engine;
+                try {
+                    await engine.init(options);
+                }
+                catch (err) {
+                    engine.destroy();
+                    throw err;
+                }
+                if (OverlayEngine.launchEpoch !== epoch) {
+                    engine.destroy();
+                    return null;
+                }
+                return engine.isDestroyed ? null : engine;
+            }
+            finally {
+                if (OverlayEngine.activeLaunchPromise === currentPromise) {
+                    OverlayEngine.activeLaunchPromise = null;
+                }
+            }
+        })();
+        OverlayEngine.activeLaunchPromise = currentPromise;
+        return currentPromise;
     }
-    async init() {
-        await this.loadConfig();
+    static async destroyActive() {
+        ++OverlayEngine.launchEpoch;
+        const inst = OverlayEngine.activeInstance;
+        const pending = OverlayEngine.activeLaunchPromise;
+        OverlayEngine.activeInstance = null;
+        OverlayEngine.activeLaunchPromise = null;
+        inst?.launchAbortController?.abort();
+        inst?.destroy();
+        if (pending) {
+            const resolved = await pending.catch(() => null);
+            resolved?.destroy();
+        }
+    }
+    handleWindowMessage = (e) => {
+        if (e.origin === globalThis.location.origin &&
+            e.source === globalThis &&
+            e.data?.type === "HOVERSOURCE_CONFIG_CHANGED") {
+            this.handleConfigUpdate(e.data.config);
+        }
+    };
+    async init(options) {
+        this.launchAbortController = new AbortController();
+        await this.loadConfig(options?.configTimeoutMs ?? 2000, this.launchAbortController.signal);
+        if (this.isDestroyed)
+            return;
+        const bodyReady = await waitForDomBody(options?.domReadyTimeoutMs, this.launchAbortController.signal);
+        if (this.isDestroyed)
+            return;
+        if (!bodyReady) {
+            console.warn("[HoverSource] Timed out waiting for document.body; skipping overlay UI mount.");
+            return;
+        }
+        void initInspectorMutationObserver(options?.domReadyTimeoutMs, this.launchAbortController.signal);
         this.createUI();
         this.initStyles();
         this.initShortcuts();
         this.activeMode.activate(this);
+        this.modeActivated = true;
         globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
         globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
         globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
-        globalThis.addEventListener("message", (e) => {
-            if (e.origin === globalThis.location.origin &&
-                e.source === globalThis &&
-                e.data?.type === "HOVERSOURCE_CONFIG_CHANGED") {
-                this.handleConfigUpdate(e.data.config);
-            }
-        });
+        globalThis.addEventListener("message", this.handleWindowMessage);
+        this.listenersAttached = true;
     }
     handleConfigUpdate(newConfig) {
         console.log("[HoverSource] Live reloading config...", newConfig);
@@ -50,30 +128,35 @@ class OverlayEngine {
         this.initStyles();
         this.activeMode.onConfigUpdate(newConfig);
     }
-    async loadConfig() {
+    async loadConfig(timeoutMs = 2000, signal) {
         try {
-            const data = await companionRequestJson("/config");
-            this.config = data.config;
-            console.log("[HoverSource] Configuration loaded from companion server:", this.config);
+            const data = await companionRequestJson("/config", { timeoutMs, signal });
+            if (data?.config) {
+                this.config = data.config;
+                console.log("[HoverSource] Configuration loaded from companion server:", this.config);
+                return;
+            }
         }
         catch (e) {
-            console.warn("[HoverSource] Failed to fetch config, falling back to defaults", e);
-            this.config = {
-                theme: "dark",
-                minimalModeByDefault: false,
-                snappingThreshold: 15,
-                desnappingThreshold: 15,
-                maxTraversalDepth: 32,
-                shortcuts: {
-                    toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-                    toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-                    toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-                    copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-                    openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-                    toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
-                }
-            };
+            if (!signal?.aborted) {
+                console.warn("[HoverSource] Failed to fetch config, falling back to defaults", e);
+            }
         }
+        this.config = {
+            theme: "dark",
+            minimalModeByDefault: false,
+            snappingThreshold: 15,
+            desnappingThreshold: 15,
+            maxTraversalDepth: 32,
+            shortcuts: {
+                toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
+                toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
+                toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
+                copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
+                openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
+                toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
+            }
+        };
     }
     initStyles() {
         const isLightTheme = this.config?.theme === "light" ||
@@ -415,12 +498,12 @@ class OverlayEngine {
         if (this.container) {
             this.container.appendChild(style);
         }
-        else {
+        else if (document.head) {
             document.head.appendChild(style);
         }
     }
     createUI() {
-        if (this.container)
+        if (this.container || !document.body)
             return;
         this.container = document.createElement("div");
         this.container.className = "hoversource-container";
@@ -439,6 +522,8 @@ class OverlayEngine {
         document.body.appendChild(this.container);
     }
     ensureUI() {
+        if (!document.body)
+            return;
         if (this.container && !document.body.contains(this.container)) {
             console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
             document.body.appendChild(this.container);
@@ -446,6 +531,7 @@ class OverlayEngine {
     }
     initShortcuts() {
         globalThis.addEventListener("keydown", this.handleKeyDown);
+        this.shortcutsAttached = true;
     }
     handleModeShortcuts(e, shortcuts) {
         const toggleModeShortcut = shortcuts.toggleMode ?? { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
@@ -964,10 +1050,34 @@ class OverlayEngine {
         if (this.uiVisible && this.tooltipBox) {
             const hint = this.tooltipBox.querySelector(".hoversource-shortcut-hint");
             if (hint) {
+                if (this.copyHintTimer !== null) {
+                    clearTimeout(this.copyHintTimer);
+                    this.copyHintTimer = null;
+                }
+                const canReplaceNodes = typeof hint.replaceChildren === "function" &&
+                    hint.childNodes &&
+                    typeof hint.childNodes[Symbol.iterator] === "function";
+                const originalNodes = this.copyHintOriginalNodes && this.copyHintTarget === hint
+                    ? this.copyHintOriginalNodes
+                    : canReplaceNodes
+                        ? Array.from(hint.childNodes).map((n) => n.cloneNode(true))
+                        : null;
                 const originalText = hint.innerHTML;
+                this.copyHintTarget = hint;
+                this.copyHintOriginalNodes = originalNodes;
                 hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
-                setTimeout(() => {
-                    hint.innerHTML = originalText;
+                this.copyHintTimer = setTimeout(() => {
+                    this.copyHintTimer = null;
+                    if (this.isDestroyed)
+                        return;
+                    if (originalNodes && typeof hint.replaceChildren === "function") {
+                        hint.replaceChildren(...originalNodes);
+                    }
+                    else {
+                        hint.innerHTML = originalText;
+                    }
+                    this.copyHintTarget = null;
+                    this.copyHintOriginalNodes = null;
                 }, 1500);
             }
         }
@@ -1021,6 +1131,51 @@ class OverlayEngine {
             }
         }
     }
+    destroy() {
+        if (this.isDestroyed)
+            return;
+        this.isDestroyed = true;
+        this.launchAbortController?.abort();
+        this.launchAbortController = null;
+        disconnectInspectorMutationObserver();
+        this.setFreezeMode(false);
+        if (this.modeActivated) {
+            this.activeMode.deactivate();
+            this.modeActivated = false;
+        }
+        if (this.shortcutsAttached) {
+            globalThis.removeEventListener("keydown", this.handleKeyDown);
+            this.shortcutsAttached = false;
+        }
+        if (this.listenersAttached) {
+            globalThis.removeEventListener("pointerover", this.handlePointerOver, { capture: true });
+            globalThis.removeEventListener("pointermove", this.handlePointerMove, { capture: true });
+            globalThis.removeEventListener("scroll", this.handleScroll, { capture: true });
+            globalThis.removeEventListener("message", this.handleWindowMessage);
+            this.listenersAttached = false;
+        }
+        if (typeof document !== "undefined") {
+            document.onmouseup = null;
+            document.onmousemove = null;
+        }
+        if (this.copyHintTimer !== null) {
+            clearTimeout(this.copyHintTimer);
+            this.copyHintTimer = null;
+        }
+        this.copyHintTarget = null;
+        this.copyHintOriginalNodes = null;
+        this.container?.remove();
+        this.freezeStyle?.remove();
+        this.container = null;
+        this.outlineBox = null;
+        this.tooltipBox = null;
+        this.filterPanel = null;
+        this.freezeStyle = null;
+        this.parentHighlightElements = [];
+        if (OverlayEngine.activeInstance === this) {
+            OverlayEngine.activeInstance = null;
+        }
+    }
 }
 globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
     let path = `/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
@@ -1041,7 +1196,9 @@ globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
 };
 if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
     globalThis.__HoverSourceInitialized__ = true;
-    OverlayEngine.launch();
+    void OverlayEngine.launch().catch((err) => {
+        console.error("[HoverSource] Overlay initialization failed:", err);
+    });
     console.log("[HoverSource] Overlay injected.");
 }
 function calculateMaskBounds(direction, stopValue, stopUnit, rect) {

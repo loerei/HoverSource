@@ -6,8 +6,21 @@ import { DesignAdapter } from "./modes/DesignAdapter.js";
 import { OverlayController, InteractionMode } from "./modes/types.js";
 import { ParentVisualEffect } from "@hoversource/source-resolver";
 import { companionRequestJson } from "./companionTransport.js";
+import { waitForDomBody } from "./domReady.js";
+import { initInspectorMutationObserver, disconnectInspectorMutationObserver } from "./inspector.js";
 
-class OverlayEngine implements OverlayController {
+export { waitForDomBody };
+
+export interface OverlayEngineLaunchOptions {
+  configTimeoutMs?: number;
+  domReadyTimeoutMs?: number;
+}
+
+export class OverlayEngine implements OverlayController {
+  private static launchEpoch = 0;
+  private static activeInstance: OverlayEngine | null = null;
+  private static activeLaunchPromise: Promise<OverlayEngine | null> | null = null;
+
   private config: any = null;
   private container: HTMLDivElement | null = null;
   private outlineBox: HTMLDivElement | null = null;
@@ -21,39 +34,117 @@ class OverlayEngine implements OverlayController {
   private isFrozen = false;
   private freezeStyle: HTMLStyleElement | null = null;
 
+  private launchAbortController: AbortController | null = null;
+  private shortcutsAttached = false;
+  private modeActivated = false;
+  private listenersAttached = false;
+  private isDestroyed = false;
+  private copyHintTimer: ReturnType<typeof setTimeout> | null = null;
+  private copyHintTarget: Element | null = null;
+  private copyHintOriginalNodes: ChildNode[] | null = null;
+
   private readonly inspectorMode = new InspectorAdapter();
   private readonly designMode = new DesignAdapter();
   private activeMode: InteractionMode = this.inspectorMode;
 
   private constructor() {}
 
-  public static async launch(): Promise<OverlayEngine> {
-    const engine = new OverlayEngine();
-    await engine.init();
-    return engine;
+  public static async launch(options?: OverlayEngineLaunchOptions): Promise<OverlayEngine | null> {
+    const epoch = ++OverlayEngine.launchEpoch;
+    const prevInstance = OverlayEngine.activeInstance;
+    const prevPromise = OverlayEngine.activeLaunchPromise;
+    OverlayEngine.activeInstance = null;
+    OverlayEngine.activeLaunchPromise = null;
+
+    prevInstance?.launchAbortController?.abort();
+    prevInstance?.destroy();
+
+    let currentPromise!: Promise<OverlayEngine | null>;
+    currentPromise = (async (): Promise<OverlayEngine | null> => {
+      try {
+        if (prevPromise) {
+          const prior = await prevPromise.catch(() => null);
+          prior?.destroy();
+        }
+        if (OverlayEngine.launchEpoch !== epoch) {
+          return null;
+        }
+        const engine = new OverlayEngine();
+        OverlayEngine.activeInstance = engine;
+        try {
+          await engine.init(options);
+        } catch (err) {
+          engine.destroy();
+          throw err;
+        }
+        if (OverlayEngine.launchEpoch !== epoch) {
+          engine.destroy();
+          return null;
+        }
+        return engine.isDestroyed ? null : engine;
+      } finally {
+        if (OverlayEngine.activeLaunchPromise === currentPromise) {
+          OverlayEngine.activeLaunchPromise = null;
+        }
+      }
+    })();
+
+    OverlayEngine.activeLaunchPromise = currentPromise;
+    return currentPromise;
   }
 
-  private async init() {
-    await this.loadConfig();
+  public static async destroyActive(): Promise<void> {
+    ++OverlayEngine.launchEpoch;
+    const inst = OverlayEngine.activeInstance;
+    const pending = OverlayEngine.activeLaunchPromise;
+    OverlayEngine.activeInstance = null;
+    OverlayEngine.activeLaunchPromise = null;
+
+    inst?.launchAbortController?.abort();
+    inst?.destroy();
+
+    if (pending) {
+      const resolved = await pending.catch(() => null);
+      resolved?.destroy();
+    }
+  }
+
+  private readonly handleWindowMessage = (e: MessageEvent) => {
+    if (
+      e.origin === globalThis.location.origin &&
+      e.source === (globalThis as unknown) &&
+      e.data?.type === "HOVERSOURCE_CONFIG_CHANGED"
+    ) {
+      this.handleConfigUpdate(e.data.config);
+    }
+  };
+
+  private async init(options?: OverlayEngineLaunchOptions) {
+    this.launchAbortController = new AbortController();
+    await this.loadConfig(options?.configTimeoutMs ?? 2000, this.launchAbortController.signal);
+    if (this.isDestroyed) return;
+
+    const bodyReady = await waitForDomBody(options?.domReadyTimeoutMs, this.launchAbortController.signal);
+    if (this.isDestroyed) return;
+    if (!bodyReady) {
+      console.warn("[HoverSource] Timed out waiting for document.body; skipping overlay UI mount.");
+      return;
+    }
+
+    void initInspectorMutationObserver(options?.domReadyTimeoutMs, this.launchAbortController.signal);
+
     this.createUI();
     this.initStyles();
     this.initShortcuts();
 
     this.activeMode.activate(this);
+    this.modeActivated = true;
     
     globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
     globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
     globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
-
-    globalThis.addEventListener("message", (e) => {
-      if (
-        e.origin === globalThis.location.origin &&
-        e.source === (globalThis as unknown) &&
-        e.data?.type === "HOVERSOURCE_CONFIG_CHANGED"
-      ) {
-        this.handleConfigUpdate(e.data.config);
-      }
-    });
+    globalThis.addEventListener("message", this.handleWindowMessage);
+    this.listenersAttached = true;
   }
 
   private handleConfigUpdate(newConfig: any) {
@@ -67,29 +158,34 @@ class OverlayEngine implements OverlayController {
     this.activeMode.onConfigUpdate(newConfig);
   }
 
-  private async loadConfig() {
+  private async loadConfig(timeoutMs = 2000, signal?: AbortSignal) {
     try {
-      const data = await companionRequestJson("/config");
-      this.config = data.config;
-      console.log("[HoverSource] Configuration loaded from companion server:", this.config);
+      const data = await companionRequestJson("/config", { timeoutMs, signal });
+      if (data?.config) {
+        this.config = data.config;
+        console.log("[HoverSource] Configuration loaded from companion server:", this.config);
+        return;
+      }
     } catch (e) {
-      console.warn("[HoverSource] Failed to fetch config, falling back to defaults", e);
-      this.config = {
-        theme: "dark",
-        minimalModeByDefault: false,
-        snappingThreshold: 15,
-        desnappingThreshold: 15,
-        maxTraversalDepth: 32,
-        shortcuts: {
-          toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-          copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-          openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-          toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
-        }
-      };
+      if (!signal?.aborted) {
+        console.warn("[HoverSource] Failed to fetch config, falling back to defaults", e);
+      }
     }
+    this.config = {
+      theme: "dark",
+      minimalModeByDefault: false,
+      snappingThreshold: 15,
+      desnappingThreshold: 15,
+      maxTraversalDepth: 32,
+      shortcuts: {
+        toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
+        toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
+        toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
+        copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
+        openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
+        toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
+      }
+    };
   }
 
   private initStyles() {
@@ -434,13 +530,13 @@ class OverlayEngine implements OverlayController {
     `;
     if (this.container) {
       this.container.appendChild(style);
-    } else {
+    } else if (document.head) {
       document.head.appendChild(style);
     }
   }
 
   private createUI() {
-    if (this.container) return;
+    if (this.container || !document.body) return;
     this.container = document.createElement("div");
     this.container.className = "hoversource-container";
 
@@ -463,6 +559,7 @@ class OverlayEngine implements OverlayController {
   }
 
   private ensureUI() {
+    if (!document.body) return;
     if (this.container && !document.body.contains(this.container)) {
       console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
       document.body.appendChild(this.container);
@@ -471,6 +568,7 @@ class OverlayEngine implements OverlayController {
 
   private initShortcuts() {
     globalThis.addEventListener("keydown", this.handleKeyDown);
+    this.shortcutsAttached = true;
   }
 
   private handleModeShortcuts(e: KeyboardEvent, shortcuts: any) {
@@ -1027,10 +1125,34 @@ class OverlayEngine implements OverlayController {
     if (this.uiVisible && this.tooltipBox) {
       const hint = this.tooltipBox.querySelector(".hoversource-shortcut-hint");
       if (hint) {
+        if (this.copyHintTimer !== null) {
+          clearTimeout(this.copyHintTimer);
+          this.copyHintTimer = null;
+        }
+        const canReplaceNodes =
+          typeof hint.replaceChildren === "function" &&
+          hint.childNodes &&
+          typeof hint.childNodes[Symbol.iterator] === "function";
+        const originalNodes =
+          this.copyHintOriginalNodes && this.copyHintTarget === hint
+            ? this.copyHintOriginalNodes
+            : canReplaceNodes
+              ? Array.from(hint.childNodes).map((n) => n.cloneNode(true) as ChildNode)
+              : null;
         const originalText = hint.innerHTML;
+        this.copyHintTarget = hint;
+        this.copyHintOriginalNodes = originalNodes;
         hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
-        setTimeout(() => {
-          hint.innerHTML = originalText;
+        this.copyHintTimer = setTimeout(() => {
+          this.copyHintTimer = null;
+          if (this.isDestroyed) return;
+          if (originalNodes && typeof hint.replaceChildren === "function") {
+            hint.replaceChildren(...originalNodes);
+          } else {
+            hint.innerHTML = originalText;
+          }
+          this.copyHintTarget = null;
+          this.copyHintOriginalNodes = null;
         }, 1500);
       }
     }
@@ -1088,6 +1210,56 @@ class OverlayEngine implements OverlayController {
       }
     }
   }
+
+  public destroy(): void {
+    if (this.isDestroyed) return;
+    this.isDestroyed = true;
+
+    this.launchAbortController?.abort();
+    this.launchAbortController = null;
+
+    disconnectInspectorMutationObserver();
+    this.setFreezeMode(false);
+
+    if (this.modeActivated) {
+      this.activeMode.deactivate();
+      this.modeActivated = false;
+    }
+    if (this.shortcutsAttached) {
+      globalThis.removeEventListener("keydown", this.handleKeyDown);
+      this.shortcutsAttached = false;
+    }
+    if (this.listenersAttached) {
+      globalThis.removeEventListener("pointerover", this.handlePointerOver, { capture: true });
+      globalThis.removeEventListener("pointermove", this.handlePointerMove, { capture: true });
+      globalThis.removeEventListener("scroll", this.handleScroll, { capture: true });
+      globalThis.removeEventListener("message", this.handleWindowMessage);
+      this.listenersAttached = false;
+    }
+    if (typeof document !== "undefined") {
+      document.onmouseup = null;
+      document.onmousemove = null;
+    }
+    if (this.copyHintTimer !== null) {
+      clearTimeout(this.copyHintTimer);
+      this.copyHintTimer = null;
+    }
+    this.copyHintTarget = null;
+    this.copyHintOriginalNodes = null;
+
+    this.container?.remove();
+    this.freezeStyle?.remove();
+    this.container = null;
+    this.outlineBox = null;
+    this.tooltipBox = null;
+    this.filterPanel = null;
+    this.freezeStyle = null;
+    this.parentHighlightElements = [];
+
+    if (OverlayEngine.activeInstance === this) {
+      OverlayEngine.activeInstance = null;
+    }
+  }
 }
 
 (globalThis as any).__HoverSourceOpen__ = (file: string, line: number, col: number, tagName?: string, classList?: string) => {
@@ -1108,7 +1280,9 @@ class OverlayEngine implements OverlayController {
 
 if (typeof document !== "undefined" && !(globalThis as any).__HoverSourceInitialized__) {
   (globalThis as any).__HoverSourceInitialized__ = true;
-  OverlayEngine.launch();
+  void OverlayEngine.launch().catch((err) => {
+    console.error("[HoverSource] Overlay initialization failed:", err);
+  });
   console.log("[HoverSource] Overlay injected.");
 }
 

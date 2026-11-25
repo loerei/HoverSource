@@ -883,35 +883,39 @@
     if (globalThis.__HOVERSOURCE_VANILLA_PATCHED__)
       return;
     globalThis.__HOVERSOURCE_VANILLA_PATCHED__ = true;
-    const originalCreateElement = document.createElement;
-    document.createElement = function(tagName, options) {
-      const el = originalCreateElement.call(this, tagName, options);
-      const source = captureSourceLocation();
-      if (source && el.dataset) {
-        el.dataset.hsSource = source;
-      }
-      return el;
-    };
-    const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-    if (descriptor?.set) {
-      const originalSet = descriptor.set;
-      descriptor.set = function(html) {
-        originalSet.call(this, html);
+    if (typeof document.createElement === "function") {
+      const originalCreateElement = document.createElement;
+      document.createElement = function(tagName, options) {
+        const el = originalCreateElement.call(this, tagName, options);
         const source = captureSourceLocation();
-        if (source) {
-          if (this.dataset) {
-            this.dataset.hsSource = source;
-          }
-          if (this.children) {
-            for (const child of this.children) {
-              if (child.dataset) {
-                child.dataset.hsSource = source;
+        if (source && el.dataset) {
+          el.dataset.hsSource = source;
+        }
+        return el;
+      };
+    }
+    if (typeof Element !== "undefined" && Element?.prototype) {
+      const descriptor = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+      if (descriptor?.set) {
+        const originalSet = descriptor.set;
+        descriptor.set = function(html) {
+          originalSet.call(this, html);
+          const source = captureSourceLocation();
+          if (source) {
+            if (this.dataset) {
+              this.dataset.hsSource = source;
+            }
+            if (this.children) {
+              for (const child of this.children) {
+                if (child.dataset) {
+                  child.dataset.hsSource = source;
+                }
               }
             }
           }
-        }
-      };
-      Object.defineProperty(Element.prototype, "innerHTML", descriptor);
+        };
+        Object.defineProperty(Element.prototype, "innerHTML", descriptor);
+      }
     }
   }
   function isOverlayFrame(line) {
@@ -940,18 +944,151 @@
     return null;
   }
 
+  // src/domReady.ts
+  function waitForDomBody(timeoutMs = 1e4, signal) {
+    const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 1e4;
+    if (typeof document === "undefined") {
+      return Promise.resolve(false);
+    }
+    if (signal?.aborted) {
+      return Promise.resolve(Boolean(document.body));
+    }
+    if (document.body) {
+      return Promise.resolve(true);
+    }
+    if (typeof document.addEventListener !== "function") {
+      return Promise.resolve(Boolean(document.body));
+    }
+    return new Promise((resolve) => {
+      let settled = false;
+      let timer;
+      let pollInterval;
+      let observer = null;
+      const settle = (ready) => {
+        if (settled)
+          return;
+        settled = true;
+        if (timer !== void 0) {
+          clearTimeout(timer);
+          timer = void 0;
+        }
+        if (pollInterval !== void 0) {
+          clearInterval(pollInterval);
+          pollInterval = void 0;
+        }
+        if (observer) {
+          observer.disconnect();
+          observer = null;
+        }
+        document.removeEventListener("DOMContentLoaded", onReady);
+        signal?.removeEventListener("abort", onAbort);
+        resolve(ready);
+      };
+      const onReady = () => {
+        if (document.body) {
+          settle(true);
+        }
+      };
+      const onAbort = () => {
+        settle(Boolean(document.body));
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      document.addEventListener("DOMContentLoaded", onReady);
+      timer = setTimeout(() => {
+        settle(Boolean(document.body));
+      }, effectiveTimeoutMs);
+      if (document.readyState !== "loading") {
+        const observeRoot = document.documentElement ?? document;
+        let observing = false;
+        if (typeof MutationObserver !== "undefined" && observeRoot) {
+          try {
+            observer = new MutationObserver(() => {
+              if (document.body) {
+                settle(true);
+              }
+            });
+            observer.observe(observeRoot, { childList: true });
+            observing = true;
+          } catch {
+            observer?.disconnect();
+            observer = null;
+          }
+        }
+        if (!observing) {
+          pollInterval = setInterval(() => {
+            if (document.body) {
+              settle(true);
+            }
+          }, 16);
+        }
+      }
+    });
+  }
+
   // src/inspector.ts
   var contextCache = /* @__PURE__ */ new WeakMap();
   var parentStyleCache = /* @__PURE__ */ new WeakMap();
+  var activeObserver = null;
+  var observerEpoch = 0;
+  var activeObserverAbortController = null;
   function clearInspectorCache() {
     contextCache = /* @__PURE__ */ new WeakMap();
     parentStyleCache = /* @__PURE__ */ new WeakMap();
   }
-  if (typeof MutationObserver !== "undefined" && typeof document !== "undefined" && document.body) {
-    const observer = new MutationObserver(() => {
-      clearInspectorCache();
-    });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+  function disconnectInspectorMutationObserver() {
+    ++observerEpoch;
+    if (activeObserverAbortController) {
+      activeObserverAbortController.abort();
+      activeObserverAbortController = null;
+    }
+    if (activeObserver) {
+      activeObserver.disconnect();
+      activeObserver = null;
+    }
+  }
+  async function initInspectorMutationObserver(timeoutMs, signal) {
+    if (activeObserverAbortController) {
+      activeObserverAbortController.abort();
+      activeObserverAbortController = null;
+    }
+    const epoch = ++observerEpoch;
+    if (signal?.aborted || typeof MutationObserver === "undefined" || typeof document === "undefined") {
+      return null;
+    }
+    const controller = new AbortController();
+    activeObserverAbortController = controller;
+    const onExternalAbort = () => controller.abort(signal?.reason);
+    signal?.addEventListener("abort", onExternalAbort, { once: true });
+    try {
+      if (!document.body) {
+        const ready = await waitForDomBody(timeoutMs, controller.signal);
+        if (!ready)
+          return null;
+      }
+      if (epoch !== observerEpoch || controller.signal.aborted || !document.body) {
+        return null;
+      }
+      if (activeObserver) {
+        activeObserver.disconnect();
+        activeObserver = null;
+      }
+      const observer = new MutationObserver(() => {
+        clearInspectorCache();
+      });
+      try {
+        observer.observe(document.body, { childList: true, subtree: true, attributes: true });
+        activeObserver = observer;
+        return observer;
+      } catch {
+        observer.disconnect();
+        return null;
+      }
+    } finally {
+      signal?.removeEventListener("abort", onExternalAbort);
+      if (activeObserverAbortController === controller) {
+        activeObserverAbortController = null;
+      }
+    }
   }
   function inspectLayoutConstraints(element, layoutConstraints) {
     try {
@@ -1144,12 +1281,148 @@
     const port = globalThis.__HOVERSOURCE_PORT__ ?? 7300;
     return `http://127.0.0.1:${port}`;
   }
+  var pendingBridgeRequests = /* @__PURE__ */ new Map();
+  var bridgeSeq = 0;
+  var bridgeInstanceNonce = null;
+  function getBridgeInstanceNonce() {
+    if (bridgeInstanceNonce)
+      return bridgeInstanceNonce;
+    const cryptoObj = globalThis.crypto;
+    if (typeof cryptoObj?.randomUUID === "function") {
+      bridgeInstanceNonce = cryptoObj.randomUUID();
+      return bridgeInstanceNonce;
+    }
+    if (typeof cryptoObj?.getRandomValues === "function") {
+      const bytes = new Uint8Array(16);
+      cryptoObj.getRandomValues(bytes);
+      bridgeInstanceNonce = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+      return bridgeInstanceNonce;
+    }
+    throw new Error("CSPRNG unavailable for companion bridge nonce");
+  }
+  function ensureBridgeHandlers() {
+    const g = globalThis;
+    if (typeof g.__hoversourceBridgeResolve !== "function") {
+      g.__hoversourceBridgeResolve = (id, payloadJson) => {
+        const key = String(id);
+        const entry = pendingBridgeRequests.get(key);
+        if (!entry)
+          return;
+        pendingBridgeRequests.delete(key);
+        entry.cleanup();
+        try {
+          const parsed = typeof payloadJson === "string" ? JSON.parse(payloadJson) : payloadJson;
+          entry.resolve(parsed);
+        } catch (err) {
+          entry.reject(
+            new Error(`Failed to parse companion bridge response for ${entry.method} ${entry.path}`, {
+              cause: err
+            })
+          );
+        }
+      };
+    }
+    if (typeof g.__hoversourceBridgeReject !== "function") {
+      g.__hoversourceBridgeReject = (id, errMsg) => {
+        const key = String(id);
+        const entry = pendingBridgeRequests.get(key);
+        if (!entry)
+          return;
+        pendingBridgeRequests.delete(key);
+        entry.cleanup();
+        entry.reject(
+          errMsg instanceof Error ? errMsg : new Error(
+            typeof errMsg === "string" && errMsg ? errMsg : `Companion bridge request ${entry.method} ${entry.path} failed`
+          )
+        );
+      };
+    }
+  }
+  function companionBridgeRequestJson(bridgeCall, method, path, body, timeoutMs, signal) {
+    ensureBridgeHandlers();
+    const id = `${getBridgeInstanceNonce()}:${++bridgeSeq}`;
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timer;
+      const cleanup = () => {
+        if (timer !== void 0) {
+          clearTimeout(timer);
+          timer = void 0;
+        }
+        signal?.removeEventListener("abort", onAbort);
+      };
+      const onAbort = () => {
+        if (settled)
+          return;
+        settled = true;
+        pendingBridgeRequests.delete(id);
+        cleanup();
+        const reason = signal?.reason;
+        reject(
+          reason instanceof Error ? reason : new Error(`Companion bridge request ${method} ${path} aborted`)
+        );
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      timer = setTimeout(() => {
+        if (settled)
+          return;
+        settled = true;
+        pendingBridgeRequests.delete(id);
+        cleanup();
+        reject(new Error(`Companion bridge request ${method} ${path} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      pendingBridgeRequests.set(id, {
+        method,
+        path,
+        resolve: (val) => {
+          if (settled)
+            return;
+          settled = true;
+          resolve(val);
+        },
+        reject: (err) => {
+          if (settled)
+            return;
+          settled = true;
+          reject(err);
+        },
+        cleanup
+      });
+      const payload = {
+        id,
+        method: method === "POST" ? "POST" : "GET",
+        path,
+        ...body !== void 0 ? { body } : {}
+      };
+      try {
+        bridgeCall(JSON.stringify(payload));
+      } catch (err) {
+        if (!settled) {
+          settled = true;
+          pendingBridgeRequests.delete(id);
+          cleanup();
+          reject(err);
+        }
+      }
+    });
+  }
   async function companionRequestJson(path, init) {
-    const method = init?.method ?? "GET";
+    const method = (init?.method ?? "GET").toUpperCase();
     if (init?.signal?.aborted) {
       throw init.signal.reason instanceof Error ? init.signal.reason : new Error(`Companion request ${method} ${path} aborted`);
     }
     const timeoutMs = Number.isFinite(init?.timeoutMs) && init.timeoutMs > 0 ? init.timeoutMs : 5e3;
+    const bridgeCall = globalThis.__hoversourceBridgeCall;
+    if (typeof bridgeCall === "function") {
+      return companionBridgeRequestJson(
+        bridgeCall,
+        method,
+        path,
+        init?.body,
+        timeoutMs,
+        init?.signal
+      );
+    }
     const url = `${getCompanionBaseUrl()}${path}`;
     const timeoutController = new AbortController();
     const onAbort = () => {
@@ -3036,6 +3309,9 @@ The following is NOT resolved automatically and requires your judgment:
   // src/overlay.ts
   setupVanillaMonkeyPatch();
   var OverlayEngine = class _OverlayEngine {
+    static launchEpoch = 0;
+    static activeInstance = null;
+    static activeLaunchPromise = null;
     config = null;
     container = null;
     outlineBox = null;
@@ -3047,30 +3323,100 @@ The following is NOT resolved automatically and requires your judgment:
     uiVisible = true;
     isFrozen = false;
     freezeStyle = null;
+    launchAbortController = null;
+    shortcutsAttached = false;
+    modeActivated = false;
+    listenersAttached = false;
+    isDestroyed = false;
+    copyHintTimer = null;
+    copyHintTarget = null;
+    copyHintOriginalNodes = null;
     inspectorMode = new InspectorAdapter();
     designMode = new DesignAdapter();
     activeMode = this.inspectorMode;
     constructor() {
     }
-    static async launch() {
-      const engine = new _OverlayEngine();
-      await engine.init();
-      return engine;
+    static async launch(options) {
+      const epoch = ++_OverlayEngine.launchEpoch;
+      const prevInstance = _OverlayEngine.activeInstance;
+      const prevPromise = _OverlayEngine.activeLaunchPromise;
+      _OverlayEngine.activeInstance = null;
+      _OverlayEngine.activeLaunchPromise = null;
+      prevInstance?.launchAbortController?.abort();
+      prevInstance?.destroy();
+      let currentPromise;
+      currentPromise = (async () => {
+        try {
+          if (prevPromise) {
+            const prior = await prevPromise.catch(() => null);
+            prior?.destroy();
+          }
+          if (_OverlayEngine.launchEpoch !== epoch) {
+            return null;
+          }
+          const engine = new _OverlayEngine();
+          _OverlayEngine.activeInstance = engine;
+          try {
+            await engine.init(options);
+          } catch (err) {
+            engine.destroy();
+            throw err;
+          }
+          if (_OverlayEngine.launchEpoch !== epoch) {
+            engine.destroy();
+            return null;
+          }
+          return engine.isDestroyed ? null : engine;
+        } finally {
+          if (_OverlayEngine.activeLaunchPromise === currentPromise) {
+            _OverlayEngine.activeLaunchPromise = null;
+          }
+        }
+      })();
+      _OverlayEngine.activeLaunchPromise = currentPromise;
+      return currentPromise;
     }
-    async init() {
-      await this.loadConfig();
+    static async destroyActive() {
+      ++_OverlayEngine.launchEpoch;
+      const inst = _OverlayEngine.activeInstance;
+      const pending = _OverlayEngine.activeLaunchPromise;
+      _OverlayEngine.activeInstance = null;
+      _OverlayEngine.activeLaunchPromise = null;
+      inst?.launchAbortController?.abort();
+      inst?.destroy();
+      if (pending) {
+        const resolved = await pending.catch(() => null);
+        resolved?.destroy();
+      }
+    }
+    handleWindowMessage = (e) => {
+      if (e.origin === globalThis.location.origin && e.source === globalThis && e.data?.type === "HOVERSOURCE_CONFIG_CHANGED") {
+        this.handleConfigUpdate(e.data.config);
+      }
+    };
+    async init(options) {
+      this.launchAbortController = new AbortController();
+      await this.loadConfig(options?.configTimeoutMs ?? 2e3, this.launchAbortController.signal);
+      if (this.isDestroyed)
+        return;
+      const bodyReady = await waitForDomBody(options?.domReadyTimeoutMs, this.launchAbortController.signal);
+      if (this.isDestroyed)
+        return;
+      if (!bodyReady) {
+        console.warn("[HoverSource] Timed out waiting for document.body; skipping overlay UI mount.");
+        return;
+      }
+      void initInspectorMutationObserver(options?.domReadyTimeoutMs, this.launchAbortController.signal);
       this.createUI();
       this.initStyles();
       this.initShortcuts();
       this.activeMode.activate(this);
+      this.modeActivated = true;
       globalThis.addEventListener("pointerover", this.handlePointerOver, { capture: true });
       globalThis.addEventListener("pointermove", this.handlePointerMove, { capture: true });
       globalThis.addEventListener("scroll", this.handleScroll, { capture: true, passive: true });
-      globalThis.addEventListener("message", (e) => {
-        if (e.origin === globalThis.location.origin && e.source === globalThis && e.data?.type === "HOVERSOURCE_CONFIG_CHANGED") {
-          this.handleConfigUpdate(e.data.config);
-        }
-      });
+      globalThis.addEventListener("message", this.handleWindowMessage);
+      this.listenersAttached = true;
     }
     handleConfigUpdate(newConfig) {
       console.log("[HoverSource] Live reloading config...", newConfig);
@@ -3081,29 +3427,34 @@ The following is NOT resolved automatically and requires your judgment:
       this.initStyles();
       this.activeMode.onConfigUpdate(newConfig);
     }
-    async loadConfig() {
+    async loadConfig(timeoutMs = 2e3, signal) {
       try {
-        const data = await companionRequestJson("/config");
-        this.config = data.config;
-        console.log("[HoverSource] Configuration loaded from companion server:", this.config);
+        const data = await companionRequestJson("/config", { timeoutMs, signal });
+        if (data?.config) {
+          this.config = data.config;
+          console.log("[HoverSource] Configuration loaded from companion server:", this.config);
+          return;
+        }
       } catch (e) {
-        console.warn("[HoverSource] Failed to fetch config, falling back to defaults", e);
-        this.config = {
-          theme: "dark",
-          minimalModeByDefault: false,
-          snappingThreshold: 15,
-          desnappingThreshold: 15,
-          maxTraversalDepth: 32,
-          shortcuts: {
-            toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
-            toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
-            toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
-            copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
-            openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
-            toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
-          }
-        };
+        if (!signal?.aborted) {
+          console.warn("[HoverSource] Failed to fetch config, falling back to defaults", e);
+        }
       }
+      this.config = {
+        theme: "dark",
+        minimalModeByDefault: false,
+        snappingThreshold: 15,
+        desnappingThreshold: 15,
+        maxTraversalDepth: 32,
+        shortcuts: {
+          toggleUI: { key: "h", altKey: true, ctrlKey: false, shiftKey: false },
+          toggleMinimal: { key: "m", altKey: true, ctrlKey: false, shiftKey: false },
+          toggleFreeze: { key: "p", altKey: true, ctrlKey: false, shiftKey: false },
+          copyMetadata: { key: "c", altKey: true, ctrlKey: false, shiftKey: false },
+          openDashboard: { key: "s", altKey: true, ctrlKey: false, shiftKey: false },
+          toggleMode: { key: "x", altKey: true, ctrlKey: false, shiftKey: false }
+        }
+      };
     }
     initStyles() {
       const isLightTheme = this.config?.theme === "light" || this.config?.theme === "system" && !globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -3441,12 +3792,12 @@ The following is NOT resolved automatically and requires your judgment:
     `;
       if (this.container) {
         this.container.appendChild(style);
-      } else {
+      } else if (document.head) {
         document.head.appendChild(style);
       }
     }
     createUI() {
-      if (this.container)
+      if (this.container || !document.body)
         return;
       this.container = document.createElement("div");
       this.container.className = "hoversource-container";
@@ -3465,6 +3816,8 @@ The following is NOT resolved automatically and requires your judgment:
       document.body.appendChild(this.container);
     }
     ensureUI() {
+      if (!document.body)
+        return;
       if (this.container && !document.body.contains(this.container)) {
         console.log("[HoverSource] Self-healing: Restored overlay container to DOM.");
         document.body.appendChild(this.container);
@@ -3472,6 +3825,7 @@ The following is NOT resolved automatically and requires your judgment:
     }
     initShortcuts() {
       globalThis.addEventListener("keydown", this.handleKeyDown);
+      this.shortcutsAttached = true;
     }
     handleModeShortcuts(e, shortcuts) {
       const toggleModeShortcut = shortcuts.toggleMode ?? { key: "x", altKey: true, ctrlKey: false, shiftKey: false };
@@ -3956,10 +4310,27 @@ The following is NOT resolved automatically and requires your judgment:
       if (this.uiVisible && this.tooltipBox) {
         const hint = this.tooltipBox.querySelector(".hoversource-shortcut-hint");
         if (hint) {
+          if (this.copyHintTimer !== null) {
+            clearTimeout(this.copyHintTimer);
+            this.copyHintTimer = null;
+          }
+          const canReplaceNodes = typeof hint.replaceChildren === "function" && hint.childNodes && typeof hint.childNodes[Symbol.iterator] === "function";
+          const originalNodes = this.copyHintOriginalNodes && this.copyHintTarget === hint ? this.copyHintOriginalNodes : canReplaceNodes ? Array.from(hint.childNodes).map((n) => n.cloneNode(true)) : null;
           const originalText = hint.innerHTML;
+          this.copyHintTarget = hint;
+          this.copyHintOriginalNodes = originalNodes;
           hint.innerHTML = "<span style='color: #10b981; font-weight: bold;'>Copied successfully for AI!</span>";
-          setTimeout(() => {
-            hint.innerHTML = originalText;
+          this.copyHintTimer = setTimeout(() => {
+            this.copyHintTimer = null;
+            if (this.isDestroyed)
+              return;
+            if (originalNodes && typeof hint.replaceChildren === "function") {
+              hint.replaceChildren(...originalNodes);
+            } else {
+              hint.innerHTML = originalText;
+            }
+            this.copyHintTarget = null;
+            this.copyHintOriginalNodes = null;
           }, 1500);
         }
       }
@@ -4024,6 +4395,51 @@ The following is NOT resolved automatically and requires your judgment:
         }
       }
     }
+    destroy() {
+      if (this.isDestroyed)
+        return;
+      this.isDestroyed = true;
+      this.launchAbortController?.abort();
+      this.launchAbortController = null;
+      disconnectInspectorMutationObserver();
+      this.setFreezeMode(false);
+      if (this.modeActivated) {
+        this.activeMode.deactivate();
+        this.modeActivated = false;
+      }
+      if (this.shortcutsAttached) {
+        globalThis.removeEventListener("keydown", this.handleKeyDown);
+        this.shortcutsAttached = false;
+      }
+      if (this.listenersAttached) {
+        globalThis.removeEventListener("pointerover", this.handlePointerOver, { capture: true });
+        globalThis.removeEventListener("pointermove", this.handlePointerMove, { capture: true });
+        globalThis.removeEventListener("scroll", this.handleScroll, { capture: true });
+        globalThis.removeEventListener("message", this.handleWindowMessage);
+        this.listenersAttached = false;
+      }
+      if (typeof document !== "undefined") {
+        document.onmouseup = null;
+        document.onmousemove = null;
+      }
+      if (this.copyHintTimer !== null) {
+        clearTimeout(this.copyHintTimer);
+        this.copyHintTimer = null;
+      }
+      this.copyHintTarget = null;
+      this.copyHintOriginalNodes = null;
+      this.container?.remove();
+      this.freezeStyle?.remove();
+      this.container = null;
+      this.outlineBox = null;
+      this.tooltipBox = null;
+      this.filterPanel = null;
+      this.freezeStyle = null;
+      this.parentHighlightElements = [];
+      if (_OverlayEngine.activeInstance === this) {
+        _OverlayEngine.activeInstance = null;
+      }
+    }
   };
   globalThis.__HoverSourceOpen__ = (file, line, col, tagName, classList) => {
     let path = `/open-in-ide?file=${encodeURIComponent(file)}&line=${line}&column=${col}`;
@@ -4041,7 +4457,9 @@ The following is NOT resolved automatically and requires your judgment:
   };
   if (typeof document !== "undefined" && !globalThis.__HoverSourceInitialized__) {
     globalThis.__HoverSourceInitialized__ = true;
-    OverlayEngine.launch();
+    void OverlayEngine.launch().catch((err) => {
+      console.error("[HoverSource] Overlay initialization failed:", err);
+    });
     console.log("[HoverSource] Overlay injected.");
   }
   function calculateMaskBounds(direction, stopValue, stopUnit, rect) {

@@ -6,6 +6,7 @@ import {
   findFreePort,
   resolveCompanionPort,
   startCdpInjectionWatch,
+  showHelp,
 } from "../cli.js";
 
 describe("Port Heuristics", () => {
@@ -38,15 +39,15 @@ describe("Port Heuristics", () => {
   });
 
   it("should find the next free port", async () => {
+    const occupiedPort = await findFreePort(24250);
     const tempServer = net.createServer();
     await new Promise<void>((resolve) => {
-      tempServer.listen(0, "127.0.0.1", () => resolve());
+      tempServer.listen(occupiedPort, "127.0.0.1", () => resolve());
     });
-    const occupiedPort = (tempServer.address() as net.AddressInfo).port;
 
     try {
       const nextFree = await findFreePort(occupiedPort);
-      // Since occupiedPort is occupied, findFreePort should find the next port (or another free port)
+      // Since occupiedPort is occupied, findFreePort should find the next free port outside OS ephemeral pools
       expect(nextFree).not.toBe(occupiedPort);
       const free = await isPortFree(nextFree);
       expect(free).toBe(true);
@@ -56,12 +57,7 @@ describe("Port Heuristics", () => {
   });
 
   it("should exclude specific ports when finding free port", async () => {
-    const tempServer = net.createServer();
-    await new Promise<void>((resolve) => {
-      tempServer.listen(0, "127.0.0.1", () => resolve());
-    });
-    const freePort = (tempServer.address() as net.AddressInfo).port;
-    await new Promise<void>((resolve) => tempServer.close(() => resolve()));
+    const freePort = await findFreePort(24300);
 
     const nextFree = await findFreePort(freePort, freePort);
     expect(nextFree).not.toBe(freePort);
@@ -70,12 +66,7 @@ describe("Port Heuristics", () => {
   });
 
   it("should resolve companion port collision with target application port", async () => {
-    const tempServer = net.createServer();
-    await new Promise<void>((resolve) => {
-      tempServer.listen(0, "127.0.0.1", () => resolve());
-    });
-    const port = (tempServer.address() as net.AddressInfo).port;
-    await new Promise<void>((resolve) => tempServer.close(() => resolve()));
+    const port = await findFreePort(24350);
 
     const resolved = await resolveCompanionPort(port, port);
     // Should shift companion port and not equal to targetPort
@@ -227,5 +218,27 @@ describe("startCdpInjectionWatch", () => {
     await expect(
       startCdpInjectionWatch(1, "script", 7456)
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("showHelp", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("prints CLI flags and .hoversourcerc scan-scope schema for agents and users", () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    showHelp();
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const output = String(logSpy.mock.calls[0][0]);
+    expect(output).toContain("config preset");
+    expect(output).toContain("--dev-port");
+    expect(output).toContain("--https");
+    expect(output).toContain(".hoversourcerc");
+    expect(output).toContain("include");
+    expect(output).toContain("ignore");
+    expect(output).toContain("respectGitignore");
+    expect(output).toContain("whitelist mode");
+    expect(output).toContain("Prefer folder prefixes");
   });
 });

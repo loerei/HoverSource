@@ -833,34 +833,60 @@ async function main() {
   }
 }
 
-function showHelp() {
+export function showHelp() {
   console.log(`
 Usage: hs [subcommand] [options]
 
 Subcommands:
-  start                  Start the companion server only.
-  restart                Restart the running companion server.
-  dashboard              Open the HoverSource Dashboard (reuses running server or starts one).
-  config <action>        Inspect or modify settings: list|show|get|set|reset|delete
-  dev, start, etc.       Any package.json script name to execute with HoverSource overlay.
+  start                           Start the companion server only (or run package.json "start").
+  restart                         Restart the running companion server.
+  dashboard                       Open the HoverSource Dashboard (reuses running server or starts one).
+  config <action>                 Inspect or modify settings: list|show|get|set|reset|delete|preset
+  config preset <action>          Manage global presets: list|save|use|delete|bind
+  dev, start, etc.                Any package.json script name to execute with HoverSource overlay.
 
 Options:
-  -p, --port=<port>       Port for the companion server (default: 7300)
-  -t, --target=<url>      Direct target dev server URL to proxy (e.g. http://localhost:3000)
-  -e, --exec=<command>    Command to launch target app (e.g. "npm run dev", "electron .")
-  -r, --root=<path>       Project root directory (default: current directory)
-  -d, --dashboard         Open the HoverSource Dashboard (standalone or with a running command)
-  --no-open               Do not automatically open the browser when running dashboard
-  --global                Target global ~/.hoversourcerc (for hs config)
-  --local                 Target project .hoversourcerc (for hs config)
-  --merged                Read merged effective config (for hs config list|show|get)
-  --dry-run               Preview config changes without writing disk (for hs config)
-  -y, --yes               Confirm destructive config actions non-interactively
-  --json                  Emit machine-readable JSON output to stdout
-  -h, --help              Show this help message
-  --debug-port=<port>     CDP Remote debugging port for Electron (default: 9222)
-  --proxy-port=<port>     Explicit port to bind HoverSource reverse proxy server
-  --auto-resolve          Automatically resolve port conflicts (terminate process or patch debug port)
+  -p, --port=<port>               Port for the companion server (default: 7300)
+  -t, --target=<url>              Direct target dev server URL to proxy (e.g. http://localhost:3000)
+  -e, --exec=<command>            Command to launch target app (e.g. "npm run dev", "electron .")
+  -r, --root=<path>               Project root directory (default: current directory)
+  -d, --dashboard                 Open the HoverSource Dashboard (standalone or with a running command)
+  --no-open                       Do not automatically open the browser when running dashboard
+  --global                        Target global ~/.hoversourcerc (for hs config)
+  --local                         Target project .hoversourcerc (for hs config)
+  --merged                        Read merged effective config (for hs config list|show|get)
+  --dry-run                       Preview config changes without writing disk (for hs config)
+  -y, --yes                       Confirm destructive config actions non-interactively
+  --json                          Emit machine-readable JSON output to stdout
+  -h, --help                      Show this help message
+  --debug-port=<port>             CDP remote debugging port for Electron (default: 9222)
+  --dev-port=<port>               Explicit detected dev server port
+  --proxy-port=<port>             Explicit port to bind HoverSource reverse proxy server
+  --https                         Serve web reverse proxy over local HTTPS using HoverSource Root CA
+  --auto-resolve                  Automatically resolve port conflicts (terminate process or patch debug port)
+
+Configuration (.hoversourcerc):
+  Project file: <projectRoot>/.hoversourcerc (overrides global ~/.hoversourcerc; preserve existing keys when editing).
+
+  Static scan rules (apply ONLY to .css/.scss/.sass/.less and .html/.htm lookup, NOT JS/TS component resolution):
+    - Unset include: scans repo root minus dot-dirs (.*), node_modules, dist/build/out/coverage, .gitignore, and ignore.
+    - Set include (non-empty): whitelist mode. Scans ONLY matching paths (ignores all else), then filters via .gitignore and ignore.
+    - Prefer folder prefixes (e.g. ["src"], ["apps/web/src", "packages/ui/src"]) over enumerating individual files or non-style code files.
+
+  Keys (JSON):
+    include          string[]   Optional whitelist prefixes/globs for CSS/HTML lookup (omitted by default)
+    ignore           string[]   Extra gitignore-style patterns; supports "!pattern" negation (default: [])
+    respectGitignore boolean    Apply .gitignore rules during CSS/HTML lookup (default: true)
+    ports            object     { companion, debug, proxy, dev, companionConflict: "shift"|"takeover"|"fail" }
+    preset           string     Bound global preset name (set via: hs config preset bind <name>)
+    theme            string     "dark" | "light" | "system"
+    editor           string     "vscode" | "cursor" | "code"
+
+  Setup commands:
+    hs config list --merged --json
+    hs config set include '["src","packages/ui/src"]'
+    hs config set ignore '["legacy/**","*.gen.css"]'
+    hs config set respectGitignore true
 `);
 }
 

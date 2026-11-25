@@ -156,6 +156,26 @@ app.whenReady().then(() => {
 });
 ```
 
+### Configure Scan Scope (`.hoversourcerc`)
+
+By default, HoverSource ignores dot-directories (such as `.scratch` and `.next`), `node_modules`, build output directories, and entries matched by `.gitignore`. In monorepos or projects with multiple frontend folders, you can scope static CSS/HTML matching explicitly with a `.hoversourcerc` file at your project root.
+
+Ask your AI coding agent to inspect `hs --help` and generate `.hoversourcerc` for your repository:
+
+```text
+Run `hs --help`, inspect the repository layout, and configure `.hoversourcerc` for CSS/HTML lookup (`include` / `ignore` / `respectGitignore`) while preserving existing keys.
+```
+
+Or configure `.hoversourcerc` manually (or via `hs config set include '["src","packages/ui/src"]'`):
+
+```json
+{
+  "include": ["src", "packages/ui/src"],
+  "ignore": ["*.generated.css"],
+  "respectGitignore": true
+}
+```
+
 ## Commands & Flags
 
 ### Commands

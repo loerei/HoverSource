@@ -15,6 +15,7 @@ import { setupConsoleMonkeypatch } from "./utils/logger.js";
 import { parseCliArgs } from "./args.js";
 import { runDashboardCommand } from "./commands/dashboard.js";
 import { runConfigCommand } from "./commands/config.js";
+import { checkForUpdate, runUpdateCommand } from "./update.js";
 import {
   CliUsageError,
   findFreePort,
@@ -47,6 +48,21 @@ import { ElectronCdpLauncher } from "./launcher/ElectronCdpLauncher.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let cachedCliVersion: string | null = null;
+export function getCliVersion(): string {
+  if (cachedCliVersion) return cachedCliVersion;
+  try {
+    const pkgPath = path.resolve(__dirname, "../package.json");
+    const parsed = JSON.parse(fs.readFileSync(pkgPath, "utf-8")) as { version?: unknown };
+    cachedCliVersion = typeof parsed.version === "string" && parsed.version.trim() !== ""
+      ? parsed.version.trim()
+      : "0.0.0";
+  } catch {
+    cachedCliVersion = "0.0.0";
+  }
+  return cachedCliVersion;
+}
 
 // Helper functions to prevent Path Injection (S8707) and Command Injection (S8701)
 export function validateSafePath(p: string): string {
@@ -683,10 +699,35 @@ async function main() {
   });
   restoreLeftoverPatches();
 
+  if (args.version || args.V) {
+    console.log(getCliVersion());
+    return;
+  }
+
   if (args.help || args.h) {
     showHelp();
     return;
   }
+
+  if (subcommand === "update") {
+    const code = await runUpdateCommand({
+      currentVersion: getCliVersion(),
+      dryRun: Boolean(args["dry-run"]),
+      json: Boolean(args.json),
+    });
+    process.exitCode = code;
+    return;
+  }
+
+  void checkForUpdate({
+    currentVersion: getCliVersion(),
+    json: Boolean(args.json),
+    quiet: Boolean(args.quiet),
+  }).then((res) => {
+    if (res) {
+      process.stderr.write(`\n${res.notice}\n`);
+    }
+  });
 
   const projectRoot = validateSafePath(path.resolve(String(args.root || args.r || ".")));
   const mergedConfig = loadMergedConfig(projectRoot);
@@ -843,6 +884,7 @@ Subcommands:
   dashboard                       Open the HoverSource Dashboard (reuses running server or starts one).
   config <action>                 Inspect or modify settings: list|show|get|set|reset|delete|preset
   config preset <action>          Manage global presets: list|save|use|delete|bind
+  update [--dry-run] [--json]     Check npm for a newer hoversource release and install globally
   dev, start, etc.                Any package.json script name to execute with HoverSource overlay.
 
 Options:
@@ -858,6 +900,7 @@ Options:
   --dry-run                       Preview config changes without writing disk (for hs config)
   -y, --yes                       Confirm destructive config actions non-interactively
   --json                          Emit machine-readable JSON output to stdout
+  -V, --version                   Show HoverSource CLI version
   -h, --help                      Show this help message
   --debug-port=<port>             CDP remote debugging port for Electron (default: 9222)
   --dev-port=<port>               Explicit detected dev server port

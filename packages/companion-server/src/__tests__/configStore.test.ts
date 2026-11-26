@@ -4,6 +4,8 @@ import path from "node:path";
 import os from "node:os";
 import {
   DEFAULT_CONFIG,
+  CURRENT_CONFIG_SCHEMA_VERSION,
+  migrateConfigObject,
   normalizeProjectPath,
   mergeDeep,
   loadMergedConfig,
@@ -567,5 +569,50 @@ describe("configStore", () => {
     expect(unrelatedMerged.include).toBeUndefined();
     expect(unrelatedMerged.ignore).toEqual([]);
     expect(unrelatedMerged.respectGitignore).toBe(true);
+    expect(unrelatedMerged.schemaVersion).toBe(CURRENT_CONFIG_SCHEMA_VERSION);
+  });
+
+  it("migrates legacy v0 configs with backup-before-write and preserves newer future schemaVersion", () => {
+    const legacyGlobal = {
+      theme: "light",
+      include: ["stale-global-include"],
+      ignore: ["stale/**"],
+      respectGitignore: false,
+    };
+    fs.writeFileSync(globalConfigPath, JSON.stringify(legacyGlobal), "utf-8");
+
+    const loaded = loadMergedConfig(projectDir, globalConfigPath);
+    expect(loaded.schemaVersion).toBe(CURRENT_CONFIG_SCHEMA_VERSION);
+    expect(loaded.theme).toBe("light");
+    expect(loaded.include).toBeUndefined();
+
+    // Backup created before atomic rewrite
+    const backupPath = `${globalConfigPath}.bak.v0`;
+    expect(fs.existsSync(backupPath)).toBe(true);
+    expect(JSON.parse(fs.readFileSync(backupPath, "utf-8"))).toEqual(legacyGlobal);
+
+    // Persisted file upgraded to schemaVersion 1 with misplaced global scan keys removed
+    const migratedDisk = JSON.parse(fs.readFileSync(globalConfigPath, "utf-8"));
+    expect(migratedDisk.schemaVersion).toBe(1);
+    expect(migratedDisk.include).toBeUndefined();
+
+    // Second migration pass is idempotent
+    const secondPass = migrateConfigObject(migratedDisk, "global");
+    expect(secondPass.changed).toBe(false);
+
+    // Future schemaVersion is preserved without downgrading
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const futureConfig = { schemaVersion: 99, theme: "dark", futureField: "keep-me" };
+    fs.writeFileSync(path.join(projectDir, ".hoversourcerc"), JSON.stringify(futureConfig), "utf-8");
+    loadMergedConfig(projectDir, globalConfigPath);
+    const persistedFuture = JSON.parse(fs.readFileSync(path.join(projectDir, ".hoversourcerc"), "utf-8"));
+    expect(persistedFuture.schemaVersion).toBe(99);
+    expect(persistedFuture.futureField).toBe("keep-me");
+    expect(warnSpy).toHaveBeenCalled();
+
+    // Malformed schemaVersion is preserved without destructive migration
+    const malformed = migrateConfigObject({ schemaVersion: "invalid", theme: "dark" }, "global");
+    expect(malformed.changed).toBe(false);
+    expect(malformed.migrated.schemaVersion).toBe("invalid");
   });
 });

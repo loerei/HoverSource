@@ -91,6 +91,13 @@ describe("parseCliArgs", () => {
     });
   });
 
+  it("maps -V/--version to version without disturbing -v/--vue", () => {
+    expect(parseCliArgs(["-V"]).args.version).toBe(true);
+    expect(parseCliArgs(["--version"]).args.version).toBe(true);
+    expect(parseCliArgs(["install", "-v"]).args.vue).toBe(true);
+    expect(parseCliArgs(["install", "-v"]).args.version).toBeUndefined();
+  });
+
   it("supports new and existing long/short flags including --dev-port", () => {
     const parsed = parseCliArgs([
       "start",

@@ -10,9 +10,13 @@
     "build": "tsc -b && pnpm --filter @hoversource/overlay-core build",
     "clean": "tsc -b --clean",
     "test": "vitest run --exclude **/dist/**",
-    "test:coverage": "vitest run --coverage.enabled=true --coverage.reporter=lcov --exclude **/dist/**"
+    "test:coverage": "vitest run --coverage.enabled=true --coverage.reporter=lcov --exclude **/dist/**",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@types/node": "^20.11.0",
     "@vitest/coverage-v8": "^4.1.9",
     "typescript": "^5.3.3",

@@ -15,6 +15,7 @@ const SHORT_BOOLEAN_FLAGS: Record<string, string> = {
   d: "dashboard",
   h: "help",
   v: "vue",
+  V: "version",
   s: "solid",
   a: "angular",
   y: "yes",

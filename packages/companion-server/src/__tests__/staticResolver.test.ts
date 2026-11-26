@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -252,5 +252,214 @@ describe("StaticContextResolver HTML element resolving", () => {
     expect(location).not.toBeNull();
     expect(location?.fileName).toBe("src/index.html");
     expect(location?.lineNumber).toBe(9);
+  });
+});
+
+describe("StaticContextResolver scan scoping and CSS proximity sorting", () => {
+  let rootDir: string;
+  let resolver: StaticContextResolver;
+
+  beforeAll(() => {
+    rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "hoversource-scope-test-"));
+    resolver = new StaticContextResolver();
+
+    // Create dot-dir .scratch with same filename appearing alphabetically before src/
+    const scratchCssDir = path.join(rootDir, ".scratch", "pre-310-frontend", "src", "styles");
+    fs.mkdirSync(scratchCssDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(scratchCssDir, "header-search.css"),
+      ".search-input { color: red; }\n",
+      "utf-8"
+    );
+
+    // Gitignored directory with generated CSS
+    const genDir = path.join(rootDir, "generated-styles");
+    fs.mkdirSync(genDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(genDir, "theme.css"),
+      ".search-input { color: purple; }\n.kept-btn { color: green; }\n",
+      "utf-8"
+    );
+
+    // Un-ignored competing folder "archive" vs component directory "src"
+    const archiveDir = path.join(rootDir, "archive", "styles");
+    fs.mkdirSync(archiveDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(archiveDir, "header-search.css"),
+      ".search-input { color: gray; }\n",
+      "utf-8"
+    );
+
+    // Custom dot-dir explicitly opt-in via include
+    const storybookDir = path.join(rootDir, ".storybook");
+    fs.mkdirSync(storybookDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(storybookDir, "preview.css"),
+      ".story-frame { padding: 8px; }\n",
+      "utf-8"
+    );
+
+    // Real component and CSS under src/
+    const compDir = path.join(rootDir, "src", "renderer", "components");
+    const srcCssDir = path.join(rootDir, "src", "styles");
+    fs.mkdirSync(compDir, { recursive: true });
+    fs.mkdirSync(srcCssDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(compDir, "SearchBar.tsx"),
+      [
+        "export function SearchBar() {",
+        '  return <input className="search-input" />;',
+        "}",
+      ].join("\n"),
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(srcCssDir, "header-search.css"),
+      ".search-input { color: white; }\n",
+      "utf-8"
+    );
+
+    fs.writeFileSync(
+      path.join(rootDir, ".gitignore"),
+      "generated-styles/\n*.gen.css\n",
+      "utf-8"
+    );
+    fs.writeFileSync(
+      path.join(srcCssDir, "tokens.gen.css"),
+      ".token-cls { color: blue; }\n",
+      "utf-8"
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(rootDir, { recursive: true, force: true });
+  });
+
+  it("ignores dot-dirs and prefers shared path prefix src/ over archive/ with zero config", async () => {
+    const compFile = path.join(rootDir, "src", "renderer", "components", "SearchBar.tsx");
+    const meta = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["search-input", "token-cls", "story-frame"]
+    );
+
+    expect(meta.classOrigins["search-input"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, "src", "styles", "header-search.css").replaceAll("\\", "/")
+    );
+    // Respects .gitignore by default
+    expect(meta.classOrigins["token-cls"]).toBeUndefined();
+    // Dot-dir .storybook is ignored when not explicitly included
+    expect(meta.classOrigins["story-frame"]).toBeUndefined();
+  });
+
+  it("supports respectGitignore: false and custom ignore overrides including negation", async () => {
+    const compFile = path.join(rootDir, "src", "renderer", "components", "SearchBar.tsx");
+    const metaNoGitignore = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["token-cls"],
+      { respectGitignore: false }
+    );
+    expect(metaNoGitignore.classOrigins["token-cls"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, "src", "styles", "tokens.gen.css").replaceAll("\\", "/")
+    );
+
+    const metaCustomIgnore = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["search-input", "token-cls"],
+      {
+        respectGitignore: true,
+        ignore: ["src/styles/header-search.css", "!src/styles/tokens.gen.css"],
+      }
+    );
+    expect(metaCustomIgnore.classOrigins["search-input"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, "archive", "styles", "header-search.css").replaceAll("\\", "/")
+    );
+    expect(metaCustomIgnore.classOrigins["token-cls"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, "src", "styles", "tokens.gen.css").replaceAll("\\", "/")
+    );
+  });
+
+  it("scopes scanning via include whitelist and allows explicit dot-dir opt-in", async () => {
+    const compFile = path.join(rootDir, "src", "renderer", "components", "SearchBar.tsx");
+    const metaInclude = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["search-input", "story-frame"],
+      { include: ["archive"] }
+    );
+    expect(metaInclude.classOrigins["search-input"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, "archive", "styles", "header-search.css").replaceAll("\\", "/")
+    );
+    expect(metaInclude.classOrigins["story-frame"]).toBeUndefined();
+
+    const metaDotInclude = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["story-frame"],
+      { include: [".storybook"] }
+    );
+    expect(metaDotInclude.classOrigins["story-frame"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, ".storybook", "preview.css").replaceAll("\\", "/")
+    );
+
+    const metaWildcardDot = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["story-frame"],
+      { include: ["**/.storybook"] }
+    );
+    expect(metaWildcardDot.classOrigins["story-frame"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, ".storybook", "preview.css").replaceAll("\\", "/")
+    );
+  });
+
+  it("supports bracket character classes, collapses repeated **/, and fails closed on non-array include", async () => {
+    const compFile = path.join(rootDir, "src", "renderer", "components", "SearchBar.tsx");
+    const bracketMeta = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["search-input"],
+      { include: ["src/**/**/**/st[xy]les/**"] }
+    );
+    expect(bracketMeta.classOrigins["search-input"]?.file.replaceAll("\\", "/")).toBe(
+      path.join(rootDir, "src", "styles", "header-search.css").replaceAll("\\", "/")
+    );
+
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const malformedMeta = await resolver.resolveStaticContext(
+      rootDir,
+      compFile,
+      2,
+      10,
+      "input",
+      ["search-input"],
+      { include: "src" as unknown as string[] }
+    );
+    expect(malformedMeta.classOrigins["search-input"]).toBeUndefined();
+    vi.restoreAllMocks();
   });
 });

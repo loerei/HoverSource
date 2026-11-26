@@ -1264,7 +1264,7 @@ export class OverlayEngine implements OverlayController {
         const copiedSpan = el(
           "span",
           { style: "color: #10b981; font-weight: bold;" },
-          ["Copied successfully for AI!"]
+          ["Copied metadata"]
         );
         if (copiedSpan) {
           hint.replaceChildren(copiedSpan);

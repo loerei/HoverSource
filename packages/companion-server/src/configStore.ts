@@ -40,6 +40,9 @@ export interface HoverSourceConfig {
   editor: ConfigEditor;
   autoResolvePortConflicts?: boolean;
   layerPickerEnabled?: boolean;
+  include?: string[];
+  ignore?: string[];
+  respectGitignore?: boolean;
   webAppDevServerTimeout?: number;
   snappingThreshold?: number;
   desnappingThreshold?: number;
@@ -123,6 +126,9 @@ export interface ConfigDelta {
   editor?: ConfigEditor;
   autoResolvePortConflicts?: boolean;
   layerPickerEnabled?: boolean;
+  include?: string[];
+  ignore?: string[];
+  respectGitignore?: boolean;
   webAppDevServerTimeout?: number;
   snappingThreshold?: number;
   desnappingThreshold?: number;
@@ -177,6 +183,8 @@ export const DEFAULT_CONFIG: HoverSourceConfig = {
   minimalModeByDefault: false,
   editor: "vscode",
   autoResolvePortConflicts: false,
+  respectGitignore: true,
+  ignore: [],
   webAppDevServerTimeout: 120,
   snappingThreshold: 15,
   desnappingThreshold: 15,
@@ -270,6 +278,9 @@ const VALID_TOP_LEVEL_KEYS = new Set<string>([
   "ports",
   "shortcuts",
   "metadataFilter",
+  "include",
+  "ignore",
+  "respectGitignore",
 ]);
 const DISALLOWED_PROTO_KEYS = new Set<string>(["__proto__", "constructor", "prototype"]);
 
@@ -412,6 +423,30 @@ function validateIntRange(
     return undefined;
   }
   return value;
+}
+
+function validateStringArray(
+  value: unknown,
+  fieldPath: string,
+  issues: ConfigValidationIssue[]
+): string[] | undefined {
+  if (!Array.isArray(value)) {
+    issues.push({ path: fieldPath, message: `${fieldPath} must be an array of strings` });
+    return undefined;
+  }
+  const out: string[] = [];
+  for (let i = 0; i < value.length; i++) {
+    const item = value[i];
+    if (typeof item !== "string" || item.trim().length === 0 || /[\r\n\0]/.test(item)) {
+      issues.push({
+        path: `${fieldPath}.${i}`,
+        message: `${fieldPath}[${i}] must be a non-empty single-line string`,
+      });
+      continue;
+    }
+    out.push(item.trim());
+  }
+  return out;
 }
 
 function validateShortcutDelta(
@@ -703,6 +738,21 @@ export function parseConfigDelta(raw: unknown): ParseConfigDeltaResult {
         if (mf !== undefined) parsed.metadataFilter = mf;
         break;
       }
+      case "include": {
+        const includeList = validateStringArray(val, "include", issues);
+        if (includeList !== undefined) parsed.include = includeList;
+        break;
+      }
+      case "ignore": {
+        const ignoreList = validateStringArray(val, "ignore", issues);
+        if (ignoreList !== undefined) parsed.ignore = ignoreList;
+        break;
+      }
+      case "respectGitignore": {
+        const b = validateBoolean(val, "respectGitignore", issues);
+        if (b !== undefined) parsed.respectGitignore = b;
+        break;
+      }
     }
   }
 
@@ -782,13 +832,28 @@ export function buildDeltaFromKeyValue(keyPath: string, rawValue: string): Parse
     if (
       key === "minimalModeByDefault" ||
       key === "autoResolvePortConflicts" ||
-      key === "layerPickerEnabled"
+      key === "layerPickerEnabled" ||
+      key === "respectGitignore"
     ) {
       const boolVal = parseStrictBoolean(rawValue);
       if (boolVal === null) {
         return failKeyValue(keyPath, `Invalid boolean value "${rawValue}" for ${keyPath}; expected "true" or "false"`);
       }
       return parseConfigDelta({ [key]: boolVal });
+    }
+    if (key === "include" || key === "ignore") {
+      const trimmed = rawValue.trim();
+      let listVal: unknown;
+      if (trimmed.startsWith("[")) {
+        try {
+          listVal = JSON.parse(trimmed);
+        } catch {
+          return failKeyValue(keyPath, `Invalid JSON array "${rawValue}" for ${keyPath}`);
+        }
+      } else {
+        listVal = trimmed === "" ? [] : trimmed.split(",").map((item) => item.trim());
+      }
+      return parseConfigDelta({ [key]: listVal });
     }
     if (
       key === "snappingThreshold" ||
@@ -941,12 +1006,22 @@ function stripNullPortOverrides(container: Record<string, unknown>): void {
   }
 }
 
-function stripNonRuntimeKeys(raw: Record<string, unknown>): Record<string, unknown> {
+const LOCAL_ONLY_SCAN_KEYS = ["include", "ignore", "respectGitignore"] as const;
+
+function stripNonRuntimeKeys(
+  raw: Record<string, unknown>,
+  isGlobal = false
+): Record<string, unknown> {
   const sanitized = { ...raw };
   delete sanitized.recentProjects;
   delete sanitized.presets;
   delete sanitized.activePreset;
   delete sanitized.preset;
+  if (isGlobal) {
+    for (const key of LOCAL_ONLY_SCAN_KEYS) {
+      delete sanitized[key];
+    }
+  }
   return sanitized;
 }
 
@@ -1020,7 +1095,7 @@ export function loadMergedConfig(projectRoot: string, globalConfigPath?: string)
   const globalPath = getGlobalConfigPath(globalConfigPath);
   const globalConfig = readConfigFromFile(globalPath);
   if (globalConfig) {
-    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(globalConfig));
+    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(globalConfig, true));
   }
 
   const localPath = getLocalConfigPath(projectRoot);
@@ -1038,7 +1113,7 @@ export function loadMergedConfig(projectRoot: string, globalConfigPath?: string)
   }
 
   if (localConfig) {
-    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(localConfig));
+    config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(localConfig, false));
   }
 
   stripNullPortOverrides(config as unknown as Record<string, unknown>);
@@ -1056,7 +1131,7 @@ export function getConfigForTarget(
     const globalPath = getGlobalConfigPath(globalConfigPath);
     const raw = readConfigFromFile(globalPath);
     if (raw) {
-      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
+      targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw, true));
     }
   } else if (queryTarget === "local") {
     const localPath = getLocalConfigPath(defaultRoot);

@@ -440,6 +440,16 @@ export async function runConfigCommand(opts: ConfigCommandOptions): Promise<numb
       return 2;
     }
 
+    if (
+      scope === "global" &&
+      (keyPath === "include" || keyPath === "ignore" || keyPath === "respectGitignore")
+    ) {
+      console.error(
+        `[HoverSource] "${keyPath}" is repository-scoped and cannot be set in global config. Use --local instead.`
+      );
+      return 2;
+    }
+
     const parsed = buildDeltaFromKeyValue(keyPath, rawValue);
     if (!parsed.ok) {
       console.error(

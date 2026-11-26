@@ -789,9 +789,9 @@ async function runCheckA({ browserClient, cdpPort, companionPort, bundleContent 
       await waitForCondition(async () => {
         return pageClient.evalJson(`(() => {
           const hint = document.getElementById("hoversource-host")?.shadowRoot?.querySelector(".hoversource-shortcut-hint");
-          return Boolean(hint && hint.textContent && hint.textContent.includes("Copied successfully for AI!"));
+          return Boolean(hint && hint.textContent && hint.textContent.includes("Copied metadata"));
         })()`);
-      }, '"Copied successfully for AI!" in .hoversource-shortcut-hint');
+      }, '"Copied metadata" in .hoversource-shortcut-hint');
 
       // Toggle freeze mode (Alt+P)
       await pageClient.send("Input.dispatchKeyEvent", {

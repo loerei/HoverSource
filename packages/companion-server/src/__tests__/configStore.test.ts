@@ -498,4 +498,74 @@ describe("configStore", () => {
     expect(() => usePreset("missing-preset", projectDir, globalConfigPath)).toThrow(ConfigValidationError);
     expect(deletePreset("missing-preset", projectDir, globalConfigPath).deleted).toBe(false);
   });
+
+  it("supports include, ignore, and respectGitignore as repo-scoped scan config excluded from presets", () => {
+    const base = loadMergedConfig(projectDir, globalConfigPath);
+    expect(base.respectGitignore).toBe(true);
+    expect(base.ignore).toEqual([]);
+    expect(base.include).toBeUndefined();
+
+    const parsedJson = buildDeltaFromKeyValue("include", '["src", "packages/ui/src"]');
+    expect(parsedJson.ok).toBe(true);
+    if (parsedJson.ok) {
+      expect(parsedJson.value.include).toEqual(["src", "packages/ui/src"]);
+    }
+
+    const parsedCsv = buildDeltaFromKeyValue("ignore", ".scratch, *.gen.css");
+    expect(parsedCsv.ok).toBe(true);
+    if (parsedCsv.ok) {
+      expect(parsedCsv.value.ignore).toEqual([".scratch", "*.gen.css"]);
+    }
+
+    const parsedFlag = buildDeltaFromKeyValue("respectGitignore", "false");
+    expect(parsedFlag.ok).toBe(true);
+    if (parsedFlag.ok) {
+      expect(parsedFlag.value.respectGitignore).toBe(false);
+    }
+
+    expect(parseConfigDelta({ include: [""] }).ok).toBe(false);
+    expect(parseConfigDelta({ ignore: "not-an-array" }).ok).toBe(false);
+    expect(buildDeltaFromKeyValue("include", "[invalid").ok).toBe(false);
+
+    saveConfigDelta(
+      {
+        theme: "light",
+        include: ["src"],
+        ignore: ["legacy/**"],
+        respectGitignore: false,
+      },
+      "local",
+      projectDir,
+      null,
+      globalConfigPath
+    );
+
+    const merged = loadMergedConfig(projectDir, globalConfigPath);
+    expect(merged.include).toEqual(["src"]);
+    expect(merged.ignore).toEqual(["legacy/**"]);
+    expect(merged.respectGitignore).toBe(false);
+
+    const snap = savePreset("scan-test", null, projectDir, globalConfigPath);
+    expect(snap.preset.theme).toBe("light");
+    expect((snap.preset as Record<string, unknown>).include).toBeUndefined();
+    expect((snap.preset as Record<string, unknown>).ignore).toBeUndefined();
+    expect((snap.preset as Record<string, unknown>).respectGitignore).toBeUndefined();
+
+    // Global scan-scope keys must not leak into unrelated repos
+    fs.writeFileSync(
+      globalConfigPath,
+      JSON.stringify({
+        theme: "light",
+        include: ["only-global-dir"],
+        ignore: ["secret/**"],
+        respectGitignore: false,
+      }),
+      "utf-8"
+    );
+    const unrelatedMerged = loadMergedConfig(customDir, globalConfigPath);
+    expect(unrelatedMerged.theme).toBe("light");
+    expect(unrelatedMerged.include).toBeUndefined();
+    expect(unrelatedMerged.ignore).toEqual([]);
+    expect(unrelatedMerged.respectGitignore).toBe(true);
+  });
 });

@@ -7,6 +7,7 @@ import {
   resolveCompanionPort,
   startCdpInjectionWatch,
   showHelp,
+  getCliVersion,
 } from "../cli.js";
 
 describe("Port Heuristics", () => {
@@ -240,5 +241,8 @@ describe("showHelp", () => {
     expect(output).toContain("respectGitignore");
     expect(output).toContain("whitelist mode");
     expect(output).toContain("Prefer folder prefixes");
+    expect(output).toContain("-V, --version");
+    expect(output).toContain("update [--dry-run]");
+    expect(getCliVersion()).toMatch(/^\d+\.\d+\.\d+/);
   });
 });

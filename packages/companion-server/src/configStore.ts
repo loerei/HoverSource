@@ -34,7 +34,10 @@ export interface PortsConfig {
   companionConflict?: CompanionConflictPolicy;
 }
 
+export const CURRENT_CONFIG_SCHEMA_VERSION = 1;
+
 export interface HoverSourceConfig {
+  schemaVersion?: number;
   theme: ConfigTheme;
   minimalModeByDefault: boolean;
   editor: ConfigEditor;
@@ -179,6 +182,7 @@ export interface DeleteConfigResult {
 }
 
 export const DEFAULT_CONFIG: HoverSourceConfig = {
+  schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
   theme: "dark",
   minimalModeByDefault: false,
   editor: "vscode",
@@ -1089,17 +1093,95 @@ function readPresetsMap(globalRaw: Record<string, unknown> | null): Record<strin
   return result;
 }
 
+export interface ConfigMigrationResult {
+  migrated: Record<string, unknown>;
+  changed: boolean;
+  fromVersion: number;
+  toVersion: number;
+}
+
+export function migrateConfigObject(
+  raw: Record<string, unknown>,
+  scope: "global" | "local"
+): ConfigMigrationResult {
+  const rawVer = raw.schemaVersion;
+  const fromVersion =
+    typeof rawVer === "number" && Number.isInteger(rawVer) && rawVer >= 0 ? rawVer : 0;
+
+  if (fromVersion > CURRENT_CONFIG_SCHEMA_VERSION) {
+    console.warn(
+      `[HoverSource] Config schemaVersion ${fromVersion} is newer than supported v${CURRENT_CONFIG_SCHEMA_VERSION}; preserving existing fields.`
+    );
+    return {
+      migrated: structuredClone(raw),
+      changed: false,
+      fromVersion,
+      toVersion: fromVersion,
+    };
+  }
+
+  const migrated = structuredClone(raw);
+  let changed = false;
+
+  if (fromVersion < 1) {
+    if (scope === "global") {
+      for (const key of LOCAL_ONLY_SCAN_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(migrated, key)) {
+          delete migrated[key];
+          changed = true;
+        }
+      }
+    }
+    migrated.schemaVersion = 1;
+    changed = true;
+  } else if (raw.schemaVersion !== CURRENT_CONFIG_SCHEMA_VERSION) {
+    migrated.schemaVersion = CURRENT_CONFIG_SCHEMA_VERSION;
+    changed = true;
+  }
+
+  return {
+    migrated,
+    changed,
+    fromVersion,
+    toVersion: CURRENT_CONFIG_SCHEMA_VERSION,
+  };
+}
+
+function readAndMigrateConfigFile(
+  filePath: string,
+  scope: "global" | "local"
+): Record<string, unknown> | null {
+  const raw = readConfigFromFile(filePath);
+  if (!raw) {
+    return null;
+  }
+
+  const { migrated, changed, fromVersion } = migrateConfigObject(raw, scope);
+  if (changed) {
+    const backupPath = `${filePath}.bak.v${fromVersion}`;
+    try {
+      if (!fs.existsSync(backupPath)) {
+        fs.writeFileSync(backupPath, fs.readFileSync(filePath));
+      }
+      writeJsonAtomic(filePath, migrated);
+    } catch (err) {
+      console.warn(`[HoverSource] Failed to persist migrated config at ${filePath}:`, err);
+    }
+  }
+  return migrated;
+}
+
 export function loadMergedConfig(projectRoot: string, globalConfigPath?: string): HoverSourceConfig {
   let config = cloneDefaultConfig();
 
   const globalPath = getGlobalConfigPath(globalConfigPath);
-  const globalConfig = readConfigFromFile(globalPath);
+  const globalConfig = readAndMigrateConfigFile(globalPath, "global");
   if (globalConfig) {
     config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(globalConfig, true));
   }
 
   const localPath = getLocalConfigPath(projectRoot);
-  const localConfig = readConfigFromFile(localPath);
+  const localConfig = readAndMigrateConfigFile(localPath, "local");
 
   const localPresetName = readValidPresetName(localConfig?.preset);
   const globalActivePresetName = readValidPresetName(globalConfig?.activePreset);
@@ -1129,19 +1211,19 @@ export function getConfigForTarget(
   let targetConfig = cloneDefaultConfig();
   if (queryTarget === "global") {
     const globalPath = getGlobalConfigPath(globalConfigPath);
-    const raw = readConfigFromFile(globalPath);
+    const raw = readAndMigrateConfigFile(globalPath, "global");
     if (raw) {
       targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw, true));
     }
   } else if (queryTarget === "local") {
     const localPath = getLocalConfigPath(defaultRoot);
-    const raw = readConfigFromFile(localPath);
+    const raw = readAndMigrateConfigFile(localPath, "local");
     if (raw) {
       targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
     }
   } else if (queryTarget === "custom" && customPath) {
     const customPathConfig = getLocalConfigPath(customPath);
-    const raw = readConfigFromFile(customPathConfig);
+    const raw = readAndMigrateConfigFile(customPathConfig, "local");
     if (raw) {
       targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
     }
@@ -1187,9 +1269,16 @@ export function saveConfigDelta(
     registerRecentProject(customPath, globalConfigPath);
   }
 
-  const existing = readConfigFromFile(targetPath) ?? {};
+  const scope: "global" | "local" = target === "global" ? "global" : "local";
+  const existing = readAndMigrateConfigFile(targetPath, scope) ?? {};
   const mergedTarget = mergeDeep<Record<string, unknown>>(existing, parsed.value);
   stripNullPortOverrides(mergedTarget);
+  if (
+    typeof existing.schemaVersion !== "number" ||
+    existing.schemaVersion <= CURRENT_CONFIG_SCHEMA_VERSION
+  ) {
+    mergedTarget.schemaVersion = CURRENT_CONFIG_SCHEMA_VERSION;
+  }
 
   if (target === "global" && Array.isArray(existing.recentProjects)) {
     mergedTarget.recentProjects = existing.recentProjects;

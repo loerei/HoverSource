@@ -329,6 +329,58 @@
           </div>
         </div>
       </div>
+
+      <!-- Default Metadata Fields -->
+      <div class="glass-card rounded-2xl p-6 shadow-xl space-y-5 lg:col-span-2">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" /></svg>
+            <h2 class="text-base font-semibold text-slate-200">Default Metadata Fields</h2>
+          </div>
+          <span class="text-[11px] text-slate-400">Fields included in tooltips and clipboard output by default</span>
+        </div>
+
+        <div id="metadata-filter-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 space-y-2">
+            <h3 class="text-xs font-semibold text-slate-200 border-b border-slate-800 pb-1.5">Component Metadata</h3>
+            <div class="space-y-1.5 text-xs text-slate-300" data-mf-group="component">
+              <label class="flex items-center justify-between cursor-pointer"><span>Component Name</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="componentName" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Element Selector</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="elementSelector" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>File Path &amp; Line</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="filePath" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Framework</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="framework" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Dimensions</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="dimensions" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Key Styles</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="keyStyles" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Parent Styles</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="parentStyles" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Layout Constraints</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="layoutConstraints" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Source Comments</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="sourceComments" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Source Attributes</span><input type="checkbox" class="accent-blue-500" data-mf-cat="component" data-mf-field="sourceAttributes" checked></label>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 space-y-2">
+            <h3 class="text-xs font-semibold text-slate-200 border-b border-slate-800 pb-1.5">Layer Stack</h3>
+            <div class="space-y-1.5 text-xs text-slate-300" data-mf-group="layer">
+              <label class="flex items-center justify-between cursor-pointer"><span>Layers Summary</span><input type="checkbox" class="accent-blue-500" data-mf-cat="layer" data-mf-field="layerSummary" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Layer 1: Leaf</span><input type="checkbox" class="accent-blue-500" data-mf-cat="layer" data-mf-field="layer1" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Layer 2: Parents</span><input type="checkbox" class="accent-blue-500" data-mf-cat="layer" data-mf-field="layer2" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>HTML Structure Block</span><input type="checkbox" class="accent-blue-500" data-mf-cat="layer" data-mf-field="htmlStructure" checked></label>
+            </div>
+          </div>
+
+          <div class="p-3 bg-slate-950/30 rounded-lg border border-slate-800 space-y-2">
+            <h3 class="text-xs font-semibold text-slate-200 border-b border-slate-800 pb-1.5">Design Placement</h3>
+            <div class="space-y-1.5 text-xs text-slate-300" data-mf-group="design">
+              <label class="flex items-center justify-between cursor-pointer"><span>Component &amp; Element</span><input type="checkbox" class="accent-blue-500" data-mf-cat="design" data-mf-field="compInfo" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Horizontal Anchor</span><input type="checkbox" class="accent-blue-500" data-mf-cat="design" data-mf-field="horizontalAnchor" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Vertical Anchor</span><input type="checkbox" class="accent-blue-500" data-mf-cat="design" data-mf-field="verticalAnchor" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Layout Context</span><input type="checkbox" class="accent-blue-500" data-mf-cat="design" data-mf-field="layoutContext" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Suggested CSS Block</span><input type="checkbox" class="accent-blue-500" data-mf-cat="design" data-mf-field="suggestedCss" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>Source Files</span><input type="checkbox" class="accent-blue-500" data-mf-cat="design" data-mf-field="sourceFiles" checked></label>
+              <label class="flex items-center justify-between cursor-pointer"><span>AI Instructions</span><input type="checkbox" class="accent-blue-500" data-mf-cat="design" data-mf-field="aiInstructions" checked></label>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -433,6 +485,37 @@
         openDashboard: { key: 's', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
         toggleMode: { key: 'x', altKey: true, ctrlKey: false, shiftKey: false, metaKey: false },
         toggleFilterPanel: { key: 'd', altKey: true, ctrlKey: true, shiftKey: false, metaKey: false }
+      },
+      metadataFilter: {
+        filters: {
+          component: {
+            componentName: true,
+            elementSelector: true,
+            filePath: true,
+            framework: true,
+            dimensions: true,
+            keyStyles: true,
+            parentStyles: true,
+            layoutConstraints: true,
+            sourceComments: true,
+            sourceAttributes: true
+          },
+          layer: {
+            layerSummary: true,
+            layer1: true,
+            layer2: true,
+            htmlStructure: true
+          },
+          design: {
+            compInfo: true,
+            horizontalAnchor: true,
+            verticalAnchor: true,
+            layoutContext: true,
+            suggestedCss: true,
+            sourceFiles: true,
+            aiInstructions: true
+          }
+        }
       }
     };
 
@@ -512,7 +595,8 @@
         desnappingThreshold: cfg.desnappingThreshold,
         maxTraversalDepth: cfg.maxTraversalDepth,
         shortcuts: cfg.shortcuts,
-        layerPickerScroll: cfg.layerPickerScroll
+        layerPickerScroll: cfg.layerPickerScroll,
+        metadataFilter: cfg.metadataFilter
       };
     }
 
@@ -591,6 +675,13 @@
         setupShortcutUI(name, normalizeShortcut(cfg.shortcuts?.[name], DEFAULT_CONFIG.shortcuts[name]));
       }
       setupScrollShortcutUI('layerPickerScroll', normalizeScrollMods(cfg.layerPickerScroll));
+
+      const normalizedMf = normalizeMetadataFilters(cfg.metadataFilter?.filters);
+      document.querySelectorAll('input[data-mf-cat][data-mf-field]').forEach(cb => {
+        const cat = cb.dataset.mfCat;
+        const field = cb.dataset.mfField;
+        cb.checked = normalizedMf[cat]?.[field] !== false;
+      });
     }
 
     async function refreshDashboardState() {
@@ -750,6 +841,9 @@
       proxyPortInput.addEventListener('input', checkChanges);
       devPortInput.addEventListener('input', checkChanges);
       companionConflictSelect.addEventListener('change', checkChanges);
+      document.querySelectorAll('input[data-mf-cat][data-mf-field]').forEach(cb => {
+        cb.addEventListener('change', checkChanges);
+      });
     }
 
     function setupShortcutUI(name, shortcutObj) {
@@ -874,6 +968,29 @@
       };
     }
 
+    function normalizeMetadataFilters(rawFilters) {
+      const out = {};
+      for (const cat of Object.keys(DEFAULT_CONFIG.metadataFilter.filters)) {
+        out[cat] = {};
+        for (const field of Object.keys(DEFAULT_CONFIG.metadataFilter.filters[cat])) {
+          out[cat][field] = rawFilters?.[cat]?.[field] !== false;
+        }
+      }
+      return out;
+    }
+
+    function getMetadataFiltersFromUI() {
+      const out = normalizeMetadataFilters({});
+      document.querySelectorAll('input[data-mf-cat][data-mf-field]').forEach(cb => {
+        const cat = cb.dataset.mfCat;
+        const field = cb.dataset.mfField;
+        if (out[cat]) {
+          out[cat][field] = cb.checked;
+        }
+      });
+      return out;
+    }
+
     function getConfigFromUI() {
       const shortcuts = {};
       for (const name of SHORTCUT_NAMES) {
@@ -895,6 +1012,9 @@
         maxTraversalDepth: Number.isNaN(depthVal) ? 32 : Math.min(100, Math.max(8, depthVal)),
         shortcuts,
         layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll'),
+        metadataFilter: {
+          filters: getMetadataFiltersFromUI()
+        },
         ports: {
           companion: parseRequiredPort(companionPortInput, 7300),
           debug: parseRequiredPort(debugPortInput, 9222),
@@ -921,6 +1041,9 @@
         maxTraversalDepth: cfg.maxTraversalDepth ?? 32,
         shortcuts,
         layerPickerScroll: normalizeScrollMods(cfg.layerPickerScroll),
+        metadataFilter: {
+          filters: normalizeMetadataFilters(cfg.metadataFilter?.filters)
+        },
         ports: normalizePortsForCompare(cfg.ports)
       };
     }

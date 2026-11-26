@@ -792,4 +792,70 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", altKey: true }));
     expect(clipboardWriteMock).toHaveBeenCalledTimes(2);
   });
+
+  it("applies filterPanel checkbox unchecks optimistically to Alt+C even when POST /config fails and falls back to global target", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("navigator", {
+      platform: "Win32",
+      clipboard: { writeText: clipboardWriteMock },
+    });
+
+    const postBodies: Array<{ target?: string; config?: any }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (String(url).includes("/config") && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          postBodies.push(body);
+          if (body.target === "local") {
+            return new Response(JSON.stringify({ error: "EPERM: unwritable" }), { status: 500 });
+          }
+          return new Response(
+            JSON.stringify({ success: true, config: { metadataFilter: body.config.metadataFilter } }),
+            { status: 200 }
+          );
+        }
+        return new Response(JSON.stringify({ config: {} }), { status: 200 });
+      })
+    );
+
+    activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 1000 });
+    expect(activeEngine).not.toBeNull();
+    const shadow = document.getElementById("hoversource-host")!.shadowRoot!;
+
+    const target = document.createElement("button");
+    target.setAttribute("data-hs-source", "App.tsx:12:4");
+    target.textContent = "Action";
+    document.body.appendChild(target);
+    vi.spyOn(document, "elementsFromPoint").mockReturnValue([target]);
+
+    target.dispatchEvent(new PointerEvent("pointerover", { clientX: 20, clientY: 20, bubbles: true }));
+    await vi.advanceTimersByTimeAsync(60);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", altKey: true, ctrlKey: true }));
+    const frameworkCb = shadow.querySelector(
+      '.hoversource-config-panel input[data-field="framework"]'
+    ) as HTMLInputElement;
+    expect(frameworkCb).not.toBeNull();
+    frameworkCb.checked = false;
+    frameworkCb.dispatchEvent(new Event("change"));
+
+    // Synchronous Alt+C immediately after unchecking must exclude Framework
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", altKey: true }));
+    expect(clipboardWriteMock).toHaveBeenCalledTimes(1);
+    const copied = clipboardWriteMock.mock.calls[0][0] as string;
+    expect(copied).toContain("Component");
+    expect(copied).not.toContain("**Framework**");
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(postBodies.some((b) => b.target === "local")).toBe(true);
+    expect(postBodies.some((b) => b.target === "global")).toBe(true);
+
+    // Toggle scope button from Local to Global
+    const scopeBtn = shadow.querySelector("#hoversource-scope-btn") as HTMLButtonElement;
+    expect(scopeBtn.textContent).toBe("Local");
+    scopeBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    const updatedScopeBtn = shadow.querySelector("#hoversource-scope-btn") as HTMLButtonElement;
+    expect(updatedScopeBtn.textContent).toBe("Global");
+  });
 });

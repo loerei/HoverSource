@@ -32,6 +32,7 @@ export class OverlayEngine implements OverlayController {
   private filterPanel: HTMLDivElement | null = null;
   private isFilterPanelVisible = false;
   private currentMetadataTypeIndex = 0;
+  private filterSaveTarget: "local" | "global" = "local";
   private parentHighlightElements: Element[] = [];
   
   private uiVisible = true;
@@ -174,6 +175,9 @@ export class OverlayEngine implements OverlayController {
     this.initStyles();
 
     this.activeMode.onConfigUpdate(newConfig);
+    if (this.isFilterPanelVisible) {
+      this.renderFilterPanel();
+    }
   }
 
   private async loadConfig(timeoutMs = 2000, signal?: AbortSignal) {
@@ -664,14 +668,12 @@ export class OverlayEngine implements OverlayController {
   }
 
   private readonly handleKeyDown = (e: KeyboardEvent) => {
-    const shortcuts = this.config?.shortcuts;
-    if (matchShortcut(e, shortcuts?.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel)) {
+    const shortcuts = this.config?.shortcuts ?? DEFAULT_SHORTCUTS;
+    if (matchShortcut(e, shortcuts.toggleFilterPanel ?? DEFAULT_SHORTCUTS.toggleFilterPanel)) {
       e.preventDefault();
       this.toggleFilterPanel();
       return;
     }
-
-    if (!shortcuts) return;
 
     if (matchShortcut(e, shortcuts.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI)) {
       e.preventDefault();
@@ -712,7 +714,9 @@ export class OverlayEngine implements OverlayController {
     }
   }
 
-  private renderFilterPanel(restoreFocusId?: "hoversource-prev-btn" | "hoversource-next-btn") {
+  private renderFilterPanel(
+    restoreFocusId?: "hoversource-prev-btn" | "hoversource-next-btn" | "hoversource-scope-btn"
+  ) {
     if (!this.filterPanel) return;
 
     const metadataTypes = [
@@ -836,13 +840,37 @@ export class OverlayEngine implements OverlayController {
       el("table", {}, rowNodes),
     ]);
 
+    const scopeBtnEl = el(
+      "button",
+      {
+        type: "button",
+        class: "nav-btn",
+        id: "hoversource-scope-btn",
+        title: "Choose whether filter changes persist to local .hoversourcerc or global ~/.hoversourcerc",
+      },
+      [this.filterSaveTarget === "global" ? "Global" : "Local"]
+    );
+
+    const footerEl = el(
+      "div",
+      {
+        class: "hoversource-config-footer",
+        style: "display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding-top:6px;border-top:1px solid rgba(128,128,128,0.2);font-size:10px;",
+      },
+      [
+        el("span", { style: "opacity:0.75;" }, ["Persist Target"]),
+        scopeBtnEl,
+      ]
+    );
+
     this.filterPanel.replaceChildren(
-      ...[headerEl, tableContainerEl].filter((n): n is HTMLElement => n !== null)
+      ...[headerEl, tableContainerEl, footerEl].filter((n): n is HTMLElement => n !== null)
     );
 
     // Hook events
     const prevBtn = this.filterPanel.querySelector("#hoversource-prev-btn") as HTMLButtonElement | null;
     const nextBtn = this.filterPanel.querySelector("#hoversource-next-btn") as HTMLButtonElement | null;
+    const scopeBtn = this.filterPanel.querySelector("#hoversource-scope-btn") as HTMLButtonElement | null;
     if (prevBtn) {
       prevBtn.addEventListener("click", () => {
         const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
@@ -857,6 +885,14 @@ export class OverlayEngine implements OverlayController {
         const shouldRestoreFocus = activeEl === nextBtn;
         this.currentMetadataTypeIndex = (this.currentMetadataTypeIndex + 1 + metadataTypes.length) % metadataTypes.length;
         this.renderFilterPanel(shouldRestoreFocus ? "hoversource-next-btn" : undefined);
+      });
+    }
+    if (scopeBtn) {
+      scopeBtn.addEventListener("click", () => {
+        const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+        const shouldRestoreFocus = activeEl === scopeBtn;
+        this.filterSaveTarget = this.filterSaveTarget === "local" ? "global" : "local";
+        this.renderFilterPanel(shouldRestoreFocus ? "hoversource-scope-btn" : undefined);
       });
     }
 
@@ -1285,8 +1321,41 @@ export class OverlayEngine implements OverlayController {
 
   public getConfig(): any { return this.config; }
 
-  public async saveConfig(newConfig: any): Promise<void> {
-    try {
+  private applyLocalConfigDelta(newConfig: any): void {
+    if (!this.config || typeof this.config !== "object") {
+      this.config = {};
+    }
+    const mf = newConfig?.metadataFilter;
+    if (!mf || typeof mf !== "object") return;
+    if (!this.config.metadataFilter || typeof this.config.metadataFilter !== "object") {
+      this.config.metadataFilter = {};
+    }
+    if (mf.panelPosition && typeof mf.panelPosition === "object") {
+      this.config.metadataFilter.panelPosition = {
+        ...(this.config.metadataFilter.panelPosition || {}),
+        ...mf.panelPosition,
+      };
+    }
+    if (mf.filters && typeof mf.filters === "object") {
+      if (!this.config.metadataFilter.filters || typeof this.config.metadataFilter.filters !== "object") {
+        this.config.metadataFilter.filters = {};
+      }
+      for (const cat of Object.keys(mf.filters)) {
+        this.config.metadataFilter.filters[cat] = {
+          ...(this.config.metadataFilter.filters[cat] || {}),
+          ...(mf.filters[cat] || {}),
+        };
+      }
+    }
+  }
+
+  public async saveConfig(
+    newConfig: any,
+    target: "local" | "global" = this.filterSaveTarget
+  ): Promise<void> {
+    this.applyLocalConfigDelta(newConfig);
+
+    const trySave = async (saveTarget: "local" | "global") => {
       const data = await companionRequestJson("/config", {
         method: "POST",
         headers: {
@@ -1294,13 +1363,29 @@ export class OverlayEngine implements OverlayController {
         },
         body: JSON.stringify({
           config: newConfig,
-          target: "local"
+          target: saveTarget
         })
       });
-      if (data.success && data.config) {
-        this.config = data.config;
+      if (!data?.success || !data?.config) {
+        throw new Error(data?.error || `Failed to save ${saveTarget} config`);
       }
+      this.config = data.config;
+    };
+
+    try {
+      await trySave(target);
     } catch (e) {
+      if (target === "local" && newConfig?.metadataFilter) {
+        try {
+          await trySave("global");
+          this.applyLocalConfigDelta(newConfig);
+          console.warn("[HoverSource] Local config save failed; persisted metadataFilter to global config instead.");
+          return;
+        } catch (fallbackErr) {
+          console.error("[HoverSource] Failed to save config to local and global", fallbackErr);
+          return;
+        }
+      }
       console.error("[HoverSource] Failed to save config", e);
     }
   }

@@ -370,6 +370,12 @@ describe("Companion Server /config and /reload-config routes", () => {
     expect(html).toContain('⌥');
     expect(html).toContain('/^Key([A-Z])$/');
     expect(html).toContain('/^Digit([0-9])$/');
+
+    // Default Metadata Fields section in Dashboard
+    expect(html).toContain('Default Metadata Fields');
+    expect(html).toContain('data-mf-cat="component"');
+    expect(html).toContain('data-mf-field="framework"');
+    expect(html).toContain('data-mf-cat="design"');
   });
 });
 
@@ -872,9 +878,8 @@ describe("Companion Server static resolution with .hoversourcerc include/ignore"
       "utf-8"
     );
 
-    testPort = 59870 + Math.floor(Math.random() * 1000);
     server = startCompanionServer({
-      port: testPort,
+      port: 0,
       projectRoot: tempDir,
       debugPort: 9222,
       globalConfigPath,
@@ -886,6 +891,7 @@ describe("Companion Server static resolution with .hoversourcerc include/ignore"
         server.once("listening", () => resolve());
       }
     });
+    testPort = (server.address() as { port: number }).port;
   });
 
   afterAll(async () => {

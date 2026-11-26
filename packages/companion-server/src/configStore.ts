@@ -1105,8 +1105,22 @@ export function migrateConfigObject(
   scope: "global" | "local"
 ): ConfigMigrationResult {
   const rawVer = raw.schemaVersion;
-  const fromVersion =
-    typeof rawVer === "number" && Number.isInteger(rawVer) && rawVer >= 0 ? rawVer : 0;
+  if (
+    rawVer !== undefined &&
+    (typeof rawVer !== "number" || !Number.isInteger(rawVer) || rawVer < 0)
+  ) {
+    console.warn(
+      `[HoverSource] Invalid config schemaVersion (${String(rawVer)}); skipping automatic migration to preserve file.`
+    );
+    return {
+      migrated: structuredClone(raw),
+      changed: false,
+      fromVersion: -1,
+      toVersion: -1,
+    };
+  }
+
+  const fromVersion = typeof rawVer === "number" ? rawVer : 0;
 
   if (fromVersion > CURRENT_CONFIG_SCHEMA_VERSION) {
     console.warn(

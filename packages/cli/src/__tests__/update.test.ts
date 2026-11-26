@@ -60,32 +60,42 @@ describe("checkForUpdate", () => {
   });
 
   it("suppresses update checks when --json, --quiet, or NO_UPDATE_NOTIFIER=1 is set", async () => {
+    const prevNodeEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
     const fetchMock = vi.fn();
-    expect(
-      await checkForUpdate({
-        currentVersion: "1.0.0",
-        json: true,
-        cachePath,
-        fetchFn: fetchMock as unknown as typeof fetch,
-      })
-    ).toBeNull();
-    expect(
-      await checkForUpdate({
-        currentVersion: "1.0.0",
-        quiet: true,
-        cachePath,
-        fetchFn: fetchMock as unknown as typeof fetch,
-      })
-    ).toBeNull();
-    process.env.NO_UPDATE_NOTIFIER = "1";
-    expect(
-      await checkForUpdate({
-        currentVersion: "1.0.0",
-        cachePath,
-        fetchFn: fetchMock as unknown as typeof fetch,
-      })
-    ).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
+    try {
+      expect(
+        await checkForUpdate({
+          currentVersion: "1.0.0",
+          json: true,
+          cachePath,
+          fetchFn: fetchMock as unknown as typeof fetch,
+        })
+      ).toBeNull();
+      expect(
+        await checkForUpdate({
+          currentVersion: "1.0.0",
+          quiet: true,
+          cachePath,
+          fetchFn: fetchMock as unknown as typeof fetch,
+        })
+      ).toBeNull();
+      process.env.NO_UPDATE_NOTIFIER = "1";
+      expect(
+        await checkForUpdate({
+          currentVersion: "1.0.0",
+          cachePath,
+          fetchFn: fetchMock as unknown as typeof fetch,
+        })
+      ).toBeNull();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      if (prevNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = prevNodeEnv;
+      }
+    }
   });
 });
 

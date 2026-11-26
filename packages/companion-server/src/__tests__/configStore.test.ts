@@ -609,5 +609,10 @@ describe("configStore", () => {
     expect(persistedFuture.schemaVersion).toBe(99);
     expect(persistedFuture.futureField).toBe("keep-me");
     expect(warnSpy).toHaveBeenCalled();
+
+    // Malformed schemaVersion is preserved without destructive migration
+    const malformed = migrateConfigObject({ schemaVersion: "invalid", theme: "dark" }, "global");
+    expect(malformed.changed).toBe(false);
+    expect(malformed.migrated.schemaVersion).toBe("invalid");
   });
 });

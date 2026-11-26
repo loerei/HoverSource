@@ -148,7 +148,8 @@ export async function checkForUpdate(
   const cached = readUpdateCache(cachePath);
 
   let latestVersion: string | null = null;
-  if (cached && now - cached.checkedAt < UPDATE_CACHE_TTL_MS) {
+  const cacheAge = cached ? now - cached.checkedAt : -1;
+  if (cached && cacheAge >= 0 && cacheAge < UPDATE_CACHE_TTL_MS) {
     latestVersion = cached.latestVersion;
   } else {
     latestVersion = await fetchLatestCliVersion(800, opts.fetchFn);

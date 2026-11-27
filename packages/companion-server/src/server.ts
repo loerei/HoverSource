@@ -22,6 +22,7 @@ import {
   getConfigForTarget,
   getGlobalConfigPath,
   getLocalConfigPath,
+  isSameConfigFilePath,
   registerRecentProject,
   getRecentProjects,
   parseConfigDelta,
@@ -215,7 +216,10 @@ function handleConfigGet(req: http.IncomingMessage, res: http.ServerResponse, ur
     targetPath = getGlobalConfigPath(config.globalConfigPath);
   }
   if (targetPath) {
-    configExists = fs.existsSync(targetPath);
+    const globalPath = getGlobalConfigPath(config.globalConfigPath);
+    const distinctFromGlobal =
+      queryTarget === "global" || !isSameConfigFilePath(targetPath, globalPath);
+    configExists = distinctFromGlobal && fs.existsSync(targetPath);
   }
 
   sendJson(res, 200, {

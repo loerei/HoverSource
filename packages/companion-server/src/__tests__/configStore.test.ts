@@ -685,4 +685,61 @@ describe("configStore", () => {
       saveFilterPreset("custom", {}, "local", projectDir, globalConfigPath)
     ).toThrow(ConfigValidationError);
   });
+
+  it("ignores local alias overrides and guards local mutations when projectRoot matches globalConfigPath dir", () => {
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "hs-homedir-"));
+    try {
+      const homeRc = path.join(homeDir, ".hoversourcerc");
+      writeJsonAtomic(homeRc, {
+        schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
+        minimalModeByDefault: true,
+        activePreset: "Default",
+        preset: "Default",
+        presets: {
+          Default: {
+            theme: "light",
+            minimalModeByDefault: false,
+          },
+        },
+        metadataFilter: {
+          presets: {
+            "global-only": {
+              component: { componentName: true },
+            },
+          },
+        },
+      });
+
+      const merged = loadMergedConfig(homeDir, homeRc);
+      expect(merged.minimalModeByDefault).toBe(false);
+      expect(merged.theme).toBe("light");
+
+      const localTargetCfg = getConfigForTarget("local", null, homeDir, homeRc);
+      expect(localTargetCfg.minimalModeByDefault).toBe(DEFAULT_CONFIG.minimalModeByDefault);
+
+      const presets = listPresets(homeDir, homeRc);
+      expect(presets.activePreset).toBe("Default");
+      expect(presets.boundPreset).toBeNull();
+      expect(presets.effectivePreset).toBe("Default");
+
+      const fpList = listFilterPresets(homeDir, homeRc);
+      expect(fpList.sources["global-only"]).toBe("global");
+      expect(fpList.localNames).toEqual([]);
+
+      expect(() => saveConfigDelta({ theme: "dark" }, "local", homeDir, null, homeRc)).toThrow(
+        ConfigValidationError
+      );
+      expect(() => resetConfigTarget("local", homeDir, null, homeRc)).toThrow(ConfigValidationError);
+      expect(() => bindRepoPreset("Default", homeDir, homeRc)).toThrow(ConfigValidationError);
+      expect(() => saveFilterPreset("foo", {}, "local", homeDir, homeRc)).toThrow(ConfigValidationError);
+      expect(() => useFilterPreset("minimal", "local", homeDir, homeRc)).toThrow(ConfigValidationError);
+      expect(() => deleteFilterPreset("foo", "local", homeDir, homeRc)).toThrow(ConfigValidationError);
+
+      const delResult = deleteConfigTarget("local", homeDir, null, false, homeRc);
+      expect(delResult.deletedFile).toBe(false);
+      expect(fs.existsSync(homeRc)).toBe(true);
+    } finally {
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
 });

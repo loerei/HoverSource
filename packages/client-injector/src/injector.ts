@@ -82,6 +82,25 @@ function clampPositiveTimeout(value: number | undefined, fallback: number): numb
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function isConnectionRefusedError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: unknown }).code;
+  if (code === "ECONNREFUSED") return true;
+  const cause = (err as { cause?: unknown }).cause;
+  return Boolean(cause && typeof cause === "object" && (cause as { code?: unknown }).code === "ECONNREFUSED");
+}
+
+function logInjectorDebug(message: string, err?: unknown): void {
+  if (!process.env.DEBUG) {
+    return;
+  }
+  if (err !== undefined) {
+    console.debug(message, err);
+  } else {
+    console.debug(message);
+  }
+}
+
 function getSessionKey(port: number, target: CdpTarget): string {
   return `${port}:${target.id || target.webSocketDebuggerUrl}`;
 }
@@ -524,7 +543,7 @@ async function evaluateBridgeCallback(
   diagnosticLabel: string
 ): Promise<void> {
   if (session.ws.readyState !== WebSocket.OPEN) {
-    console.debug(
+    logInjectorDebug(
       `[HoverSource] CDP WebSocket closed mid-flight before delivering ${diagnosticLabel} on ${session.target.url}`
     );
     return;
@@ -537,7 +556,7 @@ async function evaluateBridgeCallback(
     });
   } catch (err) {
     if (session.ws.readyState !== WebSocket.OPEN) {
-      console.debug(
+      logInjectorDebug(
         `[HoverSource] CDP WebSocket closed mid-flight during ${diagnosticLabel} on ${session.target.url}`
       );
     } else {
@@ -1052,7 +1071,7 @@ function isAlreadyInjected(wsUrl: string): Promise<boolean> {
           closeSocketSafely(ws);
         }
       } catch (e) {
-        console.debug("[HoverSource] Ignored evaluation error during injection check:", e);
+        logInjectorDebug("[HoverSource] Ignored evaluation error during injection check:", e);
         settle(false);
         closeSocketSafely(ws);
       }
@@ -1184,7 +1203,7 @@ function broadcastEphemeralTarget(
     try {
       ws = new WebSocket(wsUrl);
     } catch (e) {
-      console.debug("[HoverSource] Ignored connection exception:", e);
+      logInjectorDebug("[HoverSource] Ignored connection exception:", e);
       settle();
       return;
     }
@@ -1207,7 +1226,7 @@ function broadcastEphemeralTarget(
     });
 
     ws.on("error", (err) => {
-      console.debug("[HoverSource] Ignored connection error:", err);
+      logInjectorDebug("[HoverSource] Ignored connection error:", err);
       if (ws.readyState === WebSocket.CLOSED) {
         settle();
         return;
@@ -1238,7 +1257,7 @@ function broadcastEphemeralTarget(
           })
         );
       } catch (err) {
-        console.debug("[HoverSource] Ignored broadcast send error:", err);
+        logInjectorDebug("[HoverSource] Ignored broadcast send error:", err);
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
@@ -1289,7 +1308,7 @@ export async function broadcastToTargets(
             userGesture: false,
             awaitPromise: false,
           }).catch((err) => {
-            console.debug("[HoverSource] Ignored broadcast error on active session:", err);
+            logInjectorDebug("[HoverSource] Ignored broadcast error on active session:", err);
           })
         );
       } else {
@@ -1301,6 +1320,10 @@ export async function broadcastToTargets(
 
     await Promise.allSettled(tasks);
   } catch (err) {
-    console.debug("[HoverSource] Ignored target query exception:", err);
+    if (isConnectionRefusedError(err)) {
+      logInjectorDebug(`[HoverSource] Skipped CDP broadcast on port ${port}: ECONNREFUSED`);
+    } else {
+      logInjectorDebug("[HoverSource] Ignored target query exception:", err);
+    }
   }
 }

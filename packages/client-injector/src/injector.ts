@@ -56,12 +56,19 @@ const MAX_COMPANION_RESPONSE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_BRIDGE_METHODS = new Set(["GET", "POST"]);
 const ALLOWED_GET_ROUTES = new Set([
   "/config",
+  "/filter-presets",
   "/open-dashboard",
   "/open-in-ide",
   "/validate-line",
   "/static-context",
   "/resolve-html-element",
 ]);
+const ALLOWED_POST_ROUTES = new Set([
+  "/config",
+  "/filter-presets",
+  "/filter-presets/use",
+]);
+const MAX_PRESET_NAME_LENGTH = 128;
 const ALLOWED_EDITORS = new Set(["vscode", "code", "cursor"]);
 const SHELL_META_RE = /["`$\r\n\0]/;
 const WIN_ENV_VAR_RE = /%[^%/\\]+%/;
@@ -274,6 +281,89 @@ function extractValidBridgeId(raw: unknown): string | undefined {
   return undefined;
 }
 
+function validatePostBridgePayload(
+  id: string,
+  pathname: string,
+  rawBody: unknown
+): ParsedBridgeCallResult | null {
+  if (typeof rawBody !== "string") {
+    return { ok: false, id, method: "POST", path: pathname, error: `POST ${pathname} requires a JSON string body` };
+  }
+  let bodyObj: unknown;
+  try {
+    bodyObj = JSON.parse(rawBody);
+  } catch {
+    return { ok: false, id, method: "POST", path: pathname, error: `Malformed JSON in POST ${pathname} body` };
+  }
+  if (!isPlainObject(bodyObj)) {
+    return { ok: false, id, method: "POST", path: pathname, error: `POST ${pathname} requires a JSON object body` };
+  }
+
+  if (pathname === "/config") {
+    if (bodyObj.customPath !== undefined || !isPlainObject(bodyObj.config)) {
+      return {
+        ok: false,
+        id,
+        method: "POST",
+        path: pathname,
+        error: "POST /config requires target='local' (or target='global' for metadataFilter), no customPath, and a config object",
+      };
+    }
+    if (bodyObj.target === "local") return null;
+    const configKeys = Object.keys(bodyObj.config);
+    if (bodyObj.target === "global" && configKeys.length === 1 && isPlainObject(bodyObj.config.metadataFilter)) {
+      return null;
+    }
+    return {
+      ok: false,
+      id,
+      method: "POST",
+      path: pathname,
+      error: "POST /config only allows target='global' when updating metadataFilter",
+    };
+  }
+
+  if (pathname === "/filter-presets") {
+    const scope = bodyObj.scope ?? bodyObj.target;
+    const validScope = scope === undefined || scope === "local" || scope === "global";
+    const validName =
+      typeof bodyObj.name === "string" &&
+      bodyObj.name.trim().length > 0 &&
+      bodyObj.name.length <= MAX_PRESET_NAME_LENGTH;
+    if (!validScope || !validName || !isPlainObject(bodyObj.filters)) {
+      return {
+        ok: false,
+        id,
+        method: "POST",
+        path: pathname,
+        error: "POST /filter-presets requires name, valid scope, and filters object",
+      };
+    }
+    return null;
+  }
+
+  if (pathname === "/filter-presets/use") {
+    const scope = bodyObj.target ?? bodyObj.scope;
+    const validScope = scope === undefined || scope === "local" || scope === "global";
+    const rawName = bodyObj.name !== undefined ? bodyObj.name : bodyObj.preset;
+    const validName =
+      rawName === null ||
+      (typeof rawName === "string" && rawName.trim().length > 0 && rawName.length <= MAX_PRESET_NAME_LENGTH);
+    if (!validScope || !validName) {
+      return {
+        ok: false,
+        id,
+        method: "POST",
+        path: pathname,
+        error: "POST /filter-presets/use requires preset name (or null) and valid target scope",
+      };
+    }
+    return null;
+  }
+
+  return null;
+}
+
 function parseBridgeCallPayload(raw: unknown): ParsedBridgeCallResult {
   if (typeof raw !== "string" || raw.length > MAX_BRIDGE_PAYLOAD_BYTES) {
     return { ok: false, error: "Bridge payload must be a string within size limit" };
@@ -339,41 +429,20 @@ function parseBridgeCallPayload(raw: unknown): ParsedBridgeCallResult {
 
   const pathname = parsedUrl.pathname;
   if (method === "POST") {
-    if (pathname !== "/config") {
+    if (!ALLOWED_POST_ROUTES.has(pathname)) {
       return { ok: false, id, method, path: pathname, error: `POST is not allowed on ${pathname}` };
     }
   } else if (!ALLOWED_GET_ROUTES.has(pathname)) {
     return { ok: false, id, method, path: pathname, error: `Disallowed bridge route: ${pathname}` };
   }
 
-  if (method === "GET" && pathname === "/config" && parsedUrl.search !== "") {
-    return { ok: false, id, method, path: pathname, error: "GET /config does not accept query parameters" };
+  if (method === "GET" && (pathname === "/config" || pathname === "/filter-presets") && parsedUrl.search !== "") {
+    return { ok: false, id, method, path: pathname, error: `GET ${pathname} does not accept query parameters` };
   }
 
-  if (method === "POST" && pathname === "/config") {
-    if (typeof parsed.body !== "string") {
-      return { ok: false, id, method, path: pathname, error: "POST /config requires a JSON string body" };
-    }
-    let bodyObj: unknown;
-    try {
-      bodyObj = JSON.parse(parsed.body);
-    } catch {
-      return { ok: false, id, method, path: pathname, error: "Malformed JSON in POST /config body" };
-    }
-    if (
-      !isPlainObject(bodyObj) ||
-      bodyObj.target !== "local" ||
-      bodyObj.customPath !== undefined ||
-      !isPlainObject(bodyObj.config)
-    ) {
-      return {
-        ok: false,
-        id,
-        method,
-        path: pathname,
-        error: "POST /config requires target='local', no customPath, and a config object",
-      };
-    }
+  if (method === "POST") {
+    const postErr = validatePostBridgePayload(id, pathname, parsed.body);
+    if (postErr) return postErr;
   }
 
   if (pathname === "/open-in-ide") {

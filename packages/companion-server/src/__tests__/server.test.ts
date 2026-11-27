@@ -382,6 +382,8 @@ describe("Companion Server /config and /reload-config routes", () => {
     expect(html).toContain('data-mf-cat="component"');
     expect(html).toContain('data-mf-field="framework"');
     expect(html).toContain('data-mf-cat="design"');
+    expect(html).toContain('subscribeDashboardEvents');
+    expect(html).toContain('/events');
   });
 });
 

@@ -6,10 +6,20 @@ export function normalizePathSlashes(rawPath: string): string {
   return rawPath.replace(/\\/g, "/");
 }
 
-function normalizeRootPrefix(projectRoot: string): string {
+export function normalizeRootPrefix(projectRoot: string): string {
   const normalized = normalizePathSlashes(projectRoot).trim();
   if (normalized.length <= 1) return normalized;
   return normalized.replace(/\/+$/, "");
+}
+
+export function prependRootHeader(
+  body: string,
+  projectRoot: string | null | undefined,
+  anyStripped: boolean
+): string {
+  if (!anyStripped || !projectRoot) return body;
+  const root = normalizeRootPrefix(projectRoot);
+  return body ? `Root: ${root}\n${body}` : `Root: ${root}`;
 }
 
 function isUrlLike(value: string): boolean {

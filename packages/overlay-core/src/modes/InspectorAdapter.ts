@@ -4,6 +4,11 @@ import { inspectVisualContext } from "../inspector.js";
 import { companionRequestJson } from "../companionTransport.js";
 import { escapeHtml } from "../safeDom.js";
 import {
+  collapseOverflowPairs,
+  formatSourceLocation,
+  prependRootHeader,
+} from "./formatUtils.js";
+import {
   DEFAULT_SHORTCUTS,
   DEFAULT_LAYER_SCROLL_MODIFIERS,
   ScrollModifierConfig,
@@ -735,65 +740,129 @@ export class InspectorAdapter implements InteractionMode {
     }
   }
 
-  private formatSelectorLabel(tagName: string, classList: string[], classOrigins: Record<string, any> | undefined): string {
-    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
-    const elementSelector = `${tagName}${classStr}`;
-    let label = `\`${elementSelector}\``;
-    if (classOrigins) {
-      const originList: string[] = [];
-      for (const cls of classList) {
-        const origin = classOrigins[cls];
-        if (origin) {
-          originList.push(`[Source: \`${origin.file}\` (Line: \`${origin.line}\`, Column: \`${origin.column}\`)]`);
-        }
-      }
-      if (originList.length > 0) {
-        label += ` ➔ ${originList.join(" ")}`;
+  private formatCoord(
+    rawPath: string,
+    line: number | undefined,
+    column: number | undefined,
+    projectRoot: string | null,
+    onStripped: () => void
+  ): string {
+    const res = formatSourceLocation(rawPath, line, column, projectRoot);
+    if (res.stripped) onStripped();
+    return res.text;
+  }
+
+  private collectUniqueOriginLabels(
+    classList: string[],
+    classOrigins: Record<string, any> | undefined,
+    projectRoot: string | null,
+    onStripped: () => void
+  ): string[] {
+    if (!classOrigins) return [];
+    const seen = new Set<string>();
+    const origins: string[] = [];
+    for (const cls of classList) {
+      const origin = classOrigins[cls];
+      if (!origin?.file) continue;
+      const coord = this.formatCoord(origin.file, origin.line, origin.column, projectRoot, onStripped);
+      if (!seen.has(coord)) {
+        seen.add(coord);
+        origins.push(coord);
       }
     }
-    return label;
+    return origins;
   }
 
-  private formatParentStyles(parentEffects: ParentVisualEffect[], classOrigins: Record<string, any> | undefined): string {
-    return parentEffects
-      .map((fx: ParentVisualEffect) => {
-        const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
-        let originLabel = "";
-        if (classOrigins) {
-          for (const cls of fx.classList) {
-            const origin = classOrigins[cls];
-            if (origin) {
-              originLabel = ` ➔ [Source: \`${origin.file}\` (Line: ${origin.line}, Column: ${origin.column})]`;
-              break;
-            }
-          }
-        }
-        return `  - \`${fx.tagName}${classStr}\` ➔ \`${fx.property}: ${fx.value}\`${originLabel}`;
-      })
-      .join("\n");
+  private formatSelectorLabel(
+    tagName: string,
+    classList: string[],
+    classOrigins: Record<string, any> | undefined,
+    projectRoot: string | null,
+    onStripped: () => void
+  ): string {
+    const classStr = classList.length > 0 ? `.${classList.join(".")}` : "";
+    const selector = `${tagName}${classStr}`;
+    const origins = this.collectUniqueOriginLabels(classList, classOrigins, projectRoot, onStripped);
+    return origins.length > 0 ? `${selector} [${origins.join(", ")}]` : selector;
   }
 
-  private formatLayoutConstraints(layoutConstraints: Record<string, any>): string {
-    return Object.entries(layoutConstraints)
-      .map(([k, v]) => `  - \`${k}: ${v}\``)
-      .join("\n");
+  private formatParentStyles(
+    parentEffects: ParentVisualEffect[],
+    classOrigins: Record<string, any> | undefined,
+    projectRoot: string | null,
+    onStripped: () => void,
+    seenParentKeys?: Set<string>
+  ): string {
+    const grouped = new Map<
+      string,
+      { selector: string; classList: string[]; props: Array<[string, string]> }
+    >();
+
+    for (const fx of parentEffects) {
+      const classStr = fx.classList.length > 0 ? `.${fx.classList.join(".")}` : "";
+      const selector = `${fx.tagName}${classStr}`;
+      let group = grouped.get(selector);
+      if (!group) {
+        group = { selector, classList: fx.classList, props: [] };
+        grouped.set(selector, group);
+      }
+      group.props.push([fx.property, fx.value]);
+    }
+
+    const lines: string[] = [];
+    for (const group of grouped.values()) {
+      const collapsed = collapseOverflowPairs(group.props);
+      const propText = collapsed.map(([k, v]) => `${k}: ${v}`).join("; ");
+      const origins = this.collectUniqueOriginLabels(group.classList, classOrigins, projectRoot, onStripped);
+      const originBracket = origins.length > 0 ? ` [${origins[0]}]` : "";
+      const dedupeKey = `${group.selector}${originBracket}:${propText}`;
+
+      if (seenParentKeys) {
+        if (seenParentKeys.has(dedupeKey)) continue;
+        seenParentKeys.add(dedupeKey);
+      }
+
+      lines.push(`- ${group.selector}${originBracket}: ${propText}`);
+    }
+
+    return lines.join("\n");
+  }
+
+  private formatLayoutConstraints(entries: Array<[string, string]>): string {
+    const collapsed = collapseOverflowPairs(entries);
+    if (collapsed.length === 0) return "";
+    return `Layout: ${collapsed.map(([k, v]) => `${k}: ${v}`).join("; ")}`;
   }
 
   private formatSourceComments(comments: string[]): string {
-    return comments
-      .map((c: string) => `  - \`${c}\``)
-      .join("\n");
+    if (comments.length === 1 && !comments[0].includes("\n")) {
+      return `Comments: ${comments[0]}`;
+    }
+    return `Comments:\n${comments.map((c: string) => `- ${c}`).join("\n")}`;
   }
 
   private formatSourceAttributes(rawAttributes: Record<string, any>): string {
-    return Object.entries(rawAttributes)
-      .map(([k, v]) => `  - \`${k}="${v}"\``)
-      .join("\n");
+    const pairs = Object.entries(rawAttributes).map(([k, v]) => `${k}="${v}"`);
+    return `Attrs: ${pairs.join(" ")}`;
   }
 
-  private formatElementMetadata(element: HTMLElement, info: any): string {
+  private formatElementMetadata(
+    element: HTMLElement,
+    info: any,
+    options?: {
+      seenParentKeys?: Set<string>;
+      omitRootHeader?: boolean;
+      onPathStripped?: () => void;
+    }
+  ): string {
     const computed = globalThis.getComputedStyle(element);
-    
+    const projectRoot = this.controller.getProjectRoot?.() ?? null;
+    let anyStripped = false;
+    const markStripped = () => {
+      anyStripped = true;
+      options?.onPathStripped?.();
+    };
+
     const data = {
       framework: info.framework,
       component: info.componentName || element.tagName.toLowerCase(),
@@ -814,64 +883,106 @@ export class InspectorAdapter implements InteractionMode {
 
     const tagName = element.tagName.toLowerCase();
     const classList = Array.from(element.classList).filter((c: string) => !c.startsWith("hoversource") && !c.startsWith("hs-"));
-    const selectorLabel = this.formatSelectorLabel(tagName, classList, info.staticMetadata?.classOrigins);
+    const selectorLabel = this.formatSelectorLabel(
+      tagName,
+      classList,
+      info.staticMetadata?.classOrigins,
+      projectRoot,
+      markStripped
+    );
 
-    const directionStr = data.styles.display === "flex" ? `(direction: ${data.styles.flexDirection})` : "";
+    const directionStr = data.styles.display === "flex" ? ` (direction: ${data.styles.flexDirection})` : "";
     const config = this.controller.getConfig();
     const filters = config?.metadataFilter?.filters?.component;
     const isChecked = (key: string) => filters ? (filters[key] !== false) : true;
 
     const lines: string[] = [];
+    const showComp = isChecked("componentName");
+    const showFw = isChecked("framework");
+    const showDims = isChecked("dimensions");
+    const showLayout = isChecked("layoutConstraints");
 
-    const addLine = (key: string, content: string | (() => string)) => {
-      if (isChecked(key)) {
-        lines.push(typeof content === "function" ? content() : content);
+    if (showComp && showFw && data.framework) {
+      lines.push(`Component: ${data.component} (${data.framework})`);
+    } else if (showComp) {
+      lines.push(`Component: ${data.component}`);
+    } else if (showFw) {
+      lines.push(`Framework: ${data.framework}`);
+    }
+
+    if (isChecked("filePath")) {
+      const fileText = data.file
+        ? this.formatCoord(data.file, data.line, data.column, projectRoot, markStripped)
+        : "Unknown";
+      lines.push(`File: ${fileText}`);
+    }
+
+    if (isChecked("elementSelector")) {
+      lines.push(`Element: ${selectorLabel}`);
+    }
+
+    const rawLayoutEntries = Object.entries(info.visualContext?.layoutConstraints ?? {}) as Array<[string, string]>;
+    const remainingLayoutEntries: Array<[string, string]> = [];
+    let clientSize: string | undefined;
+    let scrollSize: string | undefined;
+
+    for (const [k, v] of rawLayoutEntries) {
+      if (showDims && showLayout && k === "client-size") {
+        clientSize = String(v);
+      } else if (showDims && showLayout && k === "scroll-size") {
+        scrollSize = String(v);
+      } else {
+        remainingLayoutEntries.push([k, String(v)]);
       }
-    };
+    }
 
-    addLine("componentName", `* **Component**: \`${data.component}\``);
-    addLine("elementSelector", `* **Element**: ${selectorLabel}`);
-    addLine("filePath", () => {
-      const lineColStr = data.line ? ` (Line: ${data.line}, Column: ${data.column})` : "";
-      return `* **File Path**: \`${data.file || "Unknown"}\`${lineColStr}`;
-    });
-    addLine("framework", `* **Framework**: ${data.framework}`);
-    addLine("dimensions", `* **Dimensions**: ${data.dimensions}`);
-    addLine("keyStyles", `* **Key Styles**:
-  - Color: \`${data.styles.color}\`
-  - Background: \`${data.styles.backgroundColor}\`
-  - Box Shadow: \`${data.styles.boxShadow}\`
-  - Margin: \`${data.styles.margin}\` | Padding: \`${data.styles.padding}\`
-  - Display: \`${data.styles.display}\` ${directionStr}`);
+    if (showDims) {
+      const sizeParts: string[] = [];
+      if (clientSize && clientSize !== data.dimensions) {
+        sizeParts.push(`client: ${clientSize}`);
+      }
+      if (scrollSize) {
+        sizeParts.push(`scroll: ${scrollSize}`);
+      }
+      const sizeSuffix = sizeParts.length > 0 ? ` (${sizeParts.join(", ")})` : "";
+      lines.push(`Size: ${data.dimensions}${sizeSuffix}`);
+    }
 
-    if (info.visualContext) {
-      addLine("parentStyles", () => {
-        if (info.visualContext.parentEffects.length === 0) return "";
-        const parentList = this.formatParentStyles(info.visualContext.parentEffects, info.staticMetadata?.classOrigins);
-        return `* **Parent Styles**:\n${parentList}`;
-      });
-      addLine("layoutConstraints", () => {
-        if (Object.keys(info.visualContext.layoutConstraints).length === 0) return "";
-        const layoutList = this.formatLayoutConstraints(info.visualContext.layoutConstraints);
-        return `* **Layout Constraints**:\n${layoutList}`;
-      });
+    if (isChecked("keyStyles")) {
+      lines.push(
+        `Styles: display: ${data.styles.display}${directionStr}; color: ${data.styles.color}; bg: ${data.styles.backgroundColor}; shadow: ${data.styles.boxShadow}; margin: ${data.styles.margin}; padding: ${data.styles.padding}`
+      );
+    }
+
+    if (showLayout && remainingLayoutEntries.length > 0) {
+      const layoutLine = this.formatLayoutConstraints(remainingLayoutEntries);
+      if (layoutLine) lines.push(layoutLine);
+    }
+
+    if (info.visualContext && isChecked("parentStyles") && info.visualContext.parentEffects.length > 0) {
+      const parentList = this.formatParentStyles(
+        info.visualContext.parentEffects,
+        info.staticMetadata?.classOrigins,
+        projectRoot,
+        markStripped,
+        options?.seenParentKeys
+      );
+      if (parentList) {
+        lines.push(`Parents:\n${parentList}`);
+      }
     }
 
     if (info.staticMetadata) {
-      addLine("sourceComments", () => {
-        if (!info.staticMetadata.comments || info.staticMetadata.comments.length === 0) return "";
-        const commentList = this.formatSourceComments(info.staticMetadata.comments);
-        return `* **Source Comments**:\n${commentList}`;
-      });
-      addLine("sourceAttributes", () => {
-        if (!info.staticMetadata.rawAttributes || Object.keys(info.staticMetadata.rawAttributes).length === 0) return "";
-        const attrList = this.formatSourceAttributes(info.staticMetadata.rawAttributes);
-        return `* **Source Attributes**:\n${attrList}`;
-      });
+      if (isChecked("sourceComments") && info.staticMetadata.comments?.length > 0) {
+        lines.push(this.formatSourceComments(info.staticMetadata.comments));
+      }
+      if (isChecked("sourceAttributes") && info.staticMetadata.rawAttributes && Object.keys(info.staticMetadata.rawAttributes).length > 0) {
+        lines.push(this.formatSourceAttributes(info.staticMetadata.rawAttributes));
+      }
     }
 
-    const filteredLines = lines.filter(Boolean);
-    return filteredLines.join("\n");
+    const body = lines.filter(Boolean).join("\n");
+    return options?.omitRootHeader ? body : prependRootHeader(body, projectRoot, anyStripped);
   }
 
   private copyMetadata() {
@@ -957,16 +1068,19 @@ export class InspectorAdapter implements InteractionMode {
 
   private copyAllLayers() {
     if (this.layerStack.length === 0) return;
-    
+
     const config = this.controller.getConfig();
+    const projectRoot = this.controller.getProjectRoot?.() ?? null;
     const filters = config?.metadataFilter?.filters?.layer;
     const isChecked = (key: string) => filters ? (filters[key] !== false) : true;
+    const seenParentKeys = new Set<string>();
+    let anyStripped = false;
 
-    let text = "";
+    const sections: string[] = [];
     if (isChecked("layerSummary")) {
-      text += `Found ${this.layerStack.length} layer(s), ordered from leaf (Layer 1) to root:\n\n`;
+      sections.push(`Layers (${this.layerStack.length}, leaf->root):`);
     }
-    
+
     this.layerStack.forEach((el, index) => {
       const isLeaf = index === 0;
       if (isLeaf && !isChecked("layer1")) return;
@@ -989,23 +1103,30 @@ export class InspectorAdapter implements InteractionMode {
         };
         info.visualContext = inspectVisualContext(el);
       }
-      
+
       const layerNum = index + 1;
       const totalLayers = this.layerStack.length;
-      text += `#### Layer ${layerNum}/${totalLayers}: \`${info.componentName || el.tagName.toLowerCase()}\` (${el.tagName.toLowerCase()})\n`;
-      text += this.formatElementMetadata(el, info) + "\n\n";
+      const heading = `## Layer ${layerNum}/${totalLayers}: ${info.componentName || el.tagName.toLowerCase()} (${el.tagName.toLowerCase()})`;
+      const layerBody = this.formatElementMetadata(el, info, {
+        seenParentKeys,
+        omitRootHeader: true,
+        onPathStripped: () => {
+          anyStripped = true;
+        },
+      });
+      sections.push(layerBody ? `${heading}\n${layerBody}` : heading);
     });
-    
+
     if (isChecked("htmlStructure")) {
       const activeEl = this.layerStack[this.activeLayerIndex] || this.layerStack[0];
       if (activeEl) {
         const targetElToCopy = this.getTargetHTMLToCopy(activeEl);
         const label = targetElToCopy === activeEl ? `Layer ${this.activeLayerIndex + 1}` : `Layer ${this.activeLayerIndex + 1} with siblings`;
-        text += `### Target Element HTML Structure (${label})\n`;
-        text += `\`\`\`html\n${this.getMinifiedHTML(targetElToCopy)}\n\`\`\`\n`;
+        sections.push(`HTML (${label}):\n\`\`\`html\n${this.getMinifiedHTML(targetElToCopy)}\n\`\`\``);
       }
     }
-    
-    this.controller.copyToClipboard(text.trim());
+
+    const fullText = prependRootHeader(sections.join("\n\n"), projectRoot, anyStripped);
+    this.controller.copyToClipboard(fullText.trim());
   }
 }

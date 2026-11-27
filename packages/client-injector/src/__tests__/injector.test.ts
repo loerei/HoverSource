@@ -998,4 +998,32 @@ describe("client-injector persistent CDP session & Runtime.addBinding bridge", (
       })
     ).resolves.toBeUndefined();
   });
+
+  it("suppresses ECONNREFUSED target query console.debug noise in broadcastToTargets unless DEBUG is set", async () => {
+    const unusedServer = net.createServer();
+    await new Promise<void>((resolve) => unusedServer.listen(0, "127.0.0.1", () => resolve()));
+    const closedPort = (unusedServer.address() as net.AddressInfo).port;
+    await new Promise<void>((resolve) => unusedServer.close(() => resolve()));
+
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const prevDebug = process.env.DEBUG;
+    delete process.env.DEBUG;
+    try {
+      await expect(broadcastToTargets(closedPort, "globalThis.__PING__ = 1;")).resolves.toBeUndefined();
+      expect(debugSpy).not.toHaveBeenCalled();
+
+      process.env.DEBUG = "1";
+      await expect(broadcastToTargets(closedPort, "globalThis.__PING__ = 1;")).resolves.toBeUndefined();
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`Skipped CDP broadcast on port ${closedPort}: ECONNREFUSED`)
+      );
+    } finally {
+      if (prevDebug === undefined) {
+        delete process.env.DEBUG;
+      } else {
+        process.env.DEBUG = prevDebug;
+      }
+      debugSpy.mockRestore();
+    }
+  });
 });

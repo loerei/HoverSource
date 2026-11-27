@@ -831,14 +831,16 @@ export class InspectorAdapter implements InteractionMode {
   private formatLayoutConstraints(entries: Array<[string, string]>): string {
     const collapsed = collapseOverflowPairs(entries);
     if (collapsed.length === 0) return "";
-    return `Layout: ${collapsed.map(([k, v]) => `${k}: ${v}`).join("; ")}`;
+    const pairsText = collapsed.map(([k, v]) => `${k}: ${v}`).join("; ");
+    return `Layout: ${pairsText}`;
   }
 
   private formatSourceComments(comments: string[]): string {
     if (comments.length === 1 && !comments[0].includes("\n")) {
       return `Comments: ${comments[0]}`;
     }
-    return `Comments:\n${comments.map((c: string) => `- ${c}`).join("\n")}`;
+    const bulletLines = comments.map((c: string) => `- ${c}`).join("\n");
+    return `Comments:\n${bulletLines}`;
   }
 
   private formatSourceAttributes(rawAttributes: Record<string, any>): string {
@@ -988,7 +990,9 @@ export class InspectorAdapter implements InteractionMode {
   private copyMetadata() {
     if (!this.currentSourceInfo || !this.currentElement) return;
     const text = this.formatElementMetadata(this.currentElement, this.currentSourceInfo);
-    this.controller.copyToClipboard(text);
+    this.controller.copyToClipboard(text)?.catch((err) => {
+      console.warn("[HoverSource] Clipboard copy failed:", err);
+    });
   }
 
   private getElementAttributes(elNode: HTMLElement): string[] {
@@ -1127,6 +1131,8 @@ export class InspectorAdapter implements InteractionMode {
     }
 
     const fullText = prependRootHeader(sections.join("\n\n"), projectRoot, anyStripped);
-    this.controller.copyToClipboard(fullText.trim());
+    this.controller.copyToClipboard(fullText.trim())?.catch((err) => {
+      console.warn("[HoverSource] Clipboard copy failed:", err);
+    });
   }
 }

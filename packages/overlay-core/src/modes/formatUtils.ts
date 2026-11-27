@@ -3,7 +3,7 @@
  */
 
 export function normalizePathSlashes(rawPath: string): string {
-  return rawPath.replace(/\\/g, "/");
+  return rawPath.replaceAll("\\", "/");
 }
 
 export function normalizeRootPrefix(projectRoot: string): string {

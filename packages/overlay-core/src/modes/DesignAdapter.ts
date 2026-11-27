@@ -1100,7 +1100,9 @@ export class DesignAdapter implements InteractionMode {
       anyStripped,
     });
 
-    this.controller.copyToClipboard(text);
+    this.controller.copyToClipboard(text)?.catch((err) => {
+      console.warn("[HoverSource] Clipboard copy failed:", err);
+    });
   }
 
   public onConfigUpdate(newConfig: any): void {

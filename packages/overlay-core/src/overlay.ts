@@ -142,7 +142,11 @@ export class OverlayEngine implements OverlayController {
   private isSaveFilterPresetOpen = false;
   private savePresetError: string | null = null;
   private filterSaveError: string | null = null;
+  private filterSaveWarning: string | null = null;
+  private retryLastFilterSave: (() => void) | null = null;
   private configSaveSeq = 0;
+  private pendingSaveCount = 0;
+  private activeDragCleanup: (() => void) | null = null;
   private parentHighlightElements: Element[] = [];
   
   private uiVisible = true;
@@ -275,7 +279,13 @@ export class OverlayEngine implements OverlayController {
 
   private handleConfigUpdate(newConfig: any) {
     console.log("[HoverSource] Live reloading config...", newConfig);
-    this.config = newConfig;
+    if (this.pendingSaveCount === 0) {
+      ++this.configSaveSeq;
+      this.filterSaveError = null;
+      this.filterSaveWarning = null;
+      this.retryLastFilterSave = null;
+      this.config = newConfig;
+    }
 
     const oldStyle =
       this.shadowRoot?.getElementById?.("hoversource-styles") ??
@@ -284,9 +294,11 @@ export class OverlayEngine implements OverlayController {
     if (oldStyle) oldStyle.remove();
     this.initStyles();
 
-    this.activeMode.onConfigUpdate(newConfig);
-    if (this.isFilterPanelVisible) {
+    this.activeMode.onConfigUpdate(this.config);
+    if (this.isFilterPanelVisible || this.filterPresetsCatalog !== null) {
       void this.refreshFilterPresets();
+    }
+    if (this.isFilterPanelVisible) {
       this.renderFilterPanel();
     }
   }
@@ -622,6 +634,8 @@ export class OverlayEngine implements OverlayController {
       .hoversource-config-panel {
         position: fixed;
         width: 280px;
+        max-height: calc(100vh - 24px);
+        overflow-y: auto;
         background: ${colors.tooltipBg};
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
@@ -639,10 +653,16 @@ export class OverlayEngine implements OverlayController {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: 6px;
         margin-bottom: 8px;
         border-bottom: 1px solid ${colors.borderSep};
         padding-bottom: 4px;
         cursor: move;
+      }
+      .hs-header-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
       }
       .hoversource-config-panel .nav-btn {
         background: ${colors.navBg};
@@ -734,8 +754,8 @@ export class OverlayEngine implements OverlayController {
         outline: none;
       }
       .hs-preset-select option {
-        background: #111827;
-        color: #f3f4f6;
+        background: ${isLightTheme ? "#ffffff" : "#111827"};
+        color: ${colors.tooltipText};
       }
       .hs-save-preset-form {
         margin-bottom: 8px;
@@ -752,9 +772,21 @@ export class OverlayEngine implements OverlayController {
         align-items: center;
         gap: 6px;
       }
+      .hs-save-status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 6px;
+      }
       .hs-save-preset-error {
         font-size: 9.5px;
         color: #ef4444;
+      }
+      .hs-save-preset-warn {
+        font-size: 9.5px;
+        color: #f59e0b;
+        margin-top: 6px;
       }
     `;
     if (this.shadowRoot) {
@@ -852,6 +884,21 @@ export class OverlayEngine implements OverlayController {
       return;
     }
 
+    if (e.key === "Escape" && this.isFilterPanelVisible) {
+      if (this.isSaveFilterPresetOpen) {
+        e.preventDefault();
+        this.isSaveFilterPresetOpen = false;
+        this.savePresetError = null;
+        this.renderFilterPanel("hoversource-save-preset-btn");
+        return;
+      }
+      if (!this.isTyping(e)) {
+        e.preventDefault();
+        this.toggleFilterPanel();
+        return;
+      }
+    }
+
     if (matchShortcut(e, shortcuts.toggleUI ?? DEFAULT_SHORTCUTS.toggleUI)) {
       e.preventDefault();
       this.uiVisible = !this.uiVisible;
@@ -868,19 +915,30 @@ export class OverlayEngine implements OverlayController {
     this.handleModeShortcuts(e, shortcuts);
   };
 
+  private clampPanelCoordinates(x: number, y: number): { x: number; y: number } {
+    const viewW = typeof window !== "undefined" && window.innerWidth > 0 ? window.innerWidth : 1024;
+    const viewH = typeof window !== "undefined" && window.innerHeight > 0 ? window.innerHeight : 768;
+    const panelW = this.filterPanel?.offsetWidth || 280;
+    const maxX = Math.max(8, viewW - panelW - 8);
+    const maxY = Math.max(8, viewH - 64);
+    return {
+      x: Math.max(8, Math.min(x, maxX)),
+      y: Math.max(8, Math.min(y, maxY)),
+    };
+  }
+
   private toggleFilterPanel() {
     if (!this.filterPanel) return;
     this.isFilterPanelVisible = !this.isFilterPanelVisible;
     if (this.isFilterPanelVisible) {
       this.filterPanel.style.display = "block";
-      // Restore position if saved
       const savedPos = this.config?.metadataFilter?.panelPosition;
-      if (savedPos) {
-        this.filterPanel.style.left = savedPos.x + "px";
-        this.filterPanel.style.top = savedPos.y + "px";
+      if (savedPos && typeof savedPos.x === "number" && typeof savedPos.y === "number") {
+        const clamped = this.clampPanelCoordinates(savedPos.x, savedPos.y);
+        this.filterPanel.style.left = clamped.x + "px";
+        this.filterPanel.style.top = clamped.y + "px";
         this.filterPanel.style.right = "auto";
       } else {
-        // Default position: top right
         this.filterPanel.style.top = "100px";
         this.filterPanel.style.right = "40px";
         this.filterPanel.style.left = "auto";
@@ -888,6 +946,7 @@ export class OverlayEngine implements OverlayController {
       this.renderFilterPanel();
       void this.refreshFilterPresets();
     } else {
+      this.activeDragCleanup?.();
       this.isSaveFilterPresetOpen = false;
       this.savePresetError = null;
       this.filterPanel.style.display = "none";
@@ -934,7 +993,10 @@ export class OverlayEngine implements OverlayController {
     target: "local" | "global" = this.filterSaveTarget
   ): Promise<void> {
     const seq = ++this.configSaveSeq;
+    this.pendingSaveCount++;
     this.filterSaveError = null;
+    this.filterSaveWarning = null;
+    this.retryLastFilterSave = null;
     const { presets } = this.getEffectiveFilterPresets();
     const chosenFilters = presets[presetName];
     if (chosenFilters) {
@@ -964,6 +1026,9 @@ export class OverlayEngine implements OverlayController {
       }
       if (seq === this.configSaveSeq) {
         this.config = data.config;
+        if (saveTarget === "global" && data.config?.metadataFilter?.preset !== presetName) {
+          this.filterSaveWarning = "Saved Global (Repo overrides)";
+        }
       }
       if (data.list?.presets) {
         this.filterPresetsCatalog = {
@@ -995,10 +1060,15 @@ export class OverlayEngine implements OverlayController {
       }
       if (seq === this.configSaveSeq) {
         this.filterSaveError = "Changes not saved";
+        this.retryLastFilterSave = () => {
+          void this.activateFilterPreset(presetName, target);
+        };
         if (this.isFilterPanelVisible) {
           this.renderFilterPanel();
         }
       }
+    } finally {
+      this.pendingSaveCount = Math.max(0, this.pendingSaveCount - 1);
     }
   }
 
@@ -1014,7 +1084,10 @@ export class OverlayEngine implements OverlayController {
     }
 
     const seq = ++this.configSaveSeq;
+    this.pendingSaveCount++;
     this.filterSaveError = null;
+    this.filterSaveWarning = null;
+    this.retryLastFilterSave = null;
     const snapshot = this.getCurrentMetadataFiltersSnapshot();
     const saveAndActivate = async (targetScope: "local" | "global") => {
       const saveRes = await companionRequestJson("/filter-presets", {
@@ -1066,6 +1139,8 @@ export class OverlayEngine implements OverlayController {
         this.renderFilterPanel();
         return false;
       }
+    } finally {
+      this.pendingSaveCount = Math.max(0, this.pendingSaveCount - 1);
     }
 
     this.isSaveFilterPresetOpen = false;
@@ -1220,16 +1295,29 @@ export class OverlayEngine implements OverlayController {
         ["<"]
       ),
       el("div", { class: "title" }, [activeType.name]),
-      el(
-        "button",
-        {
-          type: "button",
-          class: "nav-btn",
-          id: "hoversource-next-btn",
-          "aria-label": "Next metadata category",
-        },
-        [">"]
-      ),
+      el("div", { class: "hs-header-actions" }, [
+        el(
+          "button",
+          {
+            type: "button",
+            class: "nav-btn",
+            id: "hoversource-next-btn",
+            "aria-label": "Next metadata category",
+          },
+          [">"]
+        ),
+        el(
+          "button",
+          {
+            type: "button",
+            class: "nav-btn",
+            id: "hoversource-close-filter-btn",
+            "aria-label": "Close filter panel",
+            title: "Close (Esc)",
+          },
+          ["\u00d7"]
+        ),
+      ]),
     ]);
 
     const { presets, sources } = this.getEffectiveFilterPresets();
@@ -1366,13 +1454,34 @@ export class OverlayEngine implements OverlayController {
       [this.filterSaveTarget === "global" ? "Global" : "Local"]
     );
 
-    const saveErrorEl = this.filterSaveError
-      ? el(
-          "div",
+    let saveStatusEl: HTMLElement | SVGElement | null = null;
+    if (this.filterSaveError) {
+      saveStatusEl = el("div", { class: "hs-save-status-row" }, [
+        el(
+          "span",
           { class: "hs-save-preset-error", id: "hoversource-save-error" },
           [this.filterSaveError]
-        )
-      : null;
+        ),
+        this.retryLastFilterSave
+          ? el(
+              "button",
+              {
+                type: "button",
+                class: "nav-btn",
+                id: "hoversource-retry-save-btn",
+                title: "Retry saving filter changes",
+              },
+              ["Retry"]
+            )
+          : null,
+      ].filter((n): n is HTMLElement | SVGElement => n !== null));
+    } else if (this.filterSaveWarning) {
+      saveStatusEl = el(
+        "div",
+        { class: "hs-save-preset-warn", id: "hoversource-save-warning" },
+        [this.filterSaveWarning]
+      );
+    }
 
     const footerEl = el(
       "div",
@@ -1387,7 +1496,7 @@ export class OverlayEngine implements OverlayController {
     );
 
     this.filterPanel.replaceChildren(
-      ...[headerEl, presetBarEl, savePresetFormEl, tableContainerEl, saveErrorEl, footerEl].filter(
+      ...[headerEl, presetBarEl, savePresetFormEl, tableContainerEl, saveStatusEl, footerEl].filter(
         (n): n is HTMLElement => n !== null
       )
     );
@@ -1395,6 +1504,8 @@ export class OverlayEngine implements OverlayController {
     // Hook events
     const prevBtn = this.filterPanel.querySelector("#hoversource-prev-btn") as HTMLButtonElement | null;
     const nextBtn = this.filterPanel.querySelector("#hoversource-next-btn") as HTMLButtonElement | null;
+    const closeBtn = this.filterPanel.querySelector("#hoversource-close-filter-btn") as HTMLButtonElement | null;
+    const retrySaveBtn = this.filterPanel.querySelector("#hoversource-retry-save-btn") as HTMLButtonElement | null;
     const scopeBtn = this.filterPanel.querySelector("#hoversource-scope-btn") as HTMLButtonElement | null;
     const presetSelect = this.filterPanel.querySelector("#hoversource-preset-select") as HTMLSelectElement | null;
     const savePresetBtn = this.filterPanel.querySelector("#hoversource-save-preset-btn") as HTMLButtonElement | null;
@@ -1478,6 +1589,18 @@ export class OverlayEngine implements OverlayController {
         this.renderFilterPanel(shouldRestoreFocus ? "hoversource-next-btn" : undefined);
       });
     }
+    if (closeBtn) {
+      closeBtn.addEventListener("click", () => {
+        if (this.isFilterPanelVisible) {
+          this.toggleFilterPanel();
+        }
+      });
+    }
+    if (retrySaveBtn) {
+      retrySaveBtn.addEventListener("click", () => {
+        this.retryLastFilterSave?.();
+      });
+    }
     if (scopeBtn) {
       scopeBtn.addEventListener("click", () => {
         const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
@@ -1550,17 +1673,34 @@ export class OverlayEngine implements OverlayController {
     const header = this.filterPanel.querySelector("#hoversource-drag-header") as HTMLDivElement;
     if (!header) return;
 
+    this.activeDragCleanup?.();
+
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
     header.onmousedown = (e: MouseEvent) => {
       if (e.target && ((e.target as HTMLElement).tagName.toLowerCase() === 'button' || (e.target as HTMLElement).closest('button'))) return;
       e.preventDefault();
       pos3 = e.clientX;
       pos4 = e.clientY;
-      document.onmouseup = () => {
-        document.onmouseup = null;
-        document.onmousemove = null;
-        
-        // Save position on drag end
+
+      const onMouseMove = (ev: MouseEvent) => {
+        ev.preventDefault();
+        pos1 = pos3 - ev.clientX;
+        pos2 = pos4 - ev.clientY;
+        pos3 = ev.clientX;
+        pos4 = ev.clientY;
+        if (this.filterPanel) {
+          const clamped = this.clampPanelCoordinates(
+            this.filterPanel.offsetLeft - pos1,
+            this.filterPanel.offsetTop - pos2
+          );
+          this.filterPanel.style.top = clamped.y + "px";
+          this.filterPanel.style.left = clamped.x + "px";
+          this.filterPanel.style.right = "auto";
+        }
+      };
+
+      const onMouseUp = () => {
+        cleanupDragListeners();
         if (this.filterPanel) {
           const delta = {
             metadataFilter: {
@@ -1570,21 +1710,22 @@ export class OverlayEngine implements OverlayController {
               }
             }
           };
-          this.saveConfig(delta);
+          void this.saveConfig(delta, "local", { silentError: true });
         }
       };
-      document.onmousemove = (ev: MouseEvent) => {
-        ev.preventDefault();
-        pos1 = pos3 - ev.clientX;
-        pos2 = pos4 - ev.clientY;
-        pos3 = ev.clientX;
-        pos4 = ev.clientY;
-        if (this.filterPanel) {
-          this.filterPanel.style.top = (this.filterPanel.offsetTop - pos2) + "px";
-          this.filterPanel.style.left = (this.filterPanel.offsetLeft - pos1) + "px";
-          this.filterPanel.style.right = "auto";
+
+      const cleanupDragListeners = () => {
+        globalThis.removeEventListener("mousemove", onMouseMove);
+        globalThis.removeEventListener("mouseup", onMouseUp);
+        if (this.activeDragCleanup === cleanupDragListeners) {
+          this.activeDragCleanup = null;
         }
       };
+
+      this.activeDragCleanup?.();
+      this.activeDragCleanup = cleanupDragListeners;
+      globalThis.addEventListener("mousemove", onMouseMove);
+      globalThis.addEventListener("mouseup", onMouseUp);
     };
   }
 
@@ -1620,8 +1761,8 @@ export class OverlayEngine implements OverlayController {
     "image",
   ]);
 
-  private isTyping(_e: KeyboardEvent): boolean {
-    const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+  private isTyping(e: KeyboardEvent): boolean {
+    const activeEl = this.getSafeFilterPanelActiveElement();
     if (!activeEl) return false;
     const tag = activeEl.tagName.toLowerCase();
     if (tag === "input") {
@@ -1629,6 +1770,9 @@ export class OverlayEngine implements OverlayController {
       return !OverlayEngine.NON_TEXT_INPUT_TYPES.has(inputType);
     }
     if (tag === "textarea") return true;
+    if (tag === "select") {
+      return e.key.length === 1 && !e.altKey && !e.ctrlKey && !e.metaKey;
+    }
     if (this.shadowRoot?.contains(activeEl)) return false;
     return (
       (activeEl as HTMLElement).isContentEditable === true ||
@@ -1957,10 +2101,16 @@ export class OverlayEngine implements OverlayController {
 
   public async saveConfig(
     newConfig: any,
-    target: "local" | "global" = this.filterSaveTarget
+    target: "local" | "global" = this.filterSaveTarget,
+    options?: { silentError?: boolean }
   ): Promise<void> {
     const seq = ++this.configSaveSeq;
-    this.filterSaveError = null;
+    this.pendingSaveCount++;
+    if (!options?.silentError) {
+      this.filterSaveError = null;
+      this.filterSaveWarning = null;
+      this.retryLastFilterSave = null;
+    }
     this.applyLocalConfigDelta(newConfig);
 
     const trySave = async (saveTarget: "local" | "global") => {
@@ -1979,15 +2129,29 @@ export class OverlayEngine implements OverlayController {
       }
       if (seq === this.configSaveSeq) {
         this.config = data.config;
+        if (
+          !options?.silentError &&
+          saveTarget === "global" &&
+          newConfig?.metadataFilter?.preset === "custom" &&
+          data.config?.metadataFilter?.preset !== "custom"
+        ) {
+          this.filterSaveWarning = "Saved Global (Repo overrides)";
+        }
       }
     };
 
     try {
       await trySave(target);
+      if (!options?.silentError && seq === this.configSaveSeq && this.filterSaveWarning && this.isFilterPanelVisible) {
+        this.renderFilterPanel();
+      }
     } catch (e) {
       if (target === "local" && newConfig?.metadataFilter && !this.isAmbiguousSaveError(e)) {
         try {
           await trySave("global");
+          if (!options?.silentError && seq === this.configSaveSeq && this.filterSaveWarning && this.isFilterPanelVisible) {
+            this.renderFilterPanel();
+          }
           console.warn("[HoverSource] Local config save failed; persisted metadataFilter to global config instead.");
           return;
         } catch (fallbackErr) {
@@ -1996,12 +2160,17 @@ export class OverlayEngine implements OverlayController {
       } else {
         console.error("[HoverSource] Failed to save config", e);
       }
-      if (seq === this.configSaveSeq) {
+      if (!options?.silentError && seq === this.configSaveSeq) {
         this.filterSaveError = "Changes not saved";
+        this.retryLastFilterSave = () => {
+          void this.saveConfig(newConfig, target, options);
+        };
         if (this.isFilterPanelVisible) {
           this.renderFilterPanel();
         }
       }
+    } finally {
+      this.pendingSaveCount = Math.max(0, this.pendingSaveCount - 1);
     }
   }
 
@@ -2055,6 +2224,7 @@ export class OverlayEngine implements OverlayController {
 
     this.launchAbortController?.abort();
     this.launchAbortController = null;
+    this.activeDragCleanup?.();
 
     if (this.configEventSource) {
       try {

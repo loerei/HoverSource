@@ -2,6 +2,7 @@ import { InteractionMode, OverlayController, SemanticShortcut } from "./types.js
 import { SourceResolver } from "@hoversource/source-resolver";
 import { escapeHtml } from "../safeDom.js";
 import { DEFAULT_SHORTCUTS, formatShortcutLabel, isMacPlatform } from "../shortcuts.js";
+import { formatSourceLocation, prependRootHeader } from "./formatUtils.js";
 
 export type SnapBoundaryH = "Left-Edge" | "Right-Edge" | "Center-Axis";
 export type SnapBoundaryV = "Top-Edge" | "Bottom-Edge" | "Center-Axis";
@@ -809,17 +810,28 @@ export class DesignAdapter implements InteractionMode {
     }
   }
 
-  private getRelatedFilesList(anchorFile: string, anchorLine: number, ancestors: any[]): string[] {
+  private getRelatedFilesList(
+    anchorFile: string,
+    anchorLine: number,
+    ancestors: any[],
+    projectRoot: string | null,
+    onStripped: () => void
+  ): string[] {
     const seenFiles = new Set<string>([anchorFile]);
-    const relatedFiles: string[] = anchorFile
-      ? [`\`${anchorFile}\` (Line: ${anchorLine}) — anchor component`]
-      : [];
+    const relatedFiles: string[] = [];
+    if (anchorFile) {
+      const coord = formatSourceLocation(anchorFile, anchorLine, undefined, projectRoot);
+      if (coord.stripped) onStripped();
+      relatedFiles.push(`${coord.text} (anchor component)`);
+    }
 
     for (const anc of ancestors) {
       if (anc.fileName && !seenFiles.has(anc.fileName)) {
         seenFiles.add(anc.fileName);
-        const label = anc.componentName ? ` — \`${anc.componentName}\`` : "";
-        relatedFiles.push(`\`${anc.fileName}\` (Line: ${anc.lineNumber || 1})${label}`);
+        const coord = formatSourceLocation(anc.fileName, anc.lineNumber || 1, undefined, projectRoot);
+        if (coord.stripped) onStripped();
+        const label = anc.componentName ? ` (${anc.componentName})` : "";
+        relatedFiles.push(`${coord.text}${label}`);
       }
     }
     return relatedFiles;
@@ -880,82 +892,84 @@ export class DesignAdapter implements InteractionMode {
     posAncLine: string;
     anchorForContextSelector: string;
     anchorElementDisplay: string;
-    anchorNoteStr: string;
+    anchorNote: string;
     directParentLine: string;
-    warningStr: string;
+    layoutWarning: string;
     cssRules: string;
     filesSection: string;
-    targetParentSelector: string;
-    targetParentType: string;
+    projectRoot?: string | null;
+    anyStripped?: boolean;
   }): string {
     const config = this.controller.getConfig();
     const filters = config?.metadataFilter?.filters?.design;
     const isChecked = (key: string) => filters ? (filters[key] !== false) : true;
+    const projectRoot = p.projectRoot !== undefined ? p.projectRoot : (this.controller.getProjectRoot?.() ?? null);
+    let anyStripped = Boolean(p.anyStripped);
 
-    let lines: string[] = [];
+    const lines: string[] = [];
 
     if (isChecked("compInfo")) {
-      const lineColStr = p.line ? ` (Line: ${p.line}, Column: ${p.column})` : "";
+      const coord = formatSourceLocation(p.filePath, p.line, p.column, projectRoot);
+      if (coord.stripped) anyStripped = true;
+      const fwSuffix = p.framework ? ` (${p.framework})` : "";
       lines.push(
-        `* **Component**: \`${p.component}\``,
-        `* **Element**: \`${p.selector}\``,
-        `* **File Path**: \`${p.filePath}\`${lineColStr}`,
-        `* **Framework**: ${p.framework}`
+        `Component: ${p.component}${fwSuffix}`,
+        `Element: ${p.selector} | File: ${coord.text}`
       );
     }
 
     if (isChecked("horizontalAnchor")) {
-      lines.push(`* **Horizontal Anchor**:
-  - Selector: \`${p.selectorH}\`
-  - Boundary: \`${p.boundaryH}\`
-  - Crosshair distance from boundary (NOT a CSS value): \`${p.signH}${p.offsetH}px\` (${p.isSnappedHText})`);
+      lines.push(
+        `Anchor H (not CSS): ${p.selectorH} @ ${p.boundaryH} (${p.signH}${p.offsetH}px, ${p.isSnappedHText})`
+      );
     }
 
     if (isChecked("verticalAnchor")) {
-      lines.push(`* **Vertical Anchor**:
-  - Selector: \`${p.selectorV}\`
-  - Boundary: \`${p.boundaryV}\`
-  - Crosshair distance from boundary (NOT a CSS value): \`${p.signV}${p.offsetV}px\` (${p.isSnappedVText})`);
+      lines.push(
+        `Anchor V (not CSS): ${p.selectorV} @ ${p.boundaryV} (${p.signV}${p.offsetV}px, ${p.isSnappedVText})`
+      );
     }
 
     if (isChecked("layoutContext")) {
-      lines.push(`#### Layout Context (auto-resolved at runtime)
-* **Positioned Ancestor**: ${p.posAncLine}
-* **Anchor Element**: \`${p.anchorForContextSelector}\` (display: ${p.anchorElementDisplay})
-${p.anchorNoteStr}\\\n* **Direct Parent of Anchor**: ${p.directParentLine}
-${p.warningStr}\\`);
+      const anchorLine = p.anchorNote
+        ? `- Anchor: ${p.anchorForContextSelector} (display: ${p.anchorElementDisplay}; ${p.anchorNote})`
+        : `- Anchor: ${p.anchorForContextSelector} (display: ${p.anchorElementDisplay})`;
+      const contextLines = [
+        "Layout Context:",
+        `- Positioned Ancestor: ${p.posAncLine}`,
+        anchorLine,
+        `- Direct Parent: ${p.directParentLine}`,
+      ];
+      if (p.layoutWarning) {
+        contextLines.push(`- Note: ${p.layoutWarning}`);
+      }
+      lines.push(contextLines.join("\n"));
     }
 
     if (isChecked("suggestedCss")) {
-      lines.push(`* **USE THIS CSS** (do not use the distance values above as CSS — use this block):
-\`\`\`css
-${p.cssRules}
-\`\`\``);
+      lines.push(`CSS (use instead of anchor distances):\n\`\`\`css\n${p.cssRules}\n\`\`\``);
     }
 
     if (isChecked("sourceFiles")) {
-      lines.push(`* **Source Files to Examine**:
-${p.filesSection}`);
+      lines.push(`Source Files: ${p.filesSection}`);
     }
 
     if (isChecked("aiInstructions")) {
-      lines.push(`#### For the AI Agent
-The CSS above assumes the new element will be a direct child of the Positioned Ancestor.
-You must determine the actual DOM insertion point by examining the source files above.
-The following is NOT resolved automatically and requires your judgment:
-- **DOM insertion point**: where in the JSX/template tree the new element belongs
-  (sibling of anchor, child of a wrapper, inside a portal, etc.)
-- **Whether \`position: absolute\` is appropriate**: if the anchor or its parent is a flex/grid`);
+      lines.push(
+        "AI Note: CSS assumes direct child of Positioned Ancestor; verify DOM insertion point in source files above and whether position: absolute fits anchor/parent flex or grid layout."
+      );
     }
 
-    return lines.join("\n");
+    return prependRootHeader(lines.join("\n"), projectRoot, anyStripped);
   }
 
 
   private getLayoutContextInfo(
     info: any,
-    anchorForContext: HTMLElement,
-    ancestors: any[]
+    _anchorForContext: HTMLElement,
+    ancestors: any[],
+    projectRoot: string | null,
+    onStripped: () => void
   ): {
     posAncLine: string;
     directParentLine: string;
@@ -966,26 +980,36 @@ The following is NOT resolved automatically and requires your judgment:
     const directParent = ancestors[0] ?? null;
 
     const anchorFile = info.fileName || "";
-    const relatedFiles = this.getRelatedFilesList(anchorFile, info.lineNumber || 1, ancestors);
+    const relatedFiles = this.getRelatedFilesList(anchorFile, info.lineNumber || 1, ancestors, projectRoot, onStripped);
 
-    let posAncLine = "none found within 8 levels — CSS rules may need `position: relative` added to a parent";
+    let posAncLine = "none found within 8 levels (may need position: relative on a parent)";
     if (positionedAncestor) {
-      const sourceInfo = positionedAncestor.fileName
-        ? `, source: \`${positionedAncestor.fileName}\`:${positionedAncestor.lineNumber || 1}`
-        : ", source unresolved (no fiber)";
-      posAncLine = `\`${positionedAncestor.selector}\` (position: ${positionedAncestor.position})${sourceInfo}`;
+      if (positionedAncestor.fileName) {
+        const ancCoord = formatSourceLocation(
+          positionedAncestor.fileName,
+          positionedAncestor.lineNumber || 1,
+          undefined,
+          projectRoot
+        );
+        if (ancCoord.stripped) onStripped();
+        posAncLine = `${positionedAncestor.selector} (position: ${positionedAncestor.position}) [${ancCoord.text}]`;
+      } else {
+        posAncLine = `${positionedAncestor.selector} (position: ${positionedAncestor.position}, source unresolved)`;
+      }
     }
 
     let directParentLine = "unresolved";
     if (directParent) {
       let layoutPropsStr = "";
       if (directParent.layoutProps) {
-        layoutPropsStr = "\n  - " + Object.entries(directParent.layoutProps)
+        layoutPropsStr = Object.entries(directParent.layoutProps)
           .filter(([, v]) => v && v !== "normal" && v !== "0px")
           .map(([k, v]) => `${k}: ${v}`)
-          .join(" | ");
+          .join("; ");
       }
-      directParentLine = `\`${directParent.selector}\` (display: ${directParent.display})${layoutPropsStr}`;
+      directParentLine = layoutPropsStr
+        ? `${directParent.selector} (display: ${directParent.display}; ${layoutPropsStr})`
+        : `${directParent.selector} (display: ${directParent.display})`;
     }
 
     const parentDisplay = directParent?.display ?? "";
@@ -993,12 +1017,12 @@ The following is NOT resolved automatically and requires your judgment:
     const isParentFlexOrGrid = parentDisplay === "flex" || parentDisplay === "inline-flex" || parentDisplay === "grid" || parentDisplay === "inline-grid";
     if (isParentFlexOrGrid) {
       const childType = parentDisplay.startsWith("grid") ? "grid" : "flex";
-      layoutWarning = `Direct parent is a ${parentDisplay} container. Inserting as a ${childType} child or with position: absolute are both options — verify which fits the component layout.`;
+      layoutWarning = `Direct parent is a ${parentDisplay} container. Inserting as a ${childType} child or with position: absolute are both options; verify which fits the component layout.`;
     }
 
     const filesSection = relatedFiles.length > 0
-      ? relatedFiles.map(f => `  - ${f}`).join("\n")
-      : "  - No source files resolved (fiber not available — non-React or production build)";
+      ? relatedFiles.join(", ")
+      : "none resolved (fiber unavailable in non-React or production build)";
 
     return { posAncLine, directParentLine, layoutWarning, filesSection };
   }
@@ -1020,11 +1044,8 @@ The following is NOT resolved automatically and requires your judgment:
     const selectorV = this.anchorVElement ? getSelector(this.anchorVElement) : "None";
 
     const commonParent = findCommonAncestor(this.anchorHElement, this.anchorVElement);
-    const parentSelector = getSelector(commonParent);
-
     const { offsetH, offsetV, cssRules } = this.getPlacementAndRules(commonParent);
 
-    const isHAndVSame = this.anchorHElement && this.anchorHElement === this.anchorVElement;
     const selector = this.getTargetSelector();
 
     // --- Layout Context ---
@@ -1035,17 +1056,20 @@ The following is NOT resolved automatically and requires your judgment:
     const anchorElementDisplay = anchorDisplayInfo.display;
     const anchorDisplayNote = anchorDisplayInfo.note;
 
-    const contextInfo = this.getLayoutContextInfo(info, anchorForContext, ancestors);
+    const projectRoot = this.controller.getProjectRoot?.() ?? null;
+    let anyStripped = false;
+    const contextInfo = this.getLayoutContextInfo(
+      info,
+      anchorForContext,
+      ancestors,
+      projectRoot,
+      () => { anyStripped = true; }
+    );
 
     const signH = offsetH >= 0 ? "+" : "";
     const isSnappedHText = this.isSnappedH ? "Snapped" : "Free";
     const signV = offsetV >= 0 ? "+" : "";
     const isSnappedVText = this.isSnappedV ? "Snapped" : "Free";
-    const targetParentSelector = isHAndVSame ? selectorH : parentSelector;
-    const targetParentType = isHAndVSame ? "same as anchor" : "common ancestor of H and V anchors";
-
-    const anchorNoteStr = anchorDisplayNote ? `  - ${anchorDisplayNote}\n` : "";
-    const warningStr = contextInfo.layoutWarning ? `* ${contextInfo.layoutWarning}\n` : "";
 
     const text = this.buildMetadataText({
       component: info.componentName || this.targetElement.tagName.toLowerCase(),
@@ -1067,13 +1091,13 @@ The following is NOT resolved automatically and requires your judgment:
       posAncLine: contextInfo.posAncLine,
       anchorForContextSelector: getSelector(anchorForContext),
       anchorElementDisplay: anchorElementDisplay || "block",
-      anchorNoteStr,
+      anchorNote: anchorDisplayNote || "",
       directParentLine: contextInfo.directParentLine,
-      warningStr,
+      layoutWarning: contextInfo.layoutWarning || "",
       cssRules,
       filesSection: contextInfo.filesSection,
-      targetParentSelector,
-      targetParentType
+      projectRoot,
+      anyStripped,
     });
 
     this.controller.copyToClipboard(text);

@@ -125,6 +125,7 @@ export class OverlayEngine implements OverlayController {
   private static activeLaunchPromise: Promise<OverlayEngine | null> | null = null;
 
   private config: any = null;
+  private currentProject: string | null = null;
   public shadowHost: HTMLDivElement | null = null;
   private shadowRoot: ShadowRoot | null = null;
   private container: HTMLDivElement | null = null;
@@ -315,6 +316,10 @@ export class OverlayEngine implements OverlayController {
       const data = await companionRequestJson("/config", { timeoutMs, signal });
       if (data?.config) {
         this.config = data.config;
+        this.currentProject =
+          typeof data.currentProject === "string" && data.currentProject.trim().length > 0
+            ? data.currentProject.trim()
+            : null;
         console.log("[HoverSource] Configuration loaded from companion server:", this.config);
         return;
       }
@@ -1916,6 +1921,8 @@ export class OverlayEngine implements OverlayController {
   }
 
   public getConfig(): any { return this.config; }
+
+  public getProjectRoot(): string | null { return this.currentProject; }
 
   private applyLocalConfigDelta(newConfig: any): void {
     if (!this.config || typeof this.config !== "object") {

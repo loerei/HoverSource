@@ -25,6 +25,9 @@ export interface OverlayController {
   /** Gets the active configuration */
   getConfig(): any;
 
+  /** Gets the normalized workspace root path returned by the companion server */
+  getProjectRoot?(): string | null;
+
   /** Saves configuration changes back to the project */
   saveConfig(newConfig: any): Promise<void>;
   

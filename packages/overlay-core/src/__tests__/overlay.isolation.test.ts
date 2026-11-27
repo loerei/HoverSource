@@ -804,7 +804,27 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string, init?: RequestInit) => {
-        if (String(url).includes("/config") && init?.method === "POST") {
+        const parsedUrl = String(url);
+        if (parsedUrl.includes("/filter-presets/use") && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          postBodies.push(body);
+          return new Response(
+            JSON.stringify({
+              success: true,
+              config: { metadataFilter: { preset: body.name, filters: {} } },
+            }),
+            { status: 200 }
+          );
+        }
+        if (parsedUrl.includes("/filter-presets") && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          postBodies.push(body);
+          return new Response(
+            JSON.stringify({ success: true, name: body.name, config: { metadataFilter: {} } }),
+            { status: 200 }
+          );
+        }
+        if (parsedUrl.includes("/config") && init?.method === "POST") {
           const body = JSON.parse(String(init.body));
           postBodies.push(body);
           if (body.target === "local") {
@@ -857,5 +877,92 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
     scopeBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
     const updatedScopeBtn = shadow.querySelector("#hoversource-scope-btn") as HTMLButtonElement;
     expect(updatedScopeBtn.textContent).toBe("Global");
+
+    // Manual uncheck switches preset selector to "custom" and reveals Save as Preset -> inline save flow
+    const presetSelect = shadow.querySelector("#hoversource-preset-select") as HTMLSelectElement;
+    expect(presetSelect.value).toBe("custom");
+    const savePresetBtn = shadow.querySelector("#hoversource-save-preset-btn") as HTMLButtonElement;
+    expect(savePresetBtn).not.toBeNull();
+    savePresetBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+
+    const nameInput = shadow.querySelector("#hoversource-preset-name-input") as HTMLInputElement;
+    expect(nameInput).not.toBeNull();
+    nameInput.value = "my-custom-filter";
+    const confirmBtn = shadow.querySelector("#hoversource-save-preset-confirm") as HTMLButtonElement;
+    confirmBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(
+      postBodies.some((b: any) => b.name === "my-custom-filter" && b.filters?.component?.framework === false)
+    ).toBe(true);
+  });
+
+  it("switches filter preset from Ctrl+Alt+D dropdown and sends POST /filter-presets/use", async () => {
+    vi.useFakeTimers();
+    const calls: Array<{ url: string; body: any }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const parsedUrl = String(url);
+        if (parsedUrl.includes("/filter-presets/use") && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          calls.push({ url: parsedUrl, body });
+          return new Response(
+            JSON.stringify({
+              success: true,
+              config: {
+                metadataFilter: {
+                  preset: body.name,
+                  filters: { component: { componentName: true, filePath: true, dimensions: false } },
+                },
+              },
+            }),
+            { status: 200 }
+          );
+        }
+        if (parsedUrl.includes("/filter-presets")) {
+          return new Response(
+            JSON.stringify({
+              presets: {
+                full: { component: { componentName: true, dimensions: true }, layer: {}, design: {} },
+                "source-locate": { component: { componentName: true, dimensions: false }, layer: {}, design: {} },
+              },
+              sources: { full: "builtin", "source-locate": "builtin" },
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            config: {
+              metadataFilter: {
+                preset: "full",
+                filters: { component: { componentName: true, dimensions: true } },
+              },
+            },
+          }),
+          { status: 200 }
+        );
+      })
+    );
+
+    activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 1000 });
+    expect(activeEngine).not.toBeNull();
+    const shadow = document.getElementById("hoversource-host")!.shadowRoot!;
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", altKey: true, ctrlKey: true }));
+    await vi.advanceTimersByTimeAsync(10);
+
+    const presetSelect = shadow.querySelector("#hoversource-preset-select") as HTMLSelectElement;
+    expect(presetSelect.value).toBe("full");
+
+    presetSelect.value = "source-locate";
+    presetSelect.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].body).toEqual({ name: "source-locate", target: "local" });
+    expect(activeEngine!.getConfig().metadataFilter.preset).toBe("source-locate");
+    expect(activeEngine!.getConfig().metadataFilter.filters.component.dimensions).toBe(false);
   });
 });

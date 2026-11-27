@@ -882,8 +882,9 @@ Subcommands:
   start                           Start the companion server only (or run package.json "start").
   restart                         Restart the running companion server.
   dashboard                       Open the HoverSource Dashboard (reuses running server or starts one).
-  config <action>                 Inspect or modify settings: list|show|get|set|reset|delete|preset
+  config <action>                 Inspect or modify settings: list|show|get|set|reset|delete|preset|filter-preset
   config preset <action>          Manage global presets: list|save|use|delete|bind
+  config filter-preset <action>   Manage metadata filter presets: list|save|use|delete [--global|--local]
   update [--dry-run] [--json]     Check npm for a newer hoversource release and install globally
   dev, start, etc.                Any package.json script name to execute with HoverSource overlay.
 
@@ -922,6 +923,7 @@ Configuration (.hoversourcerc):
     respectGitignore boolean    Apply .gitignore rules during CSS/HTML lookup (default: true)
     ports            object     { companion, debug, proxy, dev, companionConflict: "shift"|"takeover"|"fail" }
     preset           string     Bound global preset name (set via: hs config preset bind <name>)
+    metadataFilter   object     { preset, presets, filters, panelPosition } (filter-preset defaults: source-locate)
     theme            string     "dark" | "light" | "system"
     editor           string     "vscode" | "cursor" | "code"
 

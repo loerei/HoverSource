@@ -25,6 +25,11 @@ import {
   usePreset,
   deletePreset,
   bindRepoPreset,
+  BUILTIN_METADATA_FILTER_PRESETS,
+  listFilterPresets,
+  saveFilterPreset,
+  useFilterPreset,
+  deleteFilterPreset,
 } from "../configStore.js";
 
 describe("configStore", () => {
@@ -591,9 +596,9 @@ describe("configStore", () => {
     expect(fs.existsSync(backupPath)).toBe(true);
     expect(JSON.parse(fs.readFileSync(backupPath, "utf-8"))).toEqual(legacyGlobal);
 
-    // Persisted file upgraded to schemaVersion 1 with misplaced global scan keys removed
+    // Persisted file upgraded to schemaVersion 2 with misplaced global scan keys removed
     const migratedDisk = JSON.parse(fs.readFileSync(globalConfigPath, "utf-8"));
-    expect(migratedDisk.schemaVersion).toBe(1);
+    expect(migratedDisk.schemaVersion).toBe(CURRENT_CONFIG_SCHEMA_VERSION);
     expect(migratedDisk.include).toBeUndefined();
 
     // Second migration pass is idempotent
@@ -614,5 +619,70 @@ describe("configStore", () => {
     const malformed = migrateConfigObject({ schemaVersion: "invalid", theme: "dark" }, "global");
     expect(malformed.changed).toBe(false);
     expect(malformed.migrated.schemaVersion).toBe("invalid");
+  });
+
+  it("migrates v1 metadataFilter.filters to preset custom and supports built-in/global/local filter presets with shadow revert", () => {
+    // 1. Default new project uses source-locate built-in preset
+    const fresh = loadMergedConfig(projectDir, globalConfigPath);
+    expect(fresh.metadataFilter?.preset).toBe("source-locate");
+    expect(fresh.metadataFilter?.filters?.component?.filePath).toBe(true);
+    expect(fresh.metadataFilter?.filters?.component?.dimensions).toBe(false);
+    expect(BUILTIN_METADATA_FILTER_PRESETS["source-locate"]).toBeDefined();
+
+    // 2. v1 local config with manual filters migrates to v2 with preset: "custom" and backup .bak.v1
+    const v1Local = {
+      schemaVersion: 1,
+      metadataFilter: {
+        filters: {
+          component: { keyStyles: false },
+        },
+      },
+    };
+    fs.writeFileSync(path.join(projectDir, ".hoversourcerc"), JSON.stringify(v1Local), "utf-8");
+    const migratedV1 = loadMergedConfig(projectDir, globalConfigPath);
+    expect(migratedV1.schemaVersion).toBe(CURRENT_CONFIG_SCHEMA_VERSION);
+    expect(migratedV1.metadataFilter?.preset).toBe("custom");
+    expect(migratedV1.metadataFilter?.filters?.component?.keyStyles).toBe(false);
+    expect(migratedV1.metadataFilter?.filters?.component?.componentName).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, ".hoversourcerc.bak.v1"))).toBe(true);
+
+    // 3. Repo-local preset is only visible in that repo, and built-in shadow can be deleted to revert
+    saveFilterPreset(
+      "repo-only",
+      { component: { componentName: true, filePath: true }, layer: { layerSummary: true } },
+      "local",
+      projectDir,
+      globalConfigPath
+    );
+    const otherRepo = fs.mkdtempSync(path.join(os.tmpdir(), "hs-other-repo-"));
+    try {
+      const otherList = listFilterPresets(otherRepo, globalConfigPath);
+      expect(otherList.presets["repo-only"]).toBeUndefined();
+    } finally {
+      fs.rmSync(otherRepo, { recursive: true, force: true });
+    }
+
+    // Shadow built-in "minimal" in local scope, activate it, then delete override to revert to built-in
+    saveFilterPreset(
+      "minimal",
+      { component: { componentName: true, framework: true }, layer: { layer1: true }, design: { compInfo: true } },
+      "local",
+      projectDir,
+      globalConfigPath
+    );
+    const usedShadow = useFilterPreset("minimal", "local", projectDir, globalConfigPath);
+    expect(usedShadow.config.metadataFilter?.preset).toBe("minimal");
+    expect(usedShadow.config.metadataFilter?.filters?.component?.framework).toBe(true);
+
+    const deletedShadow = deleteFilterPreset("minimal", "local", projectDir, globalConfigPath);
+    expect(deletedShadow.deleted).toBe(true);
+    expect(deletedShadow.revertedTo).toBe("builtin");
+    expect(deletedShadow.config.metadataFilter?.preset).toBe("minimal");
+    expect(deletedShadow.config.metadataFilter?.filters?.component?.framework).toBe(false);
+
+    // Reject reserved "custom" preset name
+    expect(() =>
+      saveFilterPreset("custom", {}, "local", projectDir, globalConfigPath)
+    ).toThrow(ConfigValidationError);
   });
 });

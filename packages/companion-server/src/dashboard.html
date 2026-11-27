@@ -330,14 +330,31 @@
         </div>
       </div>
 
-      <!-- Default Metadata Fields -->
+      <!-- Metadata Filter Presets -->
       <div class="glass-card rounded-2xl p-6 shadow-xl space-y-5 lg:col-span-2">
-        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
           <div class="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-400" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" /></svg>
-            <h2 class="text-base font-semibold text-slate-200">Default Metadata Fields</h2>
+            <div>
+              <h2 class="text-base font-semibold text-slate-200">Metadata Filter Presets</h2>
+              <p class="text-[11px] text-slate-400">Built-in, global, and repo-local presets; toggling checkboxes switches to Custom</p>
+            </div>
           </div>
-          <span class="text-[11px] text-slate-400">Fields included in tooltips and clipboard output by default</span>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="mf-preset-select" aria-label="Metadata filter preset" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none min-w-[175px]">
+              <option value="source-locate">source-locate (builtin)</option>
+            </select>
+            <select id="mf-target-select" aria-label="Metadata filter persist scope" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none">
+              <option value="local">Repo (.hoversourcerc)</option>
+              <option value="global">Global (~/.hoversourcerc)</option>
+            </select>
+            <button id="mf-save-preset-btn" type="button" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium px-2.5 py-1.5 rounded-lg transition-all text-xs active:scale-95">
+              Save As Preset
+            </button>
+            <button id="mf-delete-preset-btn" type="button" class="text-red-400 hover:text-red-300 border border-red-950/80 bg-red-950/20 hover:bg-red-950/40 font-medium px-2.5 py-1.5 rounded-lg transition-all text-xs active:scale-95 disabled:opacity-40 disabled:pointer-events-none" title="Delete custom preset or revert shadowed built-in">
+              Delete
+            </button>
+          </div>
         </div>
 
         <div id="metadata-filter-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -431,10 +448,50 @@
     </div>
   </div>
 
+  <!-- Save Metadata Filter Preset Modal -->
+  <div id="mf-preset-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-200">
+    <div class="glass-card max-w-md w-full mx-4 rounded-2xl p-6 shadow-2xl border border-slate-700/50 transform scale-95 transition-transform duration-200" id="mf-preset-modal-content">
+      <h3 class="text-base font-bold text-slate-200 mb-2">Save Metadata Filter Preset</h3>
+      <p class="text-xs text-slate-400 leading-relaxed mb-4">
+        Overwrite an existing filter preset or enter a new name. Repo-local presets are visible only in this repository.
+      </p>
+      <label for="mf-overwrite-select" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Target Preset</label>
+      <select id="mf-overwrite-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none mb-3">
+        <option value="__new__">-- Enter new preset name --</option>
+      </select>
+      <label for="mf-name-input" class="sr-only">Metadata filter preset name</label>
+      <input id="mf-name-input" type="text" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 mb-3" placeholder="e.g. api-debug, source-locate">
+      <label for="mf-save-scope-select" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Save Scope</label>
+      <select id="mf-save-scope-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none mb-5">
+        <option value="local">Repo Local (.hoversourcerc)</option>
+        <option value="global">Global (~/.hoversourcerc)</option>
+      </select>
+      <div class="flex justify-end gap-3">
+        <button id="mf-cancel-btn" type="button" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold active:scale-95 transition-all">
+          Cancel
+        </button>
+        <button id="mf-confirm-btn" type="button" class="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold active:scale-95 transition-all shadow-lg shadow-blue-600/20">
+          Save Preset
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     const API_BASE = '';
     let loadedConfig = null;
     let presetsState = { presets: {}, activePreset: null, repoBinding: null, effectivePreset: null };
+    let filterPresetsState = {
+      presets: {},
+      sources: {},
+      builtinNames: [],
+      globalNames: [],
+      localNames: [],
+      activePreset: 'source-locate',
+      globalPreset: null,
+      localPreset: null
+    };
+    let currentMfPreset = 'source-locate';
     let currentProjectPath = '';
 
     function isMacPlatform() {
@@ -487,33 +544,34 @@
         toggleFilterPanel: { key: 'd', altKey: true, ctrlKey: true, shiftKey: false, metaKey: false }
       },
       metadataFilter: {
+        preset: 'source-locate',
         filters: {
           component: {
             componentName: true,
             elementSelector: true,
             filePath: true,
             framework: true,
-            dimensions: true,
-            keyStyles: true,
-            parentStyles: true,
-            layoutConstraints: true,
-            sourceComments: true,
-            sourceAttributes: true
+            dimensions: false,
+            keyStyles: false,
+            parentStyles: false,
+            layoutConstraints: false,
+            sourceComments: false,
+            sourceAttributes: false
           },
           layer: {
             layerSummary: true,
             layer1: true,
-            layer2: true,
-            htmlStructure: true
+            layer2: false,
+            htmlStructure: false
           },
           design: {
             compInfo: true,
-            horizontalAnchor: true,
-            verticalAnchor: true,
-            layoutContext: true,
-            suggestedCss: true,
+            horizontalAnchor: false,
+            verticalAnchor: false,
+            layoutContext: false,
+            suggestedCss: false,
             sourceFiles: true,
-            aiInstructions: true
+            aiInstructions: false
           }
         }
       }
@@ -549,6 +607,10 @@
     const deletePresetBtn = document.getElementById('delete-preset-btn');
     const bindRepoCheckbox = document.getElementById('bind-repo-checkbox');
     const bindRepoLabel = document.querySelector('.bind-repo-label');
+    const mfPresetSelect = document.getElementById('mf-preset-select');
+    const mfTargetSelect = document.getElementById('mf-target-select');
+    const mfSavePresetBtn = document.getElementById('mf-save-preset-btn');
+    const mfDeletePresetBtn = document.getElementById('mf-delete-preset-btn');
     const saveBtns = document.querySelectorAll('.save-btn');
     const resetBtns = document.querySelectorAll('.reset-btn');
 
@@ -654,6 +716,45 @@
       bindRepoCheckbox.disabled = !selectedPreset && !presetsState.repoBinding;
     }
 
+    function renderMetadataFilterPresetControls() {
+      const presets = filterPresetsState.presets || {};
+      const sources = filterPresetsState.sources || {};
+      const names = Object.keys(presets);
+      mfPresetSelect.innerHTML = '';
+
+      if (currentMfPreset === 'custom' || (currentMfPreset && !Object.prototype.hasOwnProperty.call(presets, currentMfPreset))) {
+        const customOpt = document.createElement('option');
+        customOpt.value = 'custom';
+        customOpt.textContent = 'Custom (Modified)';
+        mfPresetSelect.appendChild(customOpt);
+      }
+
+      for (const name of names) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        const src = sources[name] || 'builtin';
+        const tags = [src];
+        if (name === filterPresetsState.localPreset) tags.push('repo');
+        else if (name === filterPresetsState.globalPreset) tags.push('global');
+        opt.textContent = `${name} (${tags.join(', ')})`;
+        mfPresetSelect.appendChild(opt);
+      }
+
+      mfPresetSelect.value = currentMfPreset || 'source-locate';
+
+      const sel = mfPresetSelect.value;
+      const canDelete =
+        sel !== 'custom' &&
+        (filterPresetsState.localNames.includes(sel) || filterPresetsState.globalNames.includes(sel));
+      mfDeletePresetBtn.disabled = !canDelete;
+
+      if (currentMfPreset === 'custom') {
+        mfSavePresetBtn.classList.add('border-blue-500', 'text-blue-300');
+      } else {
+        mfSavePresetBtn.classList.remove('border-blue-500', 'text-blue-300');
+      }
+    }
+
     function applyConfigToUI(cfg) {
       themeSelect.value = cfg.theme || 'dark';
       minimalCheckbox.checked = !!cfg.minimalModeByDefault;
@@ -677,6 +778,8 @@
       setupScrollShortcutUI('layerPickerScroll', normalizeScrollMods(cfg.layerPickerScroll));
 
       const normalizedMf = normalizeMetadataFilters(cfg.metadataFilter?.filters);
+      currentMfPreset = cfg.metadataFilter?.preset || 'source-locate';
+      renderMetadataFilterPresetControls();
       document.querySelectorAll('input[data-mf-cat][data-mf-field]').forEach(cb => {
         const cat = cb.dataset.mfCat;
         const field = cb.dataset.mfField;
@@ -686,12 +789,14 @@
 
     async function refreshDashboardState() {
       try {
-        const [cfgRes, presetsRes] = await Promise.all([
+        const [cfgRes, presetsRes, mfPresetsRes] = await Promise.all([
           fetch(`${API_BASE}/config`),
-          fetch(`${API_BASE}/presets`)
+          fetch(`${API_BASE}/presets`),
+          fetch(`${API_BASE}/filter-presets`)
         ]);
         const cfgData = await cfgRes.json();
         const presetsData = await presetsRes.json();
+        const mfPresetsData = mfPresetsRes.ok ? await mfPresetsRes.json() : {};
 
         loadedConfig = cfgData.config;
         currentProjectPath = cfgData.currentProject || '';
@@ -700,6 +805,16 @@
           activePreset: presetsData.activePreset ?? null,
           repoBinding: presetsData.repoBinding ?? null,
           effectivePreset: presetsData.effectivePreset ?? null
+        };
+        filterPresetsState = {
+          presets: mfPresetsData.presets || {},
+          sources: mfPresetsData.sources || {},
+          builtinNames: mfPresetsData.builtinNames || [],
+          globalNames: mfPresetsData.globalNames || [],
+          localNames: mfPresetsData.localNames || [],
+          activePreset: mfPresetsData.activePreset || 'source-locate',
+          globalPreset: mfPresetsData.globalPreset ?? null,
+          localPreset: mfPresetsData.localPreset ?? null
         };
 
         renderPresetControls();
@@ -841,8 +956,96 @@
       proxyPortInput.addEventListener('input', checkChanges);
       devPortInput.addEventListener('input', checkChanges);
       companionConflictSelect.addEventListener('change', checkChanges);
+      mfPresetSelect.onchange = async () => {
+        const chosen = mfPresetSelect.value;
+        if (!chosen || chosen === 'custom') return;
+        const targetScope = mfTargetSelect.value === 'global' ? 'global' : 'local';
+        try {
+          const res = await fetch(`${API_BASE}/filter-presets/use`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: chosen, target: targetScope })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            showToast(data.error || 'Failed to activate filter preset', true);
+            await refreshDashboardState();
+            return;
+          }
+          showToast(`Metadata filter preset "${chosen}" saved to ${targetScope}`);
+          await refreshDashboardState();
+        } catch (e) {
+          console.error('Failed to switch metadata filter preset', e);
+          showToast('Failed to switch metadata filter preset', true);
+        }
+      };
+
+      mfSavePresetBtn.onclick = () => {
+        showSaveMetadataFilterPresetModal(async (presetName, scope) => {
+          const filters = getMetadataFiltersFromUI();
+          const saveRes = await fetch(`${API_BASE}/filter-presets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: presetName, scope, filters })
+          });
+          const saveData = await saveRes.json().catch(() => ({}));
+          if (!saveRes.ok) {
+            showToast(saveData.error || 'Failed to save filter preset', true);
+            return false;
+          }
+          const useRes = await fetch(`${API_BASE}/filter-presets/use`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: saveData.name || presetName, target: scope })
+          });
+          if (!useRes.ok) {
+            const useData = await useRes.json().catch(() => ({}));
+            showToast(useData.error || 'Saved preset, failed to activate it', true);
+          } else {
+            showToast(`Saved filter preset "${saveData.name || presetName}" (${scope})`);
+          }
+          await refreshDashboardState();
+          return true;
+        });
+      };
+
+      mfDeletePresetBtn.onclick = () => {
+        const name = mfPresetSelect.value;
+        if (!name || name === 'custom') return;
+        const inLocal = filterPresetsState.localNames.includes(name);
+        const inGlobal = filterPresetsState.globalNames.includes(name);
+        const scope = inLocal ? 'local' : (inGlobal ? 'global' : null);
+        if (!scope) return;
+        const isShadowed = filterPresetsState.builtinNames.includes(name) || (inLocal && inGlobal);
+        const actionDesc = isShadowed
+          ? `Remove ${scope} override for "${name}" and revert?`
+          : `Delete filter preset "${name}" from ${scope}?`;
+        showConfirm(actionDesc, async () => {
+          try {
+            const res = await fetch(
+              `${API_BASE}/filter-presets?name=${encodeURIComponent(name)}&scope=${encodeURIComponent(scope)}`,
+              { method: 'DELETE' }
+            );
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              showToast(data.error || 'Failed to delete filter preset', true);
+              return;
+            }
+            showToast(data.revertedTo ? `Reverted "${name}" to ${data.revertedTo}` : `Deleted filter preset "${name}"`);
+            await refreshDashboardState();
+          } catch (e) {
+            console.error('Error deleting filter preset', e);
+            showToast('Failed to delete filter preset', true);
+          }
+        });
+      };
+
       document.querySelectorAll('input[data-mf-cat][data-mf-field]').forEach(cb => {
-        cb.addEventListener('change', checkChanges);
+        cb.addEventListener('change', () => {
+          currentMfPreset = 'custom';
+          renderMetadataFilterPresetControls();
+          checkChanges();
+        });
       });
     }
 
@@ -1013,6 +1216,7 @@
         shortcuts,
         layerPickerScroll: getScrollShortcutFromUI('layerPickerScroll'),
         metadataFilter: {
+          preset: currentMfPreset || 'source-locate',
           filters: getMetadataFiltersFromUI()
         },
         ports: {
@@ -1042,6 +1246,7 @@
         shortcuts,
         layerPickerScroll: normalizeScrollMods(cfg.layerPickerScroll),
         metadataFilter: {
+          preset: cfg.metadataFilter?.preset || 'source-locate',
           filters: normalizeMetadataFilters(cfg.metadataFilter?.filters)
         },
         ports: normalizePortsForCompare(cfg.ports)
@@ -1139,6 +1344,88 @@
         }
       };
     });
+
+    function showSaveMetadataFilterPresetModal(onSubmit) {
+      const modal = document.getElementById('mf-preset-modal');
+      const content = document.getElementById('mf-preset-modal-content');
+      const overwriteSelect = document.getElementById('mf-overwrite-select');
+      const input = document.getElementById('mf-name-input');
+      const scopeSelect = document.getElementById('mf-save-scope-select');
+      const cancelBtn = document.getElementById('mf-cancel-btn');
+      const confirmBtn = document.getElementById('mf-confirm-btn');
+
+      overwriteSelect.innerHTML = '';
+      const newOpt = document.createElement('option');
+      newOpt.value = '__new__';
+      newOpt.textContent = '-- Enter new preset name --';
+      overwriteSelect.appendChild(newOpt);
+      for (const name of Object.keys(filterPresetsState.presets || {})) {
+        const src = filterPresetsState.sources?.[name] || 'builtin';
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = `Overwrite: ${name} (${src})`;
+        overwriteSelect.appendChild(opt);
+      }
+
+      overwriteSelect.value = '__new__';
+      input.value = '';
+      input.readOnly = false;
+      scopeSelect.value = mfTargetSelect.value === 'global' ? 'global' : 'local';
+
+      overwriteSelect.onchange = () => {
+        if (overwriteSelect.value === '__new__') {
+          input.value = '';
+          input.readOnly = false;
+          input.focus();
+        } else {
+          input.value = overwriteSelect.value;
+          input.readOnly = true;
+        }
+      };
+
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        content.classList.remove('scale-95');
+        content.classList.add('scale-100');
+        input.focus();
+      }, 10);
+
+      const close = () => {
+        modal.classList.add('opacity-0');
+        content.classList.remove('scale-100');
+        content.classList.add('scale-95');
+        setTimeout(() => {
+          modal.classList.add('hidden');
+        }, 200);
+      };
+
+      const submit = async () => {
+        const name = (overwriteSelect.value !== '__new__' ? overwriteSelect.value : input.value).trim();
+        if (!name || name.toLowerCase() === 'custom') {
+          showToast('Enter a valid preset name (not "custom")', true);
+          input.focus();
+          return;
+        }
+        const scope = scopeSelect.value === 'global' ? 'global' : 'local';
+        const ok = await onSubmit(name, scope);
+        if (ok) {
+          close();
+        }
+      };
+
+      cancelBtn.onclick = close;
+      confirmBtn.onclick = submit;
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submit();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          close();
+        }
+      };
+    }
 
     function showSavePresetModal(onSubmit) {
       const modal = document.getElementById('preset-modal');

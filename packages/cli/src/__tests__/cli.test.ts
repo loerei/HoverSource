@@ -233,6 +233,7 @@ describe("showHelp", () => {
     expect(logSpy).toHaveBeenCalledTimes(1);
     const output = String(logSpy.mock.calls[0][0]);
     expect(output).toContain("config preset");
+    expect(output).toContain("config filter-preset");
     expect(output).toContain("--dev-port");
     expect(output).toContain("--https");
     expect(output).toContain(".hoversourcerc");

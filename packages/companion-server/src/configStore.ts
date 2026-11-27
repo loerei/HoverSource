@@ -34,7 +34,56 @@ export interface PortsConfig {
   companionConflict?: CompanionConflictPolicy;
 }
 
-export const CURRENT_CONFIG_SCHEMA_VERSION = 1;
+export const CURRENT_CONFIG_SCHEMA_VERSION = 2;
+export const DEFAULT_METADATA_FILTER_PRESET = "source-locate";
+
+export interface MetadataFilterMap {
+  component: Record<string, boolean>;
+  layer: Record<string, boolean>;
+  design: Record<string, boolean>;
+}
+
+export type MetadataFilterPresetPayload = Partial<Record<FilterCategory, Record<string, boolean>>>;
+export type MetadataFilterPresetSource = "builtin" | "global" | "local";
+
+export interface FilterPresetListResult {
+  presets: Record<string, MetadataFilterMap>;
+  sources: Record<string, MetadataFilterPresetSource>;
+  builtinNames: string[];
+  globalNames: string[];
+  localNames: string[];
+  activePreset: string;
+  globalPreset: string | null;
+  localPreset: string | null;
+  filters: MetadataFilterMap;
+}
+
+export interface SaveFilterPresetResult {
+  name: string;
+  scope: "local" | "global";
+  filters: MetadataFilterMap;
+  savedTo: string;
+  list: FilterPresetListResult;
+}
+
+export interface UseFilterPresetResult {
+  activePreset: string | null;
+  scope: "local" | "global";
+  savedTo: string;
+  config: HoverSourceConfig;
+  list: FilterPresetListResult;
+}
+
+export interface DeleteFilterPresetResult {
+  deleted: boolean;
+  name: string;
+  scope: "local" | "global";
+  revertedTo: MetadataFilterPresetSource | null;
+  clearedActive: boolean;
+  savedTo: string;
+  config: HoverSourceConfig;
+  list: FilterPresetListResult;
+}
 
 export interface HoverSourceConfig {
   schemaVersion?: number;
@@ -64,6 +113,8 @@ export interface HoverSourceConfig {
   };
   metadataFilter?: {
     panelPosition?: { x: number; y: number };
+    preset?: string;
+    presets?: Record<string, MetadataFilterPresetPayload>;
     filters?: {
       component?: Record<string, boolean>;
       layer?: Record<string, boolean>;
@@ -82,6 +133,7 @@ export interface PresetConfig {
   shortcuts?: Partial<Record<ShortcutAction, Partial<ShortcutKey>>>;
   metadataFilter?: {
     panelPosition?: { x?: number; y?: number };
+    preset?: string;
     filters?: Partial<Record<FilterCategory, Record<string, boolean>>>;
   };
 }
@@ -147,6 +199,8 @@ export interface ConfigDelta {
   shortcuts?: Partial<Record<ShortcutAction, Partial<ShortcutKey>>>;
   metadataFilter?: {
     panelPosition?: { x?: number; y?: number };
+    preset?: string;
+    presets?: Record<string, MetadataFilterPresetPayload>;
     filters?: Partial<Record<FilterCategory, Record<string, boolean>>>;
   };
 }
@@ -181,6 +235,127 @@ export interface DeleteConfigResult {
   newConfig: HoverSourceConfig;
 }
 
+const FULL_METADATA_FILTERS: MetadataFilterMap = {
+  component: {
+    componentName: true,
+    elementSelector: true,
+    filePath: true,
+    framework: true,
+    dimensions: true,
+    keyStyles: true,
+    parentStyles: true,
+    layoutConstraints: true,
+    sourceComments: true,
+    sourceAttributes: true,
+  },
+  layer: {
+    layerSummary: true,
+    layer1: true,
+    layer2: true,
+    htmlStructure: true,
+  },
+  design: {
+    compInfo: true,
+    horizontalAnchor: true,
+    verticalAnchor: true,
+    layoutContext: true,
+    suggestedCss: true,
+    sourceFiles: true,
+    aiInstructions: true,
+  },
+};
+
+export const BUILTIN_METADATA_FILTER_PRESETS: Record<string, MetadataFilterMap> = {
+  full: structuredClone(FULL_METADATA_FILTERS),
+  "source-locate": {
+    component: {
+      componentName: true,
+      elementSelector: true,
+      filePath: true,
+      framework: true,
+      dimensions: false,
+      keyStyles: false,
+      parentStyles: false,
+      layoutConstraints: false,
+      sourceComments: false,
+      sourceAttributes: false,
+    },
+    layer: {
+      layerSummary: true,
+      layer1: true,
+      layer2: false,
+      htmlStructure: false,
+    },
+    design: {
+      compInfo: true,
+      horizontalAnchor: false,
+      verticalAnchor: false,
+      layoutContext: false,
+      suggestedCss: false,
+      sourceFiles: true,
+      aiInstructions: false,
+    },
+  },
+  "layout-styles": {
+    component: {
+      componentName: true,
+      elementSelector: true,
+      filePath: true,
+      framework: false,
+      dimensions: true,
+      keyStyles: true,
+      parentStyles: true,
+      layoutConstraints: true,
+      sourceComments: false,
+      sourceAttributes: false,
+    },
+    layer: {
+      layerSummary: true,
+      layer1: true,
+      layer2: true,
+      htmlStructure: true,
+    },
+    design: {
+      compInfo: true,
+      horizontalAnchor: true,
+      verticalAnchor: true,
+      layoutContext: true,
+      suggestedCss: true,
+      sourceFiles: false,
+      aiInstructions: false,
+    },
+  },
+  minimal: {
+    component: {
+      componentName: true,
+      elementSelector: true,
+      filePath: true,
+      framework: false,
+      dimensions: false,
+      keyStyles: false,
+      parentStyles: false,
+      layoutConstraints: false,
+      sourceComments: false,
+      sourceAttributes: false,
+    },
+    layer: {
+      layerSummary: true,
+      layer1: false,
+      layer2: false,
+      htmlStructure: false,
+    },
+    design: {
+      compInfo: true,
+      horizontalAnchor: false,
+      verticalAnchor: false,
+      layoutContext: false,
+      suggestedCss: false,
+      sourceFiles: true,
+      aiInstructions: false,
+    },
+  },
+};
+
 export const DEFAULT_CONFIG: HoverSourceConfig = {
   schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
   theme: "dark",
@@ -209,35 +384,8 @@ export const DEFAULT_CONFIG: HoverSourceConfig = {
     toggleFilterPanel: { key: "d", altKey: true, ctrlKey: true, shiftKey: false, metaKey: false },
   },
   metadataFilter: {
-    filters: {
-      component: {
-        componentName: true,
-        elementSelector: true,
-        filePath: true,
-        framework: true,
-        dimensions: true,
-        keyStyles: true,
-        parentStyles: true,
-        layoutConstraints: true,
-        sourceComments: true,
-        sourceAttributes: true,
-      },
-      layer: {
-        layerSummary: true,
-        layer1: true,
-        layer2: true,
-        htmlStructure: true,
-      },
-      design: {
-        compInfo: true,
-        horizontalAnchor: true,
-        verticalAnchor: true,
-        layoutContext: true,
-        suggestedCss: true,
-        sourceFiles: true,
-        aiInstructions: true,
-      },
-    },
+    preset: DEFAULT_METADATA_FILTER_PRESET,
+    filters: structuredClone(BUILTIN_METADATA_FILTER_PRESETS[DEFAULT_METADATA_FILTER_PRESET]),
   },
 };
 
@@ -510,6 +658,72 @@ function validateScrollDelta(
   return out;
 }
 
+function normalizeFilterMap(
+  rawFilters: unknown,
+  defaultValue = false
+): MetadataFilterMap {
+  const src = isPlainObject(rawFilters) ? rawFilters : {};
+  const out: MetadataFilterMap = { component: {}, layer: {}, design: {} };
+  for (const cat of VALID_FILTER_CATEGORIES) {
+    const catKey = cat as FilterCategory;
+    const rawCat = isPlainObject(src[catKey]) ? (src[catKey] as Record<string, unknown>) : {};
+    for (const field of Object.keys(FULL_METADATA_FILTERS[catKey])) {
+      const val = rawCat[field];
+      out[catKey][field] = typeof val === "boolean" ? val : defaultValue;
+    }
+  }
+  return out;
+}
+
+function validateMetadataFilterFilters(
+  filters: unknown,
+  fieldPrefix: string,
+  issues: ConfigValidationIssue[]
+): Partial<Record<FilterCategory, Record<string, boolean>>> | undefined {
+  if (!isPlainObject(filters)) {
+    issues.push({ path: fieldPrefix, message: `${fieldPrefix} must be an object` });
+    return undefined;
+  }
+  const outFilters: Partial<Record<FilterCategory, Record<string, boolean>>> = {};
+  for (const category of Object.keys(filters)) {
+    if (DISALLOWED_PROTO_KEYS.has(category) || !VALID_FILTER_CATEGORIES.has(category)) {
+      issues.push({
+        path: `${fieldPrefix}.${category}`,
+        message: `Unknown metadataFilter category: ${fieldPrefix}.${category}`,
+      });
+      continue;
+    }
+    const catObj = filters[category];
+    if (!isPlainObject(catObj)) {
+      issues.push({
+        path: `${fieldPrefix}.${category}`,
+        message: `${fieldPrefix}.${category} must be an object`,
+      });
+      continue;
+    }
+    const outCat: Record<string, boolean> = {};
+    for (const field of Object.keys(catObj)) {
+      if (DISALLOWED_PROTO_KEYS.has(field)) {
+        issues.push({
+          path: `${fieldPrefix}.${category}.${field}`,
+          message: `Invalid filter key: ${field}`,
+        });
+        continue;
+      }
+      const parsedBool = validateBoolean(
+        catObj[field],
+        `${fieldPrefix}.${category}.${field}`,
+        issues
+      );
+      if (parsedBool !== undefined) {
+        outCat[field] = parsedBool;
+      }
+    }
+    outFilters[category as FilterCategory] = outCat;
+  }
+  return outFilters;
+}
+
 function validateMetadataFilterDelta(
   raw: unknown,
   issues: ConfigValidationIssue[]
@@ -520,7 +734,10 @@ function validateMetadataFilterDelta(
   }
   const out: NonNullable<ConfigDelta["metadataFilter"]> = {};
   for (const key of Object.keys(raw)) {
-    if (DISALLOWED_PROTO_KEYS.has(key) || (key !== "panelPosition" && key !== "filters")) {
+    if (
+      DISALLOWED_PROTO_KEYS.has(key) ||
+      (key !== "panelPosition" && key !== "filters" && key !== "preset" && key !== "presets")
+    ) {
       issues.push({ path: `metadataFilter.${key}`, message: `Unknown metadataFilter field: metadataFilter.${key}` });
       continue;
     }
@@ -550,50 +767,51 @@ function validateMetadataFilterDelta(
         }
       }
       out.panelPosition = outPos;
-    } else if (key === "filters") {
-      const filters = raw.filters;
-      if (!isPlainObject(filters)) {
-        issues.push({ path: "metadataFilter.filters", message: "metadataFilter.filters must be an object" });
+    } else if (key === "preset") {
+      const presetVal = raw.preset;
+      const valid = typeof presetVal === "string" ? presetVal.trim() : "";
+      if (valid.length === 0 || DISALLOWED_PROTO_KEYS.has(valid)) {
+        issues.push({
+          path: "metadataFilter.preset",
+          message: "metadataFilter.preset must be a valid non-empty string",
+        });
+      } else {
+        out.preset = valid;
+      }
+    } else if (key === "presets") {
+      const presetsObj = raw.presets;
+      if (!isPlainObject(presetsObj)) {
+        issues.push({ path: "metadataFilter.presets", message: "metadataFilter.presets must be an object" });
         continue;
       }
-      const outFilters: Partial<Record<FilterCategory, Record<string, boolean>>> = {};
-      for (const category of Object.keys(filters)) {
-        if (DISALLOWED_PROTO_KEYS.has(category) || !VALID_FILTER_CATEGORIES.has(category)) {
+      const outPresets: Record<string, MetadataFilterPresetPayload> = {};
+      for (const presetName of Object.keys(presetsObj)) {
+        if (
+          DISALLOWED_PROTO_KEYS.has(presetName) ||
+          presetName.trim().length === 0 ||
+          presetName.trim().toLowerCase() === "custom"
+        ) {
           issues.push({
-            path: `metadataFilter.filters.${category}`,
-            message: `Unknown metadataFilter category: metadataFilter.filters.${category}`,
+            path: `metadataFilter.presets.${presetName}`,
+            message: `Invalid filter preset name: ${presetName}`,
           });
           continue;
         }
-        const catObj = filters[category];
-        if (!isPlainObject(catObj)) {
-          issues.push({
-            path: `metadataFilter.filters.${category}`,
-            message: `metadataFilter.filters.${category} must be an object`,
-          });
-          continue;
+        const validatedFilters = validateMetadataFilterFilters(
+          presetsObj[presetName],
+          `metadataFilter.presets.${presetName}`,
+          issues
+        );
+        if (validatedFilters) {
+          outPresets[presetName.trim()] = validatedFilters;
         }
-        const outCat: Record<string, boolean> = {};
-        for (const field of Object.keys(catObj)) {
-          if (DISALLOWED_PROTO_KEYS.has(field)) {
-            issues.push({
-              path: `metadataFilter.filters.${category}.${field}`,
-              message: `Invalid filter key: ${field}`,
-            });
-            continue;
-          }
-          const parsedBool = validateBoolean(
-            catObj[field],
-            `metadataFilter.filters.${category}.${field}`,
-            issues
-          );
-          if (parsedBool !== undefined) {
-            outCat[field] = parsedBool;
-          }
-        }
-        outFilters[category as FilterCategory] = outCat;
       }
-      out.filters = outFilters;
+      out.presets = outPresets;
+    } else if (key === "filters") {
+      const validatedFilters = validateMetadataFilterFilters(raw.filters, "metadataFilter.filters", issues);
+      if (validatedFilters) {
+        out.filters = validatedFilters;
+      }
     }
   }
   return out;
@@ -923,6 +1141,9 @@ export function buildDeltaFromKeyValue(keyPath: string, rawValue: string): Parse
   }
 
   if (segments[0] === "metadataFilter") {
+    if (segments.length === 2 && segments[1] === "preset") {
+      return parseConfigDelta({ metadataFilter: { preset: rawValue } });
+    }
     if (segments.length === 3 && segments[1] === "panelPosition" && (segments[2] === "x" || segments[2] === "y")) {
       const numVal = parseStrictNumber(rawValue);
       if (numVal === null) {
@@ -1021,6 +1242,11 @@ function stripNonRuntimeKeys(
   delete sanitized.presets;
   delete sanitized.activePreset;
   delete sanitized.preset;
+  if (isPlainObject(sanitized.metadataFilter)) {
+    const mfCopy = { ...sanitized.metadataFilter };
+    delete mfCopy.presets;
+    sanitized.metadataFilter = mfCopy;
+  }
   if (isGlobal) {
     for (const key of LOCAL_ONLY_SCAN_KEYS) {
       delete sanitized[key];
@@ -1058,6 +1284,93 @@ export function validatePresetName(name: unknown): string {
     ]);
   }
   return trimmed;
+}
+
+export function validateFilterPresetName(name: unknown): string {
+  const trimmed = validatePresetName(name);
+  if (trimmed.toLowerCase() === "custom") {
+    throw new ConfigValidationError('Preset name "custom" is reserved', [
+      { path: "preset", message: 'Preset name "custom" is reserved' },
+    ]);
+  }
+  return trimmed;
+}
+
+function readValidFilterPresetName(value: unknown): string | null {
+  const valid = readValidPresetName(value);
+  if (!valid || valid.toLowerCase() === "custom") {
+    return null;
+  }
+  return valid;
+}
+
+function readSelectedFilterPreset(raw: Record<string, unknown> | null): string | null {
+  if (!raw || !isPlainObject(raw.metadataFilter)) {
+    return null;
+  }
+  const rawPreset = raw.metadataFilter.preset;
+  if (typeof rawPreset !== "string") {
+    return null;
+  }
+  const trimmed = rawPreset.trim();
+  if (trimmed.length === 0 || DISALLOWED_PROTO_KEYS.has(trimmed)) {
+    return null;
+  }
+  return trimmed.toLowerCase() === "custom" ? "custom" : trimmed;
+}
+
+function readFilterPresetsMap(raw: Record<string, unknown> | null): Record<string, MetadataFilterMap> {
+  const result: Record<string, MetadataFilterMap> = {};
+  if (!raw || !isPlainObject(raw.metadataFilter) || !isPlainObject(raw.metadataFilter.presets)) {
+    return result;
+  }
+  const rawPresets = raw.metadataFilter.presets;
+  for (const key of Object.keys(rawPresets)) {
+    const validName = readValidFilterPresetName(key);
+    if (!validName) {
+      continue;
+    }
+    const candidate = rawPresets[key];
+    if (!isPlainObject(candidate)) {
+      continue;
+    }
+    result[validName] = normalizeFilterMap(candidate, false);
+  }
+  return result;
+}
+
+function resolveFilterPresetCatalog(
+  globalRaw: Record<string, unknown> | null,
+  localRaw: Record<string, unknown> | null
+): {
+  presets: Record<string, MetadataFilterMap>;
+  sources: Record<string, MetadataFilterPresetSource>;
+  builtinNames: string[];
+  globalPresets: Record<string, MetadataFilterMap>;
+  localPresets: Record<string, MetadataFilterMap>;
+} {
+  const presets: Record<string, MetadataFilterMap> = {};
+  const sources: Record<string, MetadataFilterPresetSource> = {};
+  const builtinNames = Object.keys(BUILTIN_METADATA_FILTER_PRESETS);
+
+  for (const name of builtinNames) {
+    presets[name] = structuredClone(BUILTIN_METADATA_FILTER_PRESETS[name]);
+    sources[name] = "builtin";
+  }
+
+  const globalPresets = readFilterPresetsMap(globalRaw);
+  for (const name of Object.keys(globalPresets)) {
+    presets[name] = structuredClone(globalPresets[name]);
+    sources[name] = "global";
+  }
+
+  const localPresets = readFilterPresetsMap(localRaw);
+  for (const name of Object.keys(localPresets)) {
+    presets[name] = structuredClone(localPresets[name]);
+    sources[name] = "local";
+  }
+
+  return { presets, sources, builtinNames, globalPresets, localPresets };
 }
 
 function extractPresetFields(raw: Record<string, unknown>): PresetConfig {
@@ -1148,6 +1461,22 @@ export function migrateConfigObject(
     }
     migrated.schemaVersion = 1;
     changed = true;
+  }
+
+  if (fromVersion < 2) {
+    if (
+      isPlainObject(migrated.metadataFilter) &&
+      migrated.metadataFilter.preset === undefined &&
+      isPlainObject(migrated.metadataFilter.filters)
+    ) {
+      migrated.metadataFilter = {
+        ...migrated.metadataFilter,
+        preset: "custom",
+      };
+      changed = true;
+    }
+    migrated.schemaVersion = 2;
+    changed = true;
   } else if (raw.schemaVersion !== CURRENT_CONFIG_SCHEMA_VERSION) {
     migrated.schemaVersion = CURRENT_CONFIG_SCHEMA_VERSION;
     changed = true;
@@ -1200,16 +1529,69 @@ export function loadMergedConfig(projectRoot: string, globalConfigPath?: string)
   const localPresetName = readValidPresetName(localConfig?.preset);
   const globalActivePresetName = readValidPresetName(globalConfig?.activePreset);
   const resolvedPresetName = localPresetName ?? globalActivePresetName;
+  let fullPresetConfig: PresetConfig | undefined;
 
   if (resolvedPresetName && globalConfig) {
     const presetsMap = readPresetsMap(globalConfig);
     if (Object.prototype.hasOwnProperty.call(presetsMap, resolvedPresetName)) {
-      config = mergeDeep<HoverSourceConfig>(config, presetsMap[resolvedPresetName]);
+      fullPresetConfig = presetsMap[resolvedPresetName];
+      config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(fullPresetConfig as Record<string, unknown>, true));
     }
   }
 
   if (localConfig) {
     config = mergeDeep<HoverSourceConfig>(config, stripNonRuntimeKeys(localConfig, false));
+  }
+
+  const catalog = resolveFilterPresetCatalog(globalConfig, localConfig);
+  const localSelectedFilterPreset = readSelectedFilterPreset(localConfig);
+  const fullPresetSelectedFilter = readSelectedFilterPreset(
+    (fullPresetConfig as Record<string, unknown> | undefined) ?? null
+  );
+  const globalSelectedFilterPreset = readSelectedFilterPreset(globalConfig);
+
+  let effectiveFilterPreset =
+    localSelectedFilterPreset ??
+    fullPresetSelectedFilter ??
+    globalSelectedFilterPreset ??
+    DEFAULT_METADATA_FILTER_PRESET;
+
+  if (
+    effectiveFilterPreset !== "custom" &&
+    Object.prototype.hasOwnProperty.call(catalog.presets, effectiveFilterPreset)
+  ) {
+    config.metadataFilter = {
+      ...(config.metadataFilter ?? {}),
+      preset: effectiveFilterPreset,
+      filters: structuredClone(catalog.presets[effectiveFilterPreset]),
+    };
+  } else if (effectiveFilterPreset === "custom") {
+    let customFilters = structuredClone(FULL_METADATA_FILTERS);
+    if (isPlainObject(globalConfig?.metadataFilter) && isPlainObject(globalConfig.metadataFilter.filters)) {
+      customFilters = mergeDeep<MetadataFilterMap>(customFilters, globalConfig.metadataFilter.filters);
+    }
+    if (
+      fullPresetConfig &&
+      isPlainObject(fullPresetConfig.metadataFilter) &&
+      isPlainObject(fullPresetConfig.metadataFilter.filters)
+    ) {
+      customFilters = mergeDeep<MetadataFilterMap>(customFilters, fullPresetConfig.metadataFilter.filters);
+    }
+    if (isPlainObject(localConfig?.metadataFilter) && isPlainObject(localConfig.metadataFilter.filters)) {
+      customFilters = mergeDeep<MetadataFilterMap>(customFilters, localConfig.metadataFilter.filters);
+    }
+    config.metadataFilter = {
+      ...(config.metadataFilter ?? {}),
+      preset: "custom",
+      filters: normalizeFilterMap(customFilters, true),
+    };
+  } else {
+    effectiveFilterPreset = DEFAULT_METADATA_FILTER_PRESET;
+    config.metadataFilter = {
+      ...(config.metadataFilter ?? {}),
+      preset: effectiveFilterPreset,
+      filters: structuredClone(catalog.presets[effectiveFilterPreset]),
+    };
   }
 
   stripNullPortOverrides(config as unknown as Record<string, unknown>);
@@ -1286,6 +1668,15 @@ export function saveConfigDelta(
   const scope: "global" | "local" = target === "global" ? "global" : "local";
   const existing = readAndMigrateConfigFile(targetPath, scope) ?? {};
   const mergedTarget = mergeDeep<Record<string, unknown>>(existing, parsed.value);
+  if (parsed.value.metadataFilter && isPlainObject(mergedTarget.metadataFilter)) {
+    const mfDelta = parsed.value.metadataFilter;
+    const mfTarget = mergedTarget.metadataFilter;
+    if (mfDelta.preset && mfDelta.preset !== "custom" && mfDelta.filters === undefined) {
+      delete mfTarget.filters;
+    } else if (mfDelta.filters !== undefined && mfDelta.preset === undefined) {
+      mfTarget.preset = "custom";
+    }
+  }
   stripNullPortOverrides(mergedTarget);
   if (
     typeof existing.schemaVersion !== "number" ||
@@ -1547,5 +1938,211 @@ export function bindRepoPreset(
     boundPreset: validatedName,
     savedTo: localPath,
     config: loadMergedConfig(projectRoot, globalConfigPath),
+  };
+}
+
+
+export function listFilterPresets(
+  projectRoot: string,
+  globalConfigPath?: string
+): FilterPresetListResult {
+  const globalRaw = readAndMigrateConfigFile(getGlobalConfigPath(globalConfigPath), "global");
+  const localRaw = readAndMigrateConfigFile(getLocalConfigPath(projectRoot), "local");
+  const catalog = resolveFilterPresetCatalog(globalRaw, localRaw);
+  const merged = loadMergedConfig(projectRoot, globalConfigPath);
+
+  return {
+    presets: catalog.presets,
+    sources: catalog.sources,
+    builtinNames: catalog.builtinNames,
+    globalNames: Object.keys(catalog.globalPresets),
+    localNames: Object.keys(catalog.localPresets),
+    activePreset: merged.metadataFilter?.preset ?? DEFAULT_METADATA_FILTER_PRESET,
+    globalPreset: readSelectedFilterPreset(globalRaw),
+    localPreset: readSelectedFilterPreset(localRaw),
+    filters: normalizeFilterMap(merged.metadataFilter?.filters, true),
+  };
+}
+
+export function saveFilterPreset(
+  name: unknown,
+  filtersData: MetadataFilterPresetPayload | null | undefined,
+  scope: "local" | "global",
+  projectRoot: string,
+  globalConfigPath?: string
+): SaveFilterPresetResult {
+  const validatedName = validateFilterPresetName(name);
+  let normalizedFilters: MetadataFilterMap;
+
+  if (filtersData === null || filtersData === undefined) {
+    const merged = loadMergedConfig(projectRoot, globalConfigPath);
+    normalizedFilters = normalizeFilterMap(merged.metadataFilter?.filters, true);
+  } else {
+    const issues: ConfigValidationIssue[] = [];
+    const validated = validateMetadataFilterFilters(filtersData, "metadataFilter.filters", issues);
+    if (issues.length > 0 || !validated) {
+      throw new ConfigValidationError(
+        issues.map((i) => i.message).join("; ") || "Invalid metadataFilter preset payload",
+        issues
+      );
+    }
+    normalizedFilters = normalizeFilterMap(validated, false);
+  }
+
+  const targetPath = scope === "global" ? getGlobalConfigPath(globalConfigPath) : getLocalConfigPath(projectRoot);
+  const targetRaw = readAndMigrateConfigFile(targetPath, scope) ?? {};
+  const existingMf = isPlainObject(targetRaw.metadataFilter) ? { ...targetRaw.metadataFilter } : {};
+  const existingPresets = readFilterPresetsMap(targetRaw);
+  existingPresets[validatedName] = normalizedFilters;
+  existingMf.presets = existingPresets;
+  targetRaw.metadataFilter = existingMf;
+
+  if (
+    typeof targetRaw.schemaVersion !== "number" ||
+    targetRaw.schemaVersion <= CURRENT_CONFIG_SCHEMA_VERSION
+  ) {
+    targetRaw.schemaVersion = CURRENT_CONFIG_SCHEMA_VERSION;
+  }
+
+  writeJsonAtomic(targetPath, targetRaw);
+
+  return {
+    name: validatedName,
+    scope,
+    filters: normalizedFilters,
+    savedTo: targetPath,
+    list: listFilterPresets(projectRoot, globalConfigPath),
+  };
+}
+
+export function useFilterPreset(
+  name: string | null,
+  scope: "local" | "global",
+  projectRoot: string,
+  globalConfigPath?: string
+): UseFilterPresetResult {
+  const targetPath = scope === "global" ? getGlobalConfigPath(globalConfigPath) : getLocalConfigPath(projectRoot);
+  const targetRaw = readAndMigrateConfigFile(targetPath, scope) ?? {};
+  const existingMf = isPlainObject(targetRaw.metadataFilter) ? { ...targetRaw.metadataFilter } : {};
+
+  if (name === null) {
+    delete existingMf.preset;
+    delete existingMf.filters;
+    if (Object.keys(existingMf).length > 0) {
+      targetRaw.metadataFilter = existingMf;
+    } else {
+      delete targetRaw.metadataFilter;
+    }
+    if (
+      typeof targetRaw.schemaVersion !== "number" ||
+      targetRaw.schemaVersion <= CURRENT_CONFIG_SCHEMA_VERSION
+    ) {
+      targetRaw.schemaVersion = CURRENT_CONFIG_SCHEMA_VERSION;
+    }
+    writeJsonAtomic(targetPath, targetRaw);
+    return {
+      activePreset: null,
+      scope,
+      savedTo: targetPath,
+      config: loadMergedConfig(projectRoot, globalConfigPath),
+      list: listFilterPresets(projectRoot, globalConfigPath),
+    };
+  }
+
+  const validatedName = validateFilterPresetName(name);
+  const catalog = listFilterPresets(projectRoot, globalConfigPath);
+  if (!Object.prototype.hasOwnProperty.call(catalog.presets, validatedName)) {
+    throw new ConfigValidationError(`Unknown filter preset "${validatedName}"`, [
+      { path: "metadataFilter.preset", message: `Unknown filter preset "${validatedName}"` },
+    ]);
+  }
+
+  existingMf.preset = validatedName;
+  delete existingMf.filters;
+  targetRaw.metadataFilter = existingMf;
+  if (
+    typeof targetRaw.schemaVersion !== "number" ||
+    targetRaw.schemaVersion <= CURRENT_CONFIG_SCHEMA_VERSION
+  ) {
+    targetRaw.schemaVersion = CURRENT_CONFIG_SCHEMA_VERSION;
+  }
+
+  writeJsonAtomic(targetPath, targetRaw);
+
+  return {
+    activePreset: validatedName,
+    scope,
+    savedTo: targetPath,
+    config: loadMergedConfig(projectRoot, globalConfigPath),
+    list: listFilterPresets(projectRoot, globalConfigPath),
+  };
+}
+
+export function deleteFilterPreset(
+  name: unknown,
+  scope: "local" | "global",
+  projectRoot: string,
+  globalConfigPath?: string
+): DeleteFilterPresetResult {
+  const validatedName = validateFilterPresetName(name);
+  const targetPath = scope === "global" ? getGlobalConfigPath(globalConfigPath) : getLocalConfigPath(projectRoot);
+  const targetRaw = readAndMigrateConfigFile(targetPath, scope);
+  const existingPresets = readFilterPresetsMap(targetRaw);
+
+  if (!targetRaw || !Object.prototype.hasOwnProperty.call(existingPresets, validatedName)) {
+    const currentList = listFilterPresets(projectRoot, globalConfigPath);
+    const revertedTo = Object.prototype.hasOwnProperty.call(currentList.sources, validatedName)
+      ? currentList.sources[validatedName]
+      : null;
+    return {
+      deleted: false,
+      name: validatedName,
+      scope,
+      revertedTo,
+      clearedActive: false,
+      savedTo: targetPath,
+      config: loadMergedConfig(projectRoot, globalConfigPath),
+      list: currentList,
+    };
+  }
+
+  delete existingPresets[validatedName];
+  const existingMf = isPlainObject(targetRaw.metadataFilter) ? { ...targetRaw.metadataFilter } : {};
+  if (Object.keys(existingPresets).length > 0) {
+    existingMf.presets = existingPresets;
+  } else {
+    delete existingMf.presets;
+  }
+  targetRaw.metadataFilter = existingMf;
+
+  const globalRaw = scope === "global" ? targetRaw : readAndMigrateConfigFile(getGlobalConfigPath(globalConfigPath), "global");
+  const localRaw = scope === "local" ? targetRaw : readAndMigrateConfigFile(getLocalConfigPath(projectRoot), "local");
+  const afterCatalog = resolveFilterPresetCatalog(globalRaw, localRaw);
+  const stillExists = Object.prototype.hasOwnProperty.call(afterCatalog.presets, validatedName);
+
+  let clearedActive = false;
+  if (!stillExists && readSelectedFilterPreset(targetRaw) === validatedName) {
+    delete existingMf.preset;
+    clearedActive = true;
+  }
+
+  if (Object.keys(existingMf).length > 0) {
+    targetRaw.metadataFilter = existingMf;
+  } else {
+    delete targetRaw.metadataFilter;
+  }
+
+  writeJsonAtomic(targetPath, targetRaw);
+
+  const nextList = listFilterPresets(projectRoot, globalConfigPath);
+  return {
+    deleted: true,
+    name: validatedName,
+    scope,
+    revertedTo: stillExists ? afterCatalog.sources[validatedName] : null,
+    clearedActive,
+    savedTo: targetPath,
+    config: loadMergedConfig(projectRoot, globalConfigPath),
+    list: nextList,
   };
 }

@@ -371,8 +371,12 @@ describe("Companion Server /config and /reload-config routes", () => {
     expect(html).toContain('/^Key([A-Z])$/');
     expect(html).toContain('/^Digit([0-9])$/');
 
-    // Default Metadata Fields section in Dashboard
-    expect(html).toContain('Default Metadata Fields');
+    // Metadata Filter Presets section in Dashboard
+    expect(html).toContain('Metadata Filter Presets');
+    expect(html).toContain('id="mf-preset-select"');
+    expect(html).toContain('id="mf-save-preset-btn"');
+    expect(html).toContain('id="mf-delete-preset-btn"');
+    expect(html).toContain('id="mf-preset-modal"');
     expect(html).toContain('data-mf-cat="component"');
     expect(html).toContain('data-mf-field="framework"');
     expect(html).toContain('data-mf-cat="design"');
@@ -834,6 +838,57 @@ describe("Companion Server /presets* routes", () => {
       body: JSON.stringify({ name: "broken", config: { theme: "neon-pink" } }),
     });
     expect(invalidConfig.status).toBe(400);
+  });
+
+  it("supports GET/POST/DELETE /filter-presets and POST /filter-presets/use with shadow revert", async () => {
+    const listInit = await fetch(`http://127.0.0.1:${testPort}/filter-presets`);
+    expect(listInit.status).toBe(200);
+    const initJson = await listInit.json();
+    expect(initJson.builtinNames).toEqual(["full", "source-locate", "layout-styles", "minimal"]);
+    expect(initJson.activePreset).toBe("source-locate");
+
+    // Save local shadow of built-in "minimal" and activate locally
+    const saveShadow = await fetch(`http://127.0.0.1:${testPort}/filter-presets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "minimal",
+        scope: "local",
+        filters: { component: { componentName: true, keyStyles: true } },
+      }),
+    });
+    expect(saveShadow.status).toBe(200);
+    const saveJson = await saveShadow.json();
+    expect(saveJson.scope).toBe("local");
+
+    const useRes = await fetch(`http://127.0.0.1:${testPort}/filter-presets/use`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "minimal", target: "local" }),
+    });
+    expect(useRes.status).toBe(200);
+    const useJson = await useRes.json();
+    expect(useJson.config.metadataFilter.preset).toBe("minimal");
+    expect(useJson.config.metadataFilter.filters.component.keyStyles).toBe(true);
+
+    // Deleting local shadow reverts to built-in "minimal"
+    const delShadow = await fetch(
+      `http://127.0.0.1:${testPort}/filter-presets?name=minimal&scope=local`,
+      { method: "DELETE" }
+    );
+    expect(delShadow.status).toBe(200);
+    const delJson = await delShadow.json();
+    expect(delJson.deleted).toBe(true);
+    expect(delJson.revertedTo).toBe("builtin");
+    expect(delJson.config.metadataFilter.filters.component.keyStyles).toBe(false);
+
+    // Reject reserved "custom" name
+    const badCustom = await fetch(`http://127.0.0.1:${testPort}/filter-presets`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "custom", scope: "local", filters: {} }),
+    });
+    expect(badCustom.status).toBe(400);
   });
 });
 

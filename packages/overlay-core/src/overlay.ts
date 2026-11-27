@@ -18,6 +18,107 @@ export interface OverlayEngineLaunchOptions {
   domReadyTimeoutMs?: number;
 }
 
+type MetadataFilterMap = Record<"component" | "layer" | "design", Record<string, boolean>>;
+
+const BUILTIN_FILTER_PRESETS_FALLBACK: Record<string, MetadataFilterMap> = {
+  full: {
+    component: {
+      componentName: true,
+      elementSelector: true,
+      filePath: true,
+      framework: true,
+      dimensions: true,
+      keyStyles: true,
+      parentStyles: true,
+      layoutConstraints: true,
+      sourceComments: true,
+      sourceAttributes: true,
+    },
+    layer: { layerSummary: true, layer1: true, layer2: true, htmlStructure: true },
+    design: {
+      compInfo: true,
+      horizontalAnchor: true,
+      verticalAnchor: true,
+      layoutContext: true,
+      suggestedCss: true,
+      sourceFiles: true,
+      aiInstructions: true,
+    },
+  },
+  "source-locate": {
+    component: {
+      componentName: true,
+      elementSelector: true,
+      filePath: true,
+      framework: true,
+      dimensions: false,
+      keyStyles: false,
+      parentStyles: false,
+      layoutConstraints: false,
+      sourceComments: false,
+      sourceAttributes: false,
+    },
+    layer: { layerSummary: true, layer1: true, layer2: false, htmlStructure: false },
+    design: {
+      compInfo: true,
+      horizontalAnchor: false,
+      verticalAnchor: false,
+      layoutContext: false,
+      suggestedCss: false,
+      sourceFiles: true,
+      aiInstructions: false,
+    },
+  },
+  "layout-styles": {
+    component: {
+      componentName: true,
+      elementSelector: true,
+      filePath: true,
+      framework: false,
+      dimensions: true,
+      keyStyles: true,
+      parentStyles: true,
+      layoutConstraints: true,
+      sourceComments: false,
+      sourceAttributes: false,
+    },
+    layer: { layerSummary: true, layer1: true, layer2: true, htmlStructure: true },
+    design: {
+      compInfo: true,
+      horizontalAnchor: true,
+      verticalAnchor: true,
+      layoutContext: true,
+      suggestedCss: true,
+      sourceFiles: false,
+      aiInstructions: false,
+    },
+  },
+  minimal: {
+    component: {
+      componentName: true,
+      elementSelector: true,
+      filePath: true,
+      framework: false,
+      dimensions: false,
+      keyStyles: false,
+      parentStyles: false,
+      layoutConstraints: false,
+      sourceComments: false,
+      sourceAttributes: false,
+    },
+    layer: { layerSummary: true, layer1: false, layer2: false, htmlStructure: false },
+    design: {
+      compInfo: true,
+      horizontalAnchor: false,
+      verticalAnchor: false,
+      layoutContext: false,
+      suggestedCss: false,
+      sourceFiles: true,
+      aiInstructions: false,
+    },
+  },
+};
+
 export class OverlayEngine implements OverlayController {
   private static launchEpoch = 0;
   private static activeInstance: OverlayEngine | null = null;
@@ -33,6 +134,12 @@ export class OverlayEngine implements OverlayController {
   private isFilterPanelVisible = false;
   private currentMetadataTypeIndex = 0;
   private filterSaveTarget: "local" | "global" = "local";
+  private filterPresetsCatalog: {
+    presets: Record<string, MetadataFilterMap>;
+    sources: Record<string, "builtin" | "global" | "local">;
+  } | null = null;
+  private isSaveFilterPresetOpen = false;
+  private savePresetError: string | null = null;
   private parentHighlightElements: Element[] = [];
   
   private uiVisible = true;
@@ -176,7 +283,28 @@ export class OverlayEngine implements OverlayController {
 
     this.activeMode.onConfigUpdate(newConfig);
     if (this.isFilterPanelVisible) {
+      void this.refreshFilterPresets();
       this.renderFilterPanel();
+    }
+  }
+
+  private async refreshFilterPresets(): Promise<void> {
+    try {
+      const data = await companionRequestJson("/filter-presets", {
+        timeoutMs: 1500,
+        signal: this.launchAbortController?.signal,
+      });
+      if (data?.presets && typeof data.presets === "object") {
+        this.filterPresetsCatalog = {
+          presets: data.presets,
+          sources: data.sources && typeof data.sources === "object" ? data.sources : {},
+        };
+        if (this.isFilterPanelVisible) {
+          this.renderFilterPanel();
+        }
+      }
+    } catch {
+      // Fall back cleanly to built-in catalog when companion endpoint is unavailable
     }
   }
 
@@ -579,6 +707,48 @@ export class OverlayEngine implements OverlayController {
         width: 12px;
         height: 12px;
       }
+      .hs-preset-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .hs-preset-select,
+      .hs-preset-input {
+        flex: 1;
+        min-width: 0;
+        background: ${colors.navBg};
+        border: 1px solid ${colors.borderSep};
+        color: ${colors.tooltipText};
+        border-radius: 4px;
+        padding: 3px 6px;
+        font-size: 10.5px;
+        font-family: inherit;
+        outline: none;
+      }
+      .hs-preset-select option {
+        background: #111827;
+        color: #f3f4f6;
+      }
+      .hs-save-preset-form {
+        margin-bottom: 8px;
+        padding: 7px 8px;
+        border: 1px solid ${colors.borderSep};
+        background: ${colors.stackBg};
+        border-radius: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .hs-save-preset-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .hs-save-preset-error {
+        font-size: 9.5px;
+        color: #ef4444;
+      }
     `;
     if (this.shadowRoot) {
       this.shadowRoot.appendChild(style);
@@ -709,13 +879,185 @@ export class OverlayEngine implements OverlayController {
         this.filterPanel.style.left = "auto";
       }
       this.renderFilterPanel();
+      void this.refreshFilterPresets();
     } else {
+      this.isSaveFilterPresetOpen = false;
+      this.savePresetError = null;
       this.filterPanel.style.display = "none";
     }
   }
 
+  private getEffectiveFilterPresets(): {
+    presets: Record<string, MetadataFilterMap>;
+    sources: Record<string, "builtin" | "global" | "local">;
+  } {
+    if (this.filterPresetsCatalog) {
+      return this.filterPresetsCatalog;
+    }
+    const sources: Record<string, "builtin" | "global" | "local"> = {};
+    for (const key of Object.keys(BUILTIN_FILTER_PRESETS_FALLBACK)) {
+      sources[key] = "builtin";
+    }
+    return {
+      presets: BUILTIN_FILTER_PRESETS_FALLBACK,
+      sources,
+    };
+  }
+
+  private getCurrentMetadataFiltersSnapshot(): MetadataFilterMap {
+    const base = BUILTIN_FILTER_PRESETS_FALLBACK.full;
+    const current = this.config?.metadataFilter?.filters;
+    const out: MetadataFilterMap = { component: {}, layer: {}, design: {} };
+    for (const cat of ["component", "layer", "design"] as const) {
+      for (const field of Object.keys(base[cat])) {
+        const val = current?.[cat]?.[field];
+        out[cat][field] = val !== false;
+      }
+    }
+    return out;
+  }
+
+  private async activateFilterPreset(
+    presetName: string,
+    target: "local" | "global" = this.filterSaveTarget
+  ): Promise<void> {
+    const { presets } = this.getEffectiveFilterPresets();
+    const chosenFilters = presets[presetName];
+    if (chosenFilters) {
+      this.applyLocalConfigDelta({
+        metadataFilter: {
+          preset: presetName,
+          filters: structuredClone(chosenFilters),
+        },
+      });
+    } else {
+      this.applyLocalConfigDelta({ metadataFilter: { preset: presetName } });
+    }
+    this.isSaveFilterPresetOpen = false;
+    this.savePresetError = null;
+    if (this.isFilterPanelVisible) {
+      this.renderFilterPanel("hoversource-preset-select");
+    }
+
+    const tryUse = async (saveTarget: "local" | "global") => {
+      const data = await companionRequestJson("/filter-presets/use", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: presetName, target: saveTarget }),
+      });
+      if (!data?.success || !data?.config) {
+        throw new Error(data?.error || `Failed to activate filter preset (${saveTarget})`);
+      }
+      this.config = data.config;
+      if (data.list?.presets) {
+        this.filterPresetsCatalog = {
+          presets: data.list.presets,
+          sources: data.list.sources || {},
+        };
+      }
+    };
+
+    try {
+      await tryUse(target);
+      if (this.isFilterPanelVisible) {
+        this.renderFilterPanel();
+      }
+    } catch (err) {
+      if (target === "local") {
+        try {
+          await tryUse("global");
+          if (this.isFilterPanelVisible) {
+            this.renderFilterPanel();
+          }
+          console.warn("[HoverSource] Local filter preset activation failed; saved to global instead.");
+          return;
+        } catch (fallbackErr) {
+          console.error("[HoverSource] Failed to activate filter preset in local and global", fallbackErr);
+          return;
+        }
+      }
+      console.error("[HoverSource] Failed to activate filter preset", err);
+    }
+  }
+
+  private async saveCustomFilterPreset(
+    name: string,
+    scope: "local" | "global"
+  ): Promise<boolean> {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.toLowerCase() === "custom") {
+      this.savePresetError = 'Enter a valid name (not "custom")';
+      this.renderFilterPanel();
+      return false;
+    }
+
+    const snapshot = this.getCurrentMetadataFiltersSnapshot();
+    const saveAndActivate = async (targetScope: "local" | "global") => {
+      const saveRes = await companionRequestJson("/filter-presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: trimmed,
+          scope: targetScope,
+          filters: snapshot,
+        }),
+      });
+      if (!saveRes?.success) {
+        throw new Error(saveRes?.error || `Failed to save filter preset (${targetScope})`);
+      }
+      const useRes = await companionRequestJson("/filter-presets/use", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: saveRes.name || trimmed, target: targetScope }),
+      });
+      if (!useRes?.success || !useRes?.config) {
+        throw new Error(useRes?.error || `Saved preset, failed to activate (${targetScope})`);
+      }
+      this.config = useRes.config;
+      if (useRes.list?.presets) {
+        this.filterPresetsCatalog = {
+          presets: useRes.list.presets,
+          sources: useRes.list.sources || {},
+        };
+      }
+    };
+
+    try {
+      await saveAndActivate(scope);
+    } catch (err) {
+      if (scope === "local") {
+        try {
+          await saveAndActivate("global");
+          console.warn("[HoverSource] Local preset save failed; saved to global config instead.");
+        } catch (fallbackErr) {
+          this.savePresetError =
+            fallbackErr instanceof Error ? fallbackErr.message : "Failed to save preset";
+          this.renderFilterPanel();
+          return false;
+        }
+      } else {
+        this.savePresetError = err instanceof Error ? err.message : "Failed to save preset";
+        this.renderFilterPanel();
+        return false;
+      }
+    }
+
+    this.isSaveFilterPresetOpen = false;
+    this.savePresetError = null;
+    if (this.isFilterPanelVisible) {
+      this.renderFilterPanel("hoversource-preset-select");
+    }
+    return true;
+  }
+
   private renderFilterPanel(
-    restoreFocusId?: "hoversource-prev-btn" | "hoversource-next-btn" | "hoversource-scope-btn"
+    restoreFocusId?:
+      | "hoversource-prev-btn"
+      | "hoversource-next-btn"
+      | "hoversource-scope-btn"
+      | "hoversource-preset-select"
+      | "hoversource-save-preset-btn",
+    restoreFocusSelector?: string
   ) {
     if (!this.filterPanel) return;
 
@@ -836,6 +1178,125 @@ export class OverlayEngine implements OverlayController {
       ),
     ]);
 
+    const { presets, sources } = this.getEffectiveFilterPresets();
+    const presetNames = Object.keys(presets);
+    const activePresetName = this.config?.metadataFilter?.preset || "source-locate";
+    const isCustomMode =
+      activePresetName === "custom" || !Object.prototype.hasOwnProperty.call(presets, activePresetName);
+
+    const presetOptions: (HTMLElement | SVGElement)[] = presetNames.map((name) => {
+      const src = sources[name] || "builtin";
+      const label = src === "builtin" ? name : `${name} (${src})`;
+      const optEl = el("option", { value: name }, [label]);
+      if (optEl && !isCustomMode && activePresetName === name) {
+        (optEl as HTMLOptionElement).selected = true;
+      }
+      return optEl;
+    }).filter((n): n is HTMLElement | SVGElement => n !== null);
+
+    if (isCustomMode) {
+      const customOpt = el("option", { value: "custom" }, ["Custom (Modified)"]);
+      if (customOpt) {
+        (customOpt as HTMLOptionElement).selected = true;
+        presetOptions.unshift(customOpt);
+      }
+    }
+
+    const presetSelectEl = el(
+      "select",
+      {
+        id: "hoversource-preset-select",
+        class: "hs-preset-select",
+        "aria-label": "Metadata filter preset",
+      },
+      presetOptions
+    ) as HTMLSelectElement | null;
+    if (presetSelectEl) {
+      presetSelectEl.value = isCustomMode ? "custom" : activePresetName;
+    }
+
+    const savePresetBtnEl = isCustomMode
+      ? el(
+          "button",
+          {
+            type: "button",
+            class: "nav-btn",
+            id: "hoversource-save-preset-btn",
+            title: "Save current custom selection as a new or overwritten preset",
+          },
+          ["Save as Preset"]
+        )
+      : null;
+
+    const presetBarEl = el(
+      "div",
+      { class: "hs-preset-bar" },
+      [presetSelectEl, savePresetBtnEl].filter((n): n is HTMLElement | SVGElement => n !== null)
+    );
+
+    let savePresetFormEl: HTMLElement | SVGElement | null = null;
+    if (this.isSaveFilterPresetOpen) {
+      const overwriteOptions: (HTMLElement | SVGElement)[] = [
+        el("option", { value: "__new__" }, ["-- Enter new preset name --"]),
+        ...presetNames.map((name) => {
+          const src = sources[name] || "builtin";
+          return el("option", { value: name }, [`Overwrite: ${name} (${src})`]);
+        }),
+      ].filter((n): n is HTMLElement | SVGElement => n !== null);
+
+      const overwriteSelectEl = el(
+        "select",
+        { id: "hoversource-overwrite-select", class: "hs-preset-select" },
+        overwriteOptions
+      );
+      const nameInputEl = el("input", {
+        type: "text",
+        id: "hoversource-preset-name-input",
+        class: "hs-preset-input",
+        placeholder: "Preset name (e.g. api-debug)",
+      });
+      const scopeSelectEl = el(
+        "select",
+        {
+          id: "hoversource-save-preset-scope",
+          class: "hs-preset-select",
+          style: "flex:0 0 auto;width:82px;",
+        },
+        [
+          el("option", { value: "local" }, ["Repo"]),
+          el("option", { value: "global" }, ["Global"]),
+        ].filter((n): n is HTMLElement | SVGElement => n !== null)
+      ) as HTMLSelectElement | null;
+      if (scopeSelectEl) {
+        scopeSelectEl.value = this.filterSaveTarget;
+      }
+      const confirmBtnEl = el(
+        "button",
+        { type: "button", class: "nav-btn", id: "hoversource-save-preset-confirm" },
+        ["Save"]
+      );
+      const cancelBtnEl = el(
+        "button",
+        { type: "button", class: "nav-btn", id: "hoversource-save-preset-cancel" },
+        ["Cancel"]
+      );
+
+      savePresetFormEl = el(
+        "div",
+        { class: "hs-save-preset-form", id: "hoversource-save-preset-form" },
+        [
+          overwriteSelectEl,
+          el("div", { class: "hs-save-preset-row" }, [nameInputEl, scopeSelectEl].filter((n): n is HTMLElement | SVGElement => n !== null)),
+          this.savePresetError ? el("div", { class: "hs-save-preset-error" }, [this.savePresetError]) : null,
+          el(
+            "div",
+            { class: "hs-save-preset-row", style: "justify-content:flex-end;" },
+            [cancelBtnEl, confirmBtnEl].filter((n): n is HTMLElement | SVGElement => n !== null)
+          ),
+        ].filter((n): n is HTMLElement | SVGElement => n !== null)
+      );
+    }
+
     const tableContainerEl = el("div", { class: "table-container" }, [
       el("table", {}, rowNodes),
     ]);
@@ -864,13 +1325,81 @@ export class OverlayEngine implements OverlayController {
     );
 
     this.filterPanel.replaceChildren(
-      ...[headerEl, tableContainerEl, footerEl].filter((n): n is HTMLElement => n !== null)
+      ...[headerEl, presetBarEl, savePresetFormEl, tableContainerEl, footerEl].filter(
+        (n): n is HTMLElement => n !== null
+      )
     );
 
     // Hook events
     const prevBtn = this.filterPanel.querySelector("#hoversource-prev-btn") as HTMLButtonElement | null;
     const nextBtn = this.filterPanel.querySelector("#hoversource-next-btn") as HTMLButtonElement | null;
     const scopeBtn = this.filterPanel.querySelector("#hoversource-scope-btn") as HTMLButtonElement | null;
+    const presetSelect = this.filterPanel.querySelector("#hoversource-preset-select") as HTMLSelectElement | null;
+    const savePresetBtn = this.filterPanel.querySelector("#hoversource-save-preset-btn") as HTMLButtonElement | null;
+    const overwriteSelect = this.filterPanel.querySelector("#hoversource-overwrite-select") as HTMLSelectElement | null;
+    const nameInput = this.filterPanel.querySelector("#hoversource-preset-name-input") as HTMLInputElement | null;
+    const saveScopeSelect = this.filterPanel.querySelector("#hoversource-save-preset-scope") as HTMLSelectElement | null;
+    const saveConfirmBtn = this.filterPanel.querySelector("#hoversource-save-preset-confirm") as HTMLButtonElement | null;
+    const saveCancelBtn = this.filterPanel.querySelector("#hoversource-save-preset-cancel") as HTMLButtonElement | null;
+
+    if (presetSelect) {
+      presetSelect.addEventListener("change", () => {
+        const chosen = presetSelect.value;
+        if (!chosen || chosen === "custom") return;
+        void this.activateFilterPreset(chosen);
+      });
+    }
+    if (savePresetBtn) {
+      savePresetBtn.addEventListener("click", () => {
+        this.isSaveFilterPresetOpen = !this.isSaveFilterPresetOpen;
+        this.savePresetError = null;
+        this.renderFilterPanel("hoversource-save-preset-btn");
+        if (this.isSaveFilterPresetOpen) {
+          (this.filterPanel?.querySelector("#hoversource-preset-name-input") as HTMLInputElement | null)?.focus();
+        }
+      });
+    }
+    if (overwriteSelect && nameInput) {
+      overwriteSelect.addEventListener("change", () => {
+        if (overwriteSelect.value === "__new__") {
+          nameInput.value = "";
+          nameInput.readOnly = false;
+          nameInput.focus();
+        } else {
+          nameInput.value = overwriteSelect.value;
+          nameInput.readOnly = true;
+        }
+      });
+    }
+    if (saveCancelBtn) {
+      saveCancelBtn.addEventListener("click", () => {
+        this.isSaveFilterPresetOpen = false;
+        this.savePresetError = null;
+        this.renderFilterPanel("hoversource-save-preset-btn");
+      });
+    }
+    if (saveConfirmBtn && nameInput) {
+      const submitPreset = () => {
+        const chosenScope = (saveScopeSelect?.value === "global" ? "global" : "local") as "local" | "global";
+        const targetName =
+          overwriteSelect && overwriteSelect.value !== "__new__"
+            ? overwriteSelect.value
+            : nameInput.value;
+        void this.saveCustomFilterPreset(targetName, chosenScope);
+      };
+      saveConfirmBtn.addEventListener("click", submitPreset);
+      nameInput.addEventListener("keydown", (ev: KeyboardEvent) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          submitPreset();
+        } else if (ev.key === "Escape") {
+          ev.preventDefault();
+          this.isSaveFilterPresetOpen = false;
+          this.savePresetError = null;
+          this.renderFilterPanel("hoversource-save-preset-btn");
+        }
+      });
+    }
     if (prevBtn) {
       prevBtn.addEventListener("click", () => {
         const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
@@ -910,9 +1439,9 @@ export class OverlayEngine implements OverlayController {
 
     const checkboxes = this.filterPanel.querySelectorAll("input[type='checkbox']");
     checkboxes.forEach((cb: any) => {
-      cb.addEventListener("change", (e: any) => {
-        const type = cb.dataset.type;
-        const field = cb.dataset.field;
+      cb.addEventListener("change", () => {
+        const type = cb.dataset.type as "component" | "layer" | "design";
+        const field = cb.dataset.field as string;
         const checked = cb.checked;
 
         const row = cb.closest("tr");
@@ -924,22 +1453,34 @@ export class OverlayEngine implements OverlayController {
           }
         }
 
+        const updatedFilters = this.getCurrentMetadataFiltersSnapshot();
+        updatedFilters[type][field] = checked;
+
         const delta = {
           metadataFilter: {
-            filters: {
-              [type]: {
-                [field]: checked
-              }
-            }
-          }
+            preset: "custom",
+            filters: updatedFilters,
+          },
         };
 
-        this.saveConfig(delta);
+        const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
+        const hadCheckboxFocus = activeEl === cb;
+
+        this.applyLocalConfigDelta(delta);
+        if (this.isFilterPanelVisible) {
+          this.renderFilterPanel(
+            undefined,
+            hadCheckboxFocus ? `input[data-type="${type}"][data-field="${field}"]` : undefined
+          );
+        }
+        void this.saveConfig(delta);
       });
     });
 
     this.makePanelDraggable();
-    if (restoreFocusId) {
+    if (restoreFocusSelector) {
+      (this.filterPanel.querySelector(restoreFocusSelector) as HTMLElement | null)?.focus();
+    } else if (restoreFocusId) {
       (this.filterPanel.querySelector(`#${restoreFocusId}`) as HTMLElement | null)?.focus();
     }
   }
@@ -1022,14 +1563,14 @@ export class OverlayEngine implements OverlayController {
   private isTyping(_e: KeyboardEvent): boolean {
     const activeEl = this.shadowRoot?.activeElement ?? document.activeElement;
     if (!activeEl) return false;
-    if (this.shadowRoot?.contains(activeEl)) return false;
     const tag = activeEl.tagName.toLowerCase();
     if (tag === "input") {
       const inputType = ((activeEl as HTMLInputElement).type || "text").toLowerCase();
       return !OverlayEngine.NON_TEXT_INPUT_TYPES.has(inputType);
     }
+    if (tag === "textarea") return true;
+    if (this.shadowRoot?.contains(activeEl)) return false;
     return (
-      tag === "textarea" ||
       (activeEl as HTMLElement).isContentEditable === true ||
       (activeEl.hasAttribute("contenteditable") && activeEl.getAttribute("contenteditable") !== "false")
     );
@@ -1335,6 +1876,9 @@ export class OverlayEngine implements OverlayController {
         ...(this.config.metadataFilter.panelPosition || {}),
         ...mf.panelPosition,
       };
+    }
+    if (typeof mf.preset === "string" && mf.preset.trim().length > 0) {
+      this.config.metadataFilter.preset = mf.preset;
     }
     if (mf.filters && typeof mf.filters === "object") {
       if (!this.config.metadataFilter.filters || typeof this.config.metadataFilter.filters !== "object") {

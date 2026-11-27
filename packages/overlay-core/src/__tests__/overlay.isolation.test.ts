@@ -1116,4 +1116,111 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
     ) as HTMLInputElement;
     expect(shadow.activeElement).toBe(newFrameworkCb);
   });
+
+  it("shows Retry on save error, warns when Global is overridden by Repo, clamps position, and closes via Escape or close button", async () => {
+    vi.useFakeTimers();
+    let failUse = true;
+    let useTarget = "local";
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const parsedUrl = String(url);
+        if (parsedUrl.includes("/filter-presets/use") && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          useTarget = body.target;
+          if (failUse) {
+            return new Response(JSON.stringify({ error: "disk busy" }), { status: 500 });
+          }
+          // When saving to global, simulate repo override returning "full" instead of requested preset
+          const effectivePreset = body.target === "global" ? "full" : body.name;
+          return new Response(
+            JSON.stringify({
+              success: true,
+              config: {
+                metadataFilter: {
+                  preset: effectivePreset,
+                  filters: { component: { componentName: true } },
+                },
+              },
+            }),
+            { status: 200 }
+          );
+        }
+        if (parsedUrl.includes("/filter-presets")) {
+          return new Response(
+            JSON.stringify({
+              presets: {
+                full: { component: { componentName: true }, layer: {}, design: {} },
+                "source-locate": { component: { componentName: true }, layer: {}, design: {} },
+              },
+              sources: { full: "builtin", "source-locate": "builtin" },
+            }),
+            { status: 200 }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            config: {
+              metadataFilter: {
+                preset: "full",
+                panelPosition: { x: 9999, y: -50 },
+                filters: { component: { componentName: true } },
+              },
+            },
+          }),
+          { status: 200 }
+        );
+      })
+    );
+
+    activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 1000 });
+    expect(activeEngine).not.toBeNull();
+    const shadow = document.getElementById("hoversource-host")!.shadowRoot!;
+    const panel = shadow.querySelector(".hoversource-config-panel") as HTMLDivElement;
+
+    // Opening clamps off-screen saved position inside viewport
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", altKey: true, ctrlKey: true }));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(Number.parseInt(panel.style.left, 10)).toBeLessThan(9999);
+    expect(Number.parseInt(panel.style.top, 10)).toBeGreaterThanOrEqual(8);
+
+    // Preset change fails -> shows "Changes not saved" + Retry button; clicking Retry clears error
+    const presetSelect = shadow.querySelector("#hoversource-preset-select") as HTMLSelectElement;
+    presetSelect.value = "source-locate";
+    presetSelect.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(shadow.querySelector("#hoversource-save-error")?.textContent).toBe("Changes not saved");
+    const retryBtn = shadow.querySelector("#hoversource-retry-save-btn") as HTMLButtonElement;
+    expect(retryBtn).not.toBeNull();
+
+    failUse = false;
+    retryBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(shadow.querySelector("#hoversource-save-error")).toBeNull();
+    expect(useTarget).toBe("local");
+
+    // Switching to Global while Repo overrides surfaces warning notice
+    const scopeBtn = shadow.querySelector("#hoversource-scope-btn") as HTMLButtonElement;
+    scopeBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    const presetSelect2 = shadow.querySelector("#hoversource-preset-select") as HTMLSelectElement;
+    presetSelect2.value = "source-locate";
+    presetSelect2.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(useTarget).toBe("global");
+    expect(shadow.querySelector("#hoversource-save-warning")?.textContent).toBe(
+      "Saved Global (Repo overrides)"
+    );
+
+    // Escape closes open filter panel; reopening and clicking close button also hides it
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(panel.style.display).toBe("none");
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", altKey: true, ctrlKey: true }));
+    expect(panel.style.display).toBe("block");
+    const closeBtn = shadow.querySelector("#hoversource-close-filter-btn") as HTMLButtonElement;
+    closeBtn.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    expect(panel.style.display).toBe("none");
+  });
 });

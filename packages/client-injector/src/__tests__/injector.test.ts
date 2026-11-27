@@ -365,11 +365,30 @@ describe("client-injector persistent CDP session & Runtime.addBinding bridge", (
       { id: "n:5", method: "GET", path: "/validate-line?file=a&line=1" },
       { id: "n:6", method: "GET", path: "/static-context?file=a" },
       { id: "n:7", method: "GET", path: "/resolve-html-element?tag=div" },
+      { id: "n:7b", method: "GET", path: "/filter-presets" },
       {
         id: "n:8",
         method: "POST",
         path: "/config",
         body: JSON.stringify({ target: "local", config: { theme: "dark" } }),
+      },
+      {
+        id: "n:9",
+        method: "POST",
+        path: "/config",
+        body: JSON.stringify({ target: "global", config: { metadataFilter: { preset: "minimal" } } }),
+      },
+      {
+        id: "n:10",
+        method: "POST",
+        path: "/filter-presets",
+        body: JSON.stringify({ name: "custom-1", scope: "local", filters: { component: {}, layer: {}, design: {} } }),
+      },
+      {
+        id: "n:11",
+        method: "POST",
+        path: "/filter-presets/use",
+        body: JSON.stringify({ name: "source-locate", target: "global" }),
       },
     ];
 
@@ -396,9 +415,13 @@ describe("client-injector persistent CDP session & Runtime.addBinding bridge", (
       "GET /validate-line?file=a&line=1",
       "GET /static-context?file=a",
       "GET /resolve-html-element?tag=div",
+      "GET /filter-presets",
       "POST /config",
+      "POST /config",
+      "POST /filter-presets",
+      "POST /filter-presets/use",
     ]);
-    expect(companion.requests[7].body).toBe(
+    expect(companion.requests[8].body).toBe(
       JSON.stringify({ target: "local", config: { theme: "dark" } })
     );
   });
@@ -787,6 +810,9 @@ describe("client-injector persistent CDP session & Runtime.addBinding bridge", (
       { id: "v:10", method: "GET", path: "/open-in-ide?file=a.ts&editor=sh" },
       { id: "v:11", method: "GET", path: "/config?target=custom&customPath=/tmp" },
       { id: "v:12", method: "POST", path: "/config", body: JSON.stringify({ target: "global", config: {} }) },
+      { id: "v:12b", method: "POST", path: "/config", body: JSON.stringify({ target: "global", config: { editor: "cursor" } }) },
+      { id: "v:12c", method: "POST", path: "/filter-presets/use", body: JSON.stringify({ name: "", target: "local" }) },
+      { id: "v:12d", method: "GET", path: "/filter-presets?x=1" },
       { id: "v:13", method: "POST", path: "/config", body: JSON.stringify({ target: "local", customPath: "/tmp", config: {} }) },
       { id: "v:14", method: "POST", path: "/config", body: "null" },
       { id: "v:15", method: "GET", path: "/\t/evil.com/config" },

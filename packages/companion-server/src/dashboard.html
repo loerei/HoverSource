@@ -913,6 +913,25 @@
       });
     }
 
+    function applyFilterPresetsState(mfPresetsData) {
+      filterPresetsState = {
+        presets:
+          mfPresetsData.presets && Object.keys(mfPresetsData.presets).length > 0
+            ? mfPresetsData.presets
+            : structuredClone(BUILTIN_FILTER_PRESETS_FALLBACK),
+        sources:
+          mfPresetsData.sources && Object.keys(mfPresetsData.sources).length > 0
+            ? mfPresetsData.sources
+            : { ...BUILTIN_FILTER_SOURCES_FALLBACK },
+        builtinNames: mfPresetsData.builtinNames || Object.keys(BUILTIN_FILTER_PRESETS_FALLBACK),
+        globalNames: mfPresetsData.globalNames || [],
+        localNames: mfPresetsData.localNames || [],
+        activePreset: mfPresetsData.activePreset || 'source-locate',
+        globalPreset: mfPresetsData.globalPreset ?? null,
+        localPreset: mfPresetsData.localPreset ?? null
+      };
+    }
+
     async function refreshDashboardState() {
       try {
         const [cfgRes, presetsRes, mfPresetsRes] = await Promise.all([
@@ -933,22 +952,7 @@
           repoBinding: presetsData.repoBinding ?? null,
           effectivePreset: presetsData.effectivePreset ?? null
         };
-        filterPresetsState = {
-          presets:
-            mfPresetsData.presets && Object.keys(mfPresetsData.presets).length > 0
-              ? mfPresetsData.presets
-              : structuredClone(BUILTIN_FILTER_PRESETS_FALLBACK),
-          sources:
-            mfPresetsData.sources && Object.keys(mfPresetsData.sources).length > 0
-              ? mfPresetsData.sources
-              : { ...BUILTIN_FILTER_SOURCES_FALLBACK },
-          builtinNames: mfPresetsData.builtinNames || Object.keys(BUILTIN_FILTER_PRESETS_FALLBACK),
-          globalNames: mfPresetsData.globalNames || [],
-          localNames: mfPresetsData.localNames || [],
-          activePreset: mfPresetsData.activePreset || 'source-locate',
-          globalPreset: mfPresetsData.globalPreset ?? null,
-          localPreset: mfPresetsData.localPreset ?? null
-        };
+        applyFilterPresetsState(mfPresetsData);
 
         if (!hasFilterPresetsEndpoint && !warnedMissingFilterPresetsEndpoint) {
           warnedMissingFilterPresetsEndpoint = true;
@@ -963,9 +967,83 @@
       }
     }
 
+    function subscribeDashboardEvents() {
+      if (typeof EventSource !== 'function') return null;
+      let es = null;
+      let syncing = false;
+      let queuedConfig = null;
+
+      const handleIncomingConfig = async (incomingCfg) => {
+        if (syncing) {
+          queuedConfig = incomingCfg;
+          return;
+        }
+        syncing = true;
+        try {
+          if (!loadedConfig) {
+            await refreshDashboardState();
+            return;
+          }
+          const current = getConfigFromUI();
+          const baseline = buildBaselineForCompare(loadedConfig);
+          const isDirty = JSON.stringify(current) !== JSON.stringify(baseline);
+          if (!isDirty) {
+            await refreshDashboardState();
+            return;
+          }
+
+          const isMfDirty =
+            JSON.stringify(current.metadataFilter) !== JSON.stringify(baseline.metadataFilter);
+          const mfRes = await fetch(`${API_BASE}/filter-presets`).catch(() => ({ ok: false }));
+          if (mfRes && mfRes.ok) {
+            applyFilterPresetsState(await mfRes.json());
+          }
+          if (!isMfDirty && incomingCfg?.metadataFilter) {
+            loadedConfig.metadataFilter = incomingCfg.metadataFilter;
+            const normalizedMf = normalizeMetadataFilters(incomingCfg.metadataFilter.filters);
+            currentMfPreset = incomingCfg.metadataFilter.preset || inferPresetNameFromFilters(normalizedMf);
+            renderMetadataFilterPresetControls();
+            document.querySelectorAll('input[data-mf-cat][data-mf-field]').forEach(cb => {
+              const cat = cb.dataset.mfCat;
+              const field = cb.dataset.mfField;
+              cb.checked = normalizedMf[cat]?.[field] !== false;
+            });
+            checkChanges();
+          } else if (isMfDirty) {
+            renderMetadataFilterPresetControls();
+            showToast('Metadata filters updated externally (unsaved edits preserved)');
+          }
+        } catch (err) {
+          console.error('Failed to sync SSE config update', err);
+        } finally {
+          syncing = false;
+          if (queuedConfig !== null) {
+            const nextCfg = queuedConfig;
+            queuedConfig = null;
+            void handleIncomingConfig(nextCfg);
+          }
+        }
+      };
+
+      try {
+        es = new EventSource(`${API_BASE}/events`);
+        es.addEventListener('config', (event) => {
+          if (!event?.data) return;
+          try {
+            const parsed = JSON.parse(event.data);
+            if (parsed && typeof parsed === 'object') {
+              void handleIncomingConfig(parsed);
+            }
+          } catch {}
+        });
+      } catch {}
+      return es;
+    }
+
     async function initDashboard() {
       applyModifierLabels();
       await refreshDashboardState();
+      subscribeDashboardEvents();
 
       presetSelect.onchange = async () => {
         const chosen = presetSelect.value || null;

@@ -481,10 +481,116 @@
     const API_BASE = '';
     let loadedConfig = null;
     let presetsState = { presets: {}, activePreset: null, repoBinding: null, effectivePreset: null };
+    const BUILTIN_FILTER_PRESETS_FALLBACK = {
+      full: {
+        component: {
+          componentName: true,
+          elementSelector: true,
+          filePath: true,
+          framework: true,
+          dimensions: true,
+          keyStyles: true,
+          parentStyles: true,
+          layoutConstraints: true,
+          sourceComments: true,
+          sourceAttributes: true
+        },
+        layer: { layerSummary: true, layer1: true, layer2: true, htmlStructure: true },
+        design: {
+          compInfo: true,
+          horizontalAnchor: true,
+          verticalAnchor: true,
+          layoutContext: true,
+          suggestedCss: true,
+          sourceFiles: true,
+          aiInstructions: true
+        }
+      },
+      'source-locate': {
+        component: {
+          componentName: true,
+          elementSelector: true,
+          filePath: true,
+          framework: true,
+          dimensions: false,
+          keyStyles: false,
+          parentStyles: false,
+          layoutConstraints: false,
+          sourceComments: false,
+          sourceAttributes: false
+        },
+        layer: { layerSummary: true, layer1: true, layer2: false, htmlStructure: false },
+        design: {
+          compInfo: true,
+          horizontalAnchor: false,
+          verticalAnchor: false,
+          layoutContext: false,
+          suggestedCss: false,
+          sourceFiles: true,
+          aiInstructions: false
+        }
+      },
+      'layout-styles': {
+        component: {
+          componentName: true,
+          elementSelector: true,
+          filePath: true,
+          framework: false,
+          dimensions: true,
+          keyStyles: true,
+          parentStyles: true,
+          layoutConstraints: true,
+          sourceComments: false,
+          sourceAttributes: false
+        },
+        layer: { layerSummary: true, layer1: true, layer2: true, htmlStructure: true },
+        design: {
+          compInfo: true,
+          horizontalAnchor: true,
+          verticalAnchor: true,
+          layoutContext: true,
+          suggestedCss: true,
+          sourceFiles: false,
+          aiInstructions: false
+        }
+      },
+      minimal: {
+        component: {
+          componentName: true,
+          elementSelector: true,
+          filePath: true,
+          framework: false,
+          dimensions: false,
+          keyStyles: false,
+          parentStyles: false,
+          layoutConstraints: false,
+          sourceComments: false,
+          sourceAttributes: false
+        },
+        layer: { layerSummary: true, layer1: false, layer2: false, htmlStructure: false },
+        design: {
+          compInfo: true,
+          horizontalAnchor: false,
+          verticalAnchor: false,
+          layoutContext: false,
+          suggestedCss: false,
+          sourceFiles: true,
+          aiInstructions: false
+        }
+      }
+    };
+
+    const BUILTIN_FILTER_SOURCES_FALLBACK = {
+      full: 'builtin',
+      'source-locate': 'builtin',
+      'layout-styles': 'builtin',
+      minimal: 'builtin'
+    };
+
     let filterPresetsState = {
-      presets: {},
-      sources: {},
-      builtinNames: [],
+      presets: structuredClone(BUILTIN_FILTER_PRESETS_FALLBACK),
+      sources: { ...BUILTIN_FILTER_SOURCES_FALLBACK },
+      builtinNames: Object.keys(BUILTIN_FILTER_PRESETS_FALLBACK),
       globalNames: [],
       localNames: [],
       activePreset: 'source-locate',
@@ -492,6 +598,7 @@
       localPreset: null
     };
     let currentMfPreset = 'source-locate';
+    let warnedMissingFilterPresetsEndpoint = false;
     let currentProjectPath = '';
 
     function isMacPlatform() {
@@ -716,13 +823,32 @@
       bindRepoCheckbox.disabled = !selectedPreset && !presetsState.repoBinding;
     }
 
+    function inferPresetNameFromFilters(normalizedMf) {
+      const presets = filterPresetsState.presets || BUILTIN_FILTER_PRESETS_FALLBACK;
+      const serialized = JSON.stringify(normalizedMf);
+      for (const [name, presetFilters] of Object.entries(presets)) {
+        if (JSON.stringify(normalizeMetadataFilters(presetFilters)) === serialized) {
+          return name;
+        }
+      }
+      return 'custom';
+    }
+
     function renderMetadataFilterPresetControls() {
-      const presets = filterPresetsState.presets || {};
-      const sources = filterPresetsState.sources || {};
+      const presets =
+        filterPresetsState.presets && Object.keys(filterPresetsState.presets).length > 0
+          ? filterPresetsState.presets
+          : BUILTIN_FILTER_PRESETS_FALLBACK;
+      const sources = filterPresetsState.sources || BUILTIN_FILTER_SOURCES_FALLBACK;
       const names = Object.keys(presets);
       mfPresetSelect.innerHTML = '';
 
-      if (currentMfPreset === 'custom' || (currentMfPreset && !Object.prototype.hasOwnProperty.call(presets, currentMfPreset))) {
+      const isMissingSelection =
+        !currentMfPreset ||
+        currentMfPreset === 'custom' ||
+        !Object.prototype.hasOwnProperty.call(presets, currentMfPreset);
+
+      if (isMissingSelection) {
         const customOpt = document.createElement('option');
         customOpt.value = 'custom';
         customOpt.textContent = 'Custom (Modified)';
@@ -740,7 +866,7 @@
         mfPresetSelect.appendChild(opt);
       }
 
-      mfPresetSelect.value = currentMfPreset || 'source-locate';
+      mfPresetSelect.value = isMissingSelection ? 'custom' : currentMfPreset;
 
       const sel = mfPresetSelect.value;
       const canDelete =
@@ -748,7 +874,7 @@
         (filterPresetsState.localNames.includes(sel) || filterPresetsState.globalNames.includes(sel));
       mfDeletePresetBtn.disabled = !canDelete;
 
-      if (currentMfPreset === 'custom') {
+      if (mfPresetSelect.value === 'custom') {
         mfSavePresetBtn.classList.add('border-blue-500', 'text-blue-300');
       } else {
         mfSavePresetBtn.classList.remove('border-blue-500', 'text-blue-300');
@@ -778,7 +904,7 @@
       setupScrollShortcutUI('layerPickerScroll', normalizeScrollMods(cfg.layerPickerScroll));
 
       const normalizedMf = normalizeMetadataFilters(cfg.metadataFilter?.filters);
-      currentMfPreset = cfg.metadataFilter?.preset || 'source-locate';
+      currentMfPreset = cfg.metadataFilter?.preset || inferPresetNameFromFilters(normalizedMf);
       renderMetadataFilterPresetControls();
       document.querySelectorAll('input[data-mf-cat][data-mf-field]').forEach(cb => {
         const cat = cb.dataset.mfCat;
@@ -792,11 +918,12 @@
         const [cfgRes, presetsRes, mfPresetsRes] = await Promise.all([
           fetch(`${API_BASE}/config`),
           fetch(`${API_BASE}/presets`),
-          fetch(`${API_BASE}/filter-presets`)
+          fetch(`${API_BASE}/filter-presets`).catch(() => ({ ok: false }))
         ]);
         const cfgData = await cfgRes.json();
         const presetsData = await presetsRes.json();
-        const mfPresetsData = mfPresetsRes.ok ? await mfPresetsRes.json() : {};
+        const hasFilterPresetsEndpoint = Boolean(mfPresetsRes && mfPresetsRes.ok);
+        const mfPresetsData = hasFilterPresetsEndpoint ? await mfPresetsRes.json() : {};
 
         loadedConfig = cfgData.config;
         currentProjectPath = cfgData.currentProject || '';
@@ -807,15 +934,26 @@
           effectivePreset: presetsData.effectivePreset ?? null
         };
         filterPresetsState = {
-          presets: mfPresetsData.presets || {},
-          sources: mfPresetsData.sources || {},
-          builtinNames: mfPresetsData.builtinNames || [],
+          presets:
+            mfPresetsData.presets && Object.keys(mfPresetsData.presets).length > 0
+              ? mfPresetsData.presets
+              : structuredClone(BUILTIN_FILTER_PRESETS_FALLBACK),
+          sources:
+            mfPresetsData.sources && Object.keys(mfPresetsData.sources).length > 0
+              ? mfPresetsData.sources
+              : { ...BUILTIN_FILTER_SOURCES_FALLBACK },
+          builtinNames: mfPresetsData.builtinNames || Object.keys(BUILTIN_FILTER_PRESETS_FALLBACK),
           globalNames: mfPresetsData.globalNames || [],
           localNames: mfPresetsData.localNames || [],
           activePreset: mfPresetsData.activePreset || 'source-locate',
           globalPreset: mfPresetsData.globalPreset ?? null,
           localPreset: mfPresetsData.localPreset ?? null
         };
+
+        if (!hasFilterPresetsEndpoint && !warnedMissingFilterPresetsEndpoint) {
+          warnedMissingFilterPresetsEndpoint = true;
+          showToast('Companion server needs restart (hs restart) to persist filter presets', true);
+        }
 
         renderPresetControls();
         applyConfigToUI(loadedConfig);
@@ -1359,8 +1497,13 @@
       newOpt.value = '__new__';
       newOpt.textContent = '-- Enter new preset name --';
       overwriteSelect.appendChild(newOpt);
-      for (const name of Object.keys(filterPresetsState.presets || {})) {
-        const src = filterPresetsState.sources?.[name] || 'builtin';
+      const modalPresets =
+        filterPresetsState.presets && Object.keys(filterPresetsState.presets).length > 0
+          ? filterPresetsState.presets
+          : BUILTIN_FILTER_PRESETS_FALLBACK;
+      const modalSources = filterPresetsState.sources || BUILTIN_FILTER_SOURCES_FALLBACK;
+      for (const name of Object.keys(modalPresets)) {
+        const src = modalSources[name] || 'builtin';
         const opt = document.createElement('option');
         opt.value = name;
         opt.textContent = `Overwrite: ${name} (${src})`;

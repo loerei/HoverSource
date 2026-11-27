@@ -377,6 +377,8 @@ describe("Companion Server /config and /reload-config routes", () => {
     expect(html).toContain('id="mf-save-preset-btn"');
     expect(html).toContain('id="mf-delete-preset-btn"');
     expect(html).toContain('id="mf-preset-modal"');
+    expect(html).toContain('BUILTIN_FILTER_PRESETS_FALLBACK');
+    expect(html).toContain('inferPresetNameFromFilters');
     expect(html).toContain('data-mf-cat="component"');
     expect(html).toContain('data-mf-field="framework"');
     expect(html).toContain('data-mf-cat="design"');

@@ -17,6 +17,11 @@ import {
   savePreset,
   usePreset,
   validatePresetName,
+  listFilterPresets,
+  saveFilterPreset,
+  useFilterPreset,
+  deleteFilterPreset,
+  validateFilterPresetName,
   type HoverSourceConfig,
 } from "@hoversource/companion-server/config";
 import { askQuestion } from "../port.js";
@@ -346,6 +351,183 @@ async function handlePresetCommand(
   return 2;
 }
 
+function tryValidateFilterPresetName(rawName: unknown): string | null {
+  try {
+    return validateFilterPresetName(rawName);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[HoverSource] ${message}`);
+    return null;
+  }
+}
+
+async function handleFilterPresetCommand(
+  opts: ConfigCommandOptions,
+  isJson: boolean,
+  isDryRun: boolean
+): Promise<number> {
+  const action = opts.positionals[2] ?? "list";
+  const writeScope: "local" | "global" = Boolean(opts.args.global) ? "global" : "local";
+  const scopePath =
+    writeScope === "global"
+      ? getGlobalConfigPath(opts.globalConfigPath)
+      : getLocalConfigPath(opts.projectRoot);
+
+  if (action === "list") {
+    const result = listFilterPresets(opts.projectRoot, opts.globalConfigPath);
+    if (isJson) {
+      writeStdoutJson(result);
+    } else {
+      const names = Object.keys(result.presets);
+      console.log(`[HoverSource] Metadata filter presets (active: ${result.activePreset}):`);
+      for (const name of names) {
+        const source = result.sources[name];
+        const markers: string[] = [source];
+        if (name === result.activePreset) markers.push("active");
+        if (name === result.localPreset) markers.push("repo");
+        if (name === result.globalPreset) markers.push("global");
+        console.log(`  - ${name} (${markers.join(", ")})`);
+      }
+    }
+    return 0;
+  }
+
+  if (action === "save") {
+    const rawName = opts.positionals[3];
+    if (rawName === undefined) {
+      console.error("[HoverSource] Usage: hs config filter-preset save <name> [--global|--local]");
+      return 2;
+    }
+    const name = tryValidateFilterPresetName(rawName);
+    if (!name) return 2;
+
+    if (isDryRun) {
+      if (isJson) {
+        writeStdoutJson({ dryRun: true, action: "save", name, scope: writeScope, path: scopePath });
+      } else {
+        console.log(`[HoverSource] Dry run: would save metadata filter preset "${name}" (${writeScope}) to ${scopePath}`);
+      }
+      return 0;
+    }
+
+    const result = saveFilterPreset(name, null, writeScope, opts.projectRoot, opts.globalConfigPath);
+    const reloaded = await notifyCompanionReload(opts.requestedPort, opts.reloadTimeoutMs);
+    if (isJson) {
+      writeStdoutJson({
+        action: "save",
+        name: result.name,
+        scope: result.scope,
+        path: result.savedTo,
+        filters: result.filters,
+        reloaded,
+      });
+    } else {
+      console.log(
+        `[HoverSource] Saved metadata filter preset "${result.name}" (${result.scope}) to ${result.savedTo}${reloaded ? " (companion reloaded)" : ""}`
+      );
+    }
+    return 0;
+  }
+
+  if (action === "use") {
+    const isClear = Boolean(opts.args.clear);
+    const rawName = opts.positionals[3];
+    if ((isClear && rawName !== undefined) || (!isClear && rawName === undefined)) {
+      console.error("[HoverSource] Usage: hs config filter-preset use <name|--clear> [--global|--local]");
+      return 2;
+    }
+
+    let name: string | null = null;
+    if (!isClear) {
+      name = tryValidateFilterPresetName(rawName);
+      if (!name) return 2;
+      const catalog = listFilterPresets(opts.projectRoot, opts.globalConfigPath);
+      if (!Object.prototype.hasOwnProperty.call(catalog.presets, name)) {
+        console.error(`[HoverSource] Unknown metadata filter preset "${name}".`);
+        return 2;
+      }
+    }
+
+    if (isDryRun) {
+      if (isJson) {
+        writeStdoutJson({ dryRun: true, action: "use", name, clear: isClear, scope: writeScope, path: scopePath });
+      } else {
+        const desc = isClear ? "clear metadata filter preset override" : `activate metadata filter preset "${name}"`;
+        console.log(`[HoverSource] Dry run: would ${desc} (${writeScope}) in ${scopePath}`);
+      }
+      return 0;
+    }
+
+    const result = useFilterPreset(name, writeScope, opts.projectRoot, opts.globalConfigPath);
+    const reloaded = await notifyCompanionReload(opts.requestedPort, opts.reloadTimeoutMs);
+    if (isJson) {
+      writeStdoutJson({
+        action: "use",
+        activePreset: result.activePreset,
+        scope: result.scope,
+        clear: isClear,
+        path: result.savedTo,
+        reloaded,
+      });
+    } else {
+      const desc = isClear
+        ? `Cleared metadata filter preset override (${result.scope})`
+        : `Activated metadata filter preset "${result.activePreset}" (${result.scope})`;
+      console.log(`[HoverSource] ${desc} in ${result.savedTo}${reloaded ? " (companion reloaded)" : ""}`);
+    }
+    return 0;
+  }
+
+  if (action === "delete") {
+    const rawName = opts.positionals[3];
+    if (rawName === undefined) {
+      console.error("[HoverSource] Usage: hs config filter-preset delete <name> [--global|--local]");
+      return 2;
+    }
+    const name = tryValidateFilterPresetName(rawName);
+    if (!name) return 2;
+
+    if (isDryRun) {
+      if (isJson) {
+        writeStdoutJson({ dryRun: true, action: "delete", name, scope: writeScope, path: scopePath });
+      } else {
+        console.log(`[HoverSource] Dry run: would delete metadata filter preset "${name}" (${writeScope}) from ${scopePath}`);
+      }
+      return 0;
+    }
+
+    const result = deleteFilterPreset(name, writeScope, opts.projectRoot, opts.globalConfigPath);
+    const reloaded = result.deleted
+      ? await notifyCompanionReload(opts.requestedPort, opts.reloadTimeoutMs)
+      : false;
+    if (isJson) {
+      writeStdoutJson({
+        action: "delete",
+        name: result.name,
+        scope: result.scope,
+        deleted: result.deleted,
+        revertedTo: result.revertedTo,
+        clearedActive: result.clearedActive,
+        path: result.savedTo,
+        reloaded,
+      });
+    } else {
+      const msg = result.deleted
+        ? result.revertedTo
+          ? `Removed ${result.scope} override for "${result.name}" (reverted to ${result.revertedTo})`
+          : `Deleted metadata filter preset "${result.name}" (${result.scope})`
+        : `No ${result.scope} metadata filter preset "${result.name}" found`;
+      console.log(`[HoverSource] ${msg} in ${result.savedTo}${reloaded ? " (companion reloaded)" : ""}`);
+    }
+    return 0;
+  }
+
+  console.error(
+    `[HoverSource] Unknown filter-preset action "${action}". Usage: hs config filter-preset <list|save|use|delete> [options]`
+  );
+  return 2;
+}
+
 export async function runConfigCommand(opts: ConfigCommandOptions): Promise<number> {
   const hasGlobal = Boolean(opts.args.global);
   const hasLocal = Boolean(opts.args.local);
@@ -361,12 +543,13 @@ export async function runConfigCommand(opts: ConfigCommandOptions): Promise<numb
   const action = opts.positionals[1] ?? "list";
   const isJson = Boolean(opts.args.json);
   const isDryRun = Boolean(opts.args["dry-run"]);
-  const presetSubAction = action === "preset" ? (opts.positionals[2] ?? "list") : undefined;
+  const presetSubAction =
+    action === "preset" || action === "filter-preset" ? (opts.positionals[2] ?? "list") : undefined;
   const isReadAction =
     action === "list" ||
     action === "show" ||
     action === "get" ||
-    (action === "preset" && presetSubAction === "list");
+    ((action === "preset" || action === "filter-preset") && presetSubAction === "list");
 
   if (!isReadAction && hasMerged) {
     console.error(
@@ -377,6 +560,9 @@ export async function runConfigCommand(opts: ConfigCommandOptions): Promise<numb
 
   if (action === "preset") {
     return handlePresetCommand(opts, isJson, isDryRun);
+  }
+  if (action === "filter-preset") {
+    return handleFilterPresetCommand(opts, isJson, isDryRun);
   }
 
   const scope: ConfigScope = hasGlobal

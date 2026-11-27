@@ -723,4 +723,68 @@ describe("runConfigCommand", () => {
       })
     ).toBe(2);
   });
+
+  it("supports hs config filter-preset list, save, use, and delete for local and global scopes", async () => {
+    const stdout = captureStdout();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // Save local custom filter preset
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "filter-preset", "save", "api-debug"],
+        args: { local: true, json: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const savedLocal = JSON.parse(stdout.join("").trim());
+    expect(savedLocal.action).toBe("save");
+    expect(savedLocal.name).toBe("api-debug");
+    expect(savedLocal.scope).toBe("local");
+
+    // List includes built-in + local preset
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "filter-preset", "list"],
+        args: { json: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const listed = JSON.parse(stdout.join("").trim());
+    expect(listed.sources["api-debug"]).toBe("local");
+    expect(listed.sources["source-locate"]).toBe("builtin");
+
+    // Activate preset globally
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "filter-preset", "use", "layout-styles"],
+        args: { global: true, json: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const usedGlobal = JSON.parse(stdout.join("").trim());
+    expect(usedGlobal.activePreset).toBe("layout-styles");
+    expect(usedGlobal.scope).toBe("global");
+
+    // Delete local preset
+    stdout.length = 0;
+    expect(
+      await runConfigCommand({
+        positionals: ["config", "filter-preset", "delete", "api-debug"],
+        args: { local: true, json: true },
+        projectRoot,
+        requestedPort: 7300,
+        globalConfigPath,
+      })
+    ).toBe(0);
+    const deleted = JSON.parse(stdout.join("").trim());
+    expect(deleted.deleted).toBe(true);
+  });
 });

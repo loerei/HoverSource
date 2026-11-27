@@ -32,6 +32,11 @@ import {
   usePreset,
   deletePreset,
   bindRepoPreset,
+  listFilterPresets,
+  saveFilterPreset,
+  useFilterPreset,
+  deleteFilterPreset,
+  type MetadataFilterPresetPayload,
 } from "./configStore.js";
 export { ShortcutKey, HoverSourceConfig, CompanionConflictPolicy, PortsConfig, normalizeProjectPath, loadMergedConfig } from "./configStore.js";
 
@@ -532,6 +537,161 @@ function handlePresetsBind(
   });
 }
 
+function parseFilterPresetScope(rawScope: unknown): "local" | "global" | null {
+  if (rawScope === undefined || rawScope === null || rawScope === "") {
+    return "local";
+  }
+  if (rawScope === "local" || rawScope === "global") {
+    return rawScope;
+  }
+  return null;
+}
+
+function handleFilterPresetsGet(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig
+) {
+  try {
+    const listed = listFilterPresets(config.projectRoot, config.globalConfigPath);
+    sendJson(res, 200, listed);
+  } catch (err) {
+    handlePresetError(res, err, "list filter presets");
+  }
+}
+
+function handleFilterPresetsPost(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
+  readJsonBody(req, res, (payload) => {
+    try {
+      const scope = parseFilterPresetScope(payload?.scope ?? payload?.target);
+      if (!scope) {
+        sendJson(res, 400, { error: 'Invalid scope; expected "local" or "global"' });
+        return;
+      }
+      const name = payload?.name;
+      const filtersData = payload?.filters as MetadataFilterPresetPayload | null | undefined;
+      const result = saveFilterPreset(
+        name,
+        filtersData,
+        scope,
+        config.projectRoot,
+        config.globalConfigPath
+      );
+      const merged = loadMergedConfig(config.projectRoot, config.globalConfigPath);
+      broadcastConfigUpdate(config.debugPort, merged, sseClients, "Broadcast failed on filter preset save:");
+
+      sendJson(res, 200, {
+        success: true,
+        name: result.name,
+        scope: result.scope,
+        filters: result.filters,
+        savedTo: result.savedTo,
+        list: result.list,
+        config: merged,
+      });
+    } catch (err) {
+      handlePresetError(res, err, "save filter preset");
+    }
+  });
+}
+
+function handleFilterPresetsUse(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
+  readJsonBody(req, res, (payload) => {
+    try {
+      const scope = parseFilterPresetScope(payload?.target ?? payload?.scope);
+      if (!scope) {
+        sendJson(res, 400, { error: 'Invalid target; expected "local" or "global"' });
+        return;
+      }
+      const rawName = payload?.name !== undefined ? payload.name : payload?.preset;
+      const name = rawName === null ? null : String(rawName ?? "");
+      if (name !== null && name.trim().length === 0) {
+        sendJson(res, 400, { error: "Missing preset name" });
+        return;
+      }
+      const result = useFilterPreset(
+        rawName === null ? null : name,
+        scope,
+        config.projectRoot,
+        config.globalConfigPath
+      );
+      broadcastConfigUpdate(config.debugPort, result.config, sseClients, "Broadcast failed on filter preset use:");
+
+      sendJson(res, 200, {
+        success: true,
+        activePreset: result.activePreset,
+        scope: result.scope,
+        savedTo: result.savedTo,
+        list: result.list,
+        config: result.config,
+      });
+    } catch (err) {
+      handlePresetError(res, err, "activate filter preset");
+    }
+  });
+}
+
+function handleFilterPresetsDelete(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+  config: ServerConfig,
+  sseClients: Set<http.ServerResponse>
+) {
+  const executeDelete = (name: unknown, rawScope: unknown) => {
+    try {
+      const scope = parseFilterPresetScope(rawScope);
+      if (!scope) {
+        sendJson(res, 400, { error: 'Invalid scope; expected "local" or "global"' });
+        return;
+      }
+      const result = deleteFilterPreset(name, scope, config.projectRoot, config.globalConfigPath);
+      if (result.deleted) {
+        broadcastConfigUpdate(config.debugPort, result.config, sseClients, "Broadcast failed on filter preset delete:");
+      }
+      sendJson(res, 200, {
+        success: true,
+        deleted: result.deleted,
+        name: result.name,
+        scope: result.scope,
+        revertedTo: result.revertedTo,
+        clearedActive: result.clearedActive,
+        savedTo: result.savedTo,
+        list: result.list,
+        config: result.config,
+      });
+    } catch (err) {
+      handlePresetError(res, err, "delete filter preset");
+    }
+  };
+
+  if (url.searchParams.has("name")) {
+    executeDelete(url.searchParams.get("name"), url.searchParams.get("scope"));
+    return;
+  }
+
+  readJsonBody(
+    req,
+    res,
+    (payload) => {
+      const name = payload?.name !== undefined ? payload.name : payload?.preset;
+      const scope = payload?.scope ?? payload?.target;
+      executeDelete(name, scope);
+    },
+    true
+  );
+}
+
 interface RequestLocationParams {
   fileParam: string;
   lineVal: number;
@@ -811,6 +971,24 @@ function routeRequest(
   }
   if (path === "/presets/bind" && method === "POST") {
     handlePresetsBind(req, res, config, sseClients);
+    return;
+  }
+  if (path === "/filter-presets") {
+    if (method === "GET") {
+      handleFilterPresetsGet(req, res, config);
+      return;
+    }
+    if (method === "POST") {
+      handleFilterPresetsPost(req, res, config, sseClients);
+      return;
+    }
+    if (method === "DELETE") {
+      handleFilterPresetsDelete(req, res, url, config, sseClients);
+      return;
+    }
+  }
+  if (path === "/filter-presets/use" && method === "POST") {
+    handleFilterPresetsUse(req, res, config, sseClients);
     return;
   }
   if (path === "/validate-line" && method === "GET") {

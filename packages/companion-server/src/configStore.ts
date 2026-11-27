@@ -452,6 +452,36 @@ export function getLocalConfigPath(projectRoot: string): string {
   return path.join(projectRoot, ".hoversourcerc");
 }
 
+export function isSameConfigFilePath(a: string, b: string): boolean {
+  let normA = path.resolve(a);
+  let normB = path.resolve(b);
+  try {
+    if (fs.existsSync(normA)) normA = fs.realpathSync.native(normA);
+  } catch {
+    // Fall back to path.resolve when realpath lookup fails
+  }
+  try {
+    if (fs.existsSync(normB)) normB = fs.realpathSync.native(normB);
+  } catch {
+    // Fall back to path.resolve when realpath lookup fails
+  }
+  return process.platform === "win32" ? normA.toLowerCase() === normB.toLowerCase() : normA === normB;
+}
+
+function assertLocalScopeDistinctFromGlobal(
+  targetPath: string,
+  globalConfigPath: string | undefined,
+  actionDescription: string
+): void {
+  const globalPath = getGlobalConfigPath(globalConfigPath);
+  if (isSameConfigFilePath(targetPath, globalPath)) {
+    throw new ConfigValidationError(
+      `Cannot ${actionDescription} because the current directory resolves to the global config file (${globalPath}); use "global" or run from a project directory.`,
+      [{ path: "target", message: "Local config path matches global config path" }]
+    );
+  }
+}
+
 export function normalizeProjectPath(projectPath: string): string {
   let resolved = projectPath.replaceAll("\\", "/");
   if (!resolved.startsWith("/") && !/^[a-zA-Z]:/.test(resolved)) {
@@ -1524,7 +1554,9 @@ export function loadMergedConfig(projectRoot: string, globalConfigPath?: string)
   }
 
   const localPath = getLocalConfigPath(projectRoot);
-  const localConfig = readAndMigrateConfigFile(localPath, "local");
+  const localConfig = isSameConfigFilePath(localPath, globalPath)
+    ? null
+    : readAndMigrateConfigFile(localPath, "local");
 
   const localPresetName = readValidPresetName(localConfig?.preset);
   const globalActivePresetName = readValidPresetName(globalConfig?.activePreset);
@@ -1613,13 +1645,19 @@ export function getConfigForTarget(
     }
   } else if (queryTarget === "local") {
     const localPath = getLocalConfigPath(defaultRoot);
-    const raw = readAndMigrateConfigFile(localPath, "local");
+    const globalPath = getGlobalConfigPath(globalConfigPath);
+    const raw = isSameConfigFilePath(localPath, globalPath)
+      ? null
+      : readAndMigrateConfigFile(localPath, "local");
     if (raw) {
       targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
     }
   } else if (queryTarget === "custom" && customPath) {
     const customPathConfig = getLocalConfigPath(customPath);
-    const raw = readAndMigrateConfigFile(customPathConfig, "local");
+    const globalPath = getGlobalConfigPath(globalConfigPath);
+    const raw = isSameConfigFilePath(customPathConfig, globalPath)
+      ? null
+      : readAndMigrateConfigFile(customPathConfig, "local");
     if (raw) {
       targetConfig = mergeDeep<HoverSourceConfig>(targetConfig, stripNonRuntimeKeys(raw));
     }
@@ -1661,6 +1699,9 @@ export function saveConfigDelta(
   }
 
   const targetPath = resolveTargetConfigPath(target, projectRoot, customPath, globalConfigPath);
+  if (target !== "global") {
+    assertLocalScopeDistinctFromGlobal(targetPath, globalConfigPath, "save local config");
+  }
   if (target === "custom" && customPath) {
     registerRecentProject(customPath, globalConfigPath);
   }
@@ -1702,6 +1743,9 @@ export function resetConfigTarget(
   globalConfigPath?: string
 ): SaveConfigResult {
   const targetPath = resolveTargetConfigPath(target, projectRoot, customPath, globalConfigPath);
+  if (target !== "global") {
+    assertLocalScopeDistinctFromGlobal(targetPath, globalConfigPath, "reset local config");
+  }
   const resetPayload: Record<string, unknown> = cloneDefaultConfig() as unknown as Record<string, unknown>;
 
   if (target === "global") {
@@ -1750,9 +1794,11 @@ export function deleteConfigTarget(
   globalConfigPath?: string
 ): DeleteConfigResult {
   const targetPath = resolveTargetConfigPath(target, projectRoot, customPath, globalConfigPath);
+  const globalPath = getGlobalConfigPath(globalConfigPath);
+  const isGlobalAlias = target !== "global" && isSameConfigFilePath(targetPath, globalPath);
 
   let deletedFile = false;
-  if (fs.existsSync(targetPath)) {
+  if (!isGlobalAlias && fs.existsSync(targetPath)) {
     fs.unlinkSync(targetPath);
     deletedFile = true;
   }
@@ -1779,7 +1825,10 @@ export function listPresets(projectRoot?: string, globalConfigPath?: string): Pr
 
   let boundPreset: string | null = null;
   if (projectRoot) {
-    const localRaw = readConfigFromFile(getLocalConfigPath(projectRoot));
+    const localPath = getLocalConfigPath(projectRoot);
+    const localRaw = isSameConfigFilePath(localPath, globalPath)
+      ? null
+      : readConfigFromFile(localPath);
     boundPreset = readValidPresetName(localRaw?.preset);
   }
 
@@ -1915,6 +1964,7 @@ export function bindRepoPreset(
   globalConfigPath?: string
 ): BindRepoPresetResult {
   const localPath = getLocalConfigPath(projectRoot);
+  assertLocalScopeDistinctFromGlobal(localPath, globalConfigPath, "bind a repo preset");
 
   if (presetName === null) {
     const localRaw = readConfigFromFile(localPath);
@@ -1946,8 +1996,12 @@ export function listFilterPresets(
   projectRoot: string,
   globalConfigPath?: string
 ): FilterPresetListResult {
-  const globalRaw = readAndMigrateConfigFile(getGlobalConfigPath(globalConfigPath), "global");
-  const localRaw = readAndMigrateConfigFile(getLocalConfigPath(projectRoot), "local");
+  const globalPath = getGlobalConfigPath(globalConfigPath);
+  const localPath = getLocalConfigPath(projectRoot);
+  const globalRaw = readAndMigrateConfigFile(globalPath, "global");
+  const localRaw = isSameConfigFilePath(localPath, globalPath)
+    ? null
+    : readAndMigrateConfigFile(localPath, "local");
   const catalog = resolveFilterPresetCatalog(globalRaw, localRaw);
   const merged = loadMergedConfig(projectRoot, globalConfigPath);
 
@@ -1990,6 +2044,9 @@ export function saveFilterPreset(
   }
 
   const targetPath = scope === "global" ? getGlobalConfigPath(globalConfigPath) : getLocalConfigPath(projectRoot);
+  if (scope === "local") {
+    assertLocalScopeDistinctFromGlobal(targetPath, globalConfigPath, "save a local filter preset");
+  }
   const targetRaw = readAndMigrateConfigFile(targetPath, scope) ?? {};
   const existingMf = isPlainObject(targetRaw.metadataFilter) ? { ...targetRaw.metadataFilter } : {};
   const existingPresets = readFilterPresetsMap(targetRaw);
@@ -2022,6 +2079,9 @@ export function useFilterPreset(
   globalConfigPath?: string
 ): UseFilterPresetResult {
   const targetPath = scope === "global" ? getGlobalConfigPath(globalConfigPath) : getLocalConfigPath(projectRoot);
+  if (scope === "local") {
+    assertLocalScopeDistinctFromGlobal(targetPath, globalConfigPath, "activate a local filter preset");
+  }
   const targetRaw = readAndMigrateConfigFile(targetPath, scope) ?? {};
   const existingMf = isPlainObject(targetRaw.metadataFilter) ? { ...targetRaw.metadataFilter } : {};
 
@@ -2086,6 +2146,9 @@ export function deleteFilterPreset(
 ): DeleteFilterPresetResult {
   const validatedName = validateFilterPresetName(name);
   const targetPath = scope === "global" ? getGlobalConfigPath(globalConfigPath) : getLocalConfigPath(projectRoot);
+  if (scope === "local") {
+    assertLocalScopeDistinctFromGlobal(targetPath, globalConfigPath, "delete a local filter preset");
+  }
   const targetRaw = readAndMigrateConfigFile(targetPath, scope);
   const existingPresets = readFilterPresetsMap(targetRaw);
 

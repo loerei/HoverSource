@@ -1077,6 +1077,7 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
       vi.fn(async () =>
         new Response(
           JSON.stringify({
+            currentProject: "D:/Projects/DemoApp",
             config: {
               metadataFilter: {
                 preset: "full",
@@ -1091,6 +1092,7 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
 
     activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 1000 });
     expect(activeEngine).not.toBeNull();
+    expect(activeEngine!.getProjectRoot()).toBe("D:/Projects/DemoApp");
     const shadow = document.getElementById("hoversource-host")!.shadowRoot!;
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", altKey: true, ctrlKey: true }));

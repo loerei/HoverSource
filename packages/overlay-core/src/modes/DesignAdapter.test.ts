@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 const mockBody = { parentElement: null } as any;
 if (typeof document === "undefined") {
@@ -8,6 +8,7 @@ if (typeof document === "undefined") {
 }
 
 import {
+  DesignAdapter,
   findNearestSnapPoint,
   shouldReleaseSnap,
   calculateNudge,
@@ -161,5 +162,82 @@ describe("DesignAdapter - Relational Alignment and Offset (RAO) Helpers", () => 
     expect(rulesDiff).toContain("left: 50%;");
     expect(rulesDiff).toContain("top: 25%;");
     expect(rulesDiff).toContain("white-space: nowrap;");
+  });
+});
+
+describe("DesignAdapter - Compact Metadata Output", () => {
+  it("formats placement metadata compactly with Root header, single-line anchors, and zero stray backslashes", () => {
+    const adapter = new DesignAdapter();
+    adapter["controller"] = {
+      getConfig: () => ({}),
+      getProjectRoot: () => "D:/Projects/HoverSource",
+      isUIVisible: () => true,
+      drawHighlight: vi.fn(),
+      drawParentHighlight: vi.fn(),
+      clearParentHighlights: vi.fn(),
+      drawTooltip: vi.fn(),
+      clear: vi.fn(),
+      setFreezeMode: vi.fn(),
+    } as any;
+
+    const ctx = adapter["getLayoutContextInfo"](
+      { componentName: "SaveBar", fileName: "D:\\Projects\\HoverSource\\src\\SaveBar.tsx", lineNumber: 24 },
+      {} as any,
+      [
+        {
+          selector: "div.bar",
+          display: "flex",
+          position: "static",
+          layoutProps: { "flex-direction": "row", gap: "8px", "justify-content": "normal" },
+        },
+        {
+          selector: "div.panel",
+          display: "block",
+          position: "relative",
+          fileName: "D:/Projects/HoverSource/src/Panel.tsx",
+          lineNumber: 12,
+          componentName: "Panel",
+        },
+      ],
+      "D:/Projects/HoverSource",
+      () => {}
+    );
+
+    const out = adapter["buildMetadataText"]({
+      component: "SaveBar",
+      selector: "div.save-folder-path",
+      filePath: "D:\\Projects\\HoverSource\\src\\SaveBar.tsx",
+      line: 24,
+      column: 5,
+      framework: "React",
+      selectorH: "button#save",
+      boundaryH: "Right-Edge",
+      signH: "+",
+      offsetH: 12,
+      isSnappedHText: "Snapped",
+      selectorV: "div.header",
+      boundaryV: "Top-Edge",
+      signV: "+",
+      offsetV: 0,
+      isSnappedVText: "Free",
+      posAncLine: ctx.posAncLine,
+      anchorForContextSelector: "button#save",
+      anchorElementDisplay: "flex",
+      anchorNote: "",
+      directParentLine: ctx.directParentLine,
+      layoutWarning: ctx.layoutWarning || "",
+      cssRules: "position: absolute;\nleft: 12px;",
+      filesSection: ctx.filesSection,
+    });
+
+    expect(out.startsWith("Root: D:/Projects/HoverSource\nComponent: SaveBar (React)")).toBe(true);
+    expect(out).toContain("Element: div.save-folder-path | File: src/SaveBar.tsx:24:5");
+    expect(out).toContain("Anchor H (not CSS): button#save @ Right-Edge (+12px, Snapped)");
+    expect(out).toContain("Anchor V (not CSS): div.header @ Top-Edge (+0px, Free)");
+    expect(out).toContain("- Positioned Ancestor: div.panel (position: relative) [src/Panel.tsx:12]");
+    expect(out).toContain("- Direct Parent: div.bar (display: flex; flex-direction: row; gap: 8px)");
+    expect(out).toContain("Source Files: src/SaveBar.tsx:24 (anchor component), src/Panel.tsx:12 (Panel)");
+    expect(out).not.toContain("\\\n");
+    expect(out).not.toMatch(/\\$/m);
   });
 });

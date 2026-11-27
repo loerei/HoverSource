@@ -165,17 +165,15 @@ describe("InspectorAdapter - Metadata Filtering", () => {
     const formatted = adapter["formatElementMetadata"](mockElement, mockInfo);
 
     // Checked fields should be present
-    expect(formatted).toContain("Component");
-    expect(formatted).toContain("UserProfileCard");
-    expect(formatted).toContain("File Path");
-    expect(formatted).toContain("src/components/UserProfileCard.tsx");
-    expect(formatted).toContain("Dimensions");
-    expect(formatted).toContain("120x40");
+    expect(formatted).toContain("Component: UserProfileCard");
+    expect(formatted).toContain("File: src/components/UserProfileCard.tsx:45:8");
+    expect(formatted).toContain("Size: 120x40");
 
     // Unchecked fields should NOT be present
-    expect(formatted).not.toContain("Element");
-    expect(formatted).not.toContain("Framework");
-    expect(formatted).not.toContain("Key Styles");
+    expect(formatted).not.toContain("Element:");
+    expect(formatted).not.toContain("(React)");
+    expect(formatted).not.toContain("Framework:");
+    expect(formatted).not.toContain("Styles:");
   });
 
   it("renders scroll/gutter layoutConstraints when enabled and hides them when layoutConstraints is false", () => {
@@ -236,20 +234,191 @@ describe("InspectorAdapter - Metadata Filtering", () => {
     enabledAdapter.activate(createMockController(true));
     const enabledFormatted = enabledAdapter["formatElementMetadata"](mockElement, mockInfo);
 
-    expect(enabledFormatted).toContain("* **Layout Constraints**:");
-    expect(enabledFormatted).toContain("`overflow-y: auto`");
-    expect(enabledFormatted).toContain("`scrollbar-gutter: stable`");
-    expect(enabledFormatted).toContain("`client-size: 747x579`");
-    expect(enabledFormatted).toContain("`scroll-size: 747x2400`");
-    expect(enabledFormatted).toContain("`scrollbar-width: 10px`");
+    expect(enabledFormatted).toContain("Size: 757x579 (client: 747x579, scroll: 747x2400)");
+    expect(enabledFormatted).toContain(
+      "Layout: overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: 10px"
+    );
 
     const disabledAdapter = new InspectorAdapter();
     disabledAdapter.activate(createMockController(false));
     const disabledFormatted = disabledAdapter["formatElementMetadata"](mockElement, mockInfo);
 
-    expect(disabledFormatted).not.toContain("* **Layout Constraints**:");
+    expect(disabledFormatted).toContain("Size: 757x579");
+    expect(disabledFormatted).not.toContain("Layout:");
     expect(disabledFormatted).not.toContain("overflow-y: auto");
     expect(disabledFormatted).not.toContain("scrollbar-gutter: stable");
+  });
+
+  it("strips matching projectRoot with single Root header, groups parent styles, and collapses overflow-x/y", () => {
+    const adapter = new InspectorAdapter();
+    adapter.activate({
+      getConfig: () => ({}),
+      getProjectRoot: () => "D:/Projects/YumeShelf",
+      isUIVisible: () => true,
+      drawHighlight: vi.fn(),
+      drawParentHighlight: vi.fn(),
+      clearParentHighlights: vi.fn(),
+      drawTooltip: vi.fn(),
+      clear: vi.fn(),
+      setFreezeMode: vi.fn(),
+    } as any);
+
+    const mockElement = {
+      tagName: "DIV",
+      classList: ["save-folder-path"],
+      parentElement: null,
+      offsetWidth: 196,
+      offsetHeight: 15,
+      _mockComputedStyle: {
+        color: "rgb(255, 255, 255)",
+        backgroundColor: "rgba(0, 0, 0, 0)",
+        boxShadow: "none",
+        margin: "0px",
+        padding: "0px",
+        display: "block",
+        flexDirection: "row",
+      },
+    } as any;
+
+    const mockInfo = {
+      componentName: "SaveFolderBar",
+      tagName: "div",
+      framework: "React",
+      fileName: "D:\\Projects\\YumeShelf\\src\\renderer\\SaveFolderBar.tsx",
+      lineNumber: 74,
+      columnNumber: 7,
+      classList: ["save-folder-path"],
+      visualContext: {
+        parentEffects: [
+          { tagName: "aside", classList: ["save-editor-sidebar"], property: "display", value: "flex" },
+          { tagName: "aside", classList: ["save-editor-sidebar"], property: "overflow-x", value: "hidden" },
+          { tagName: "aside", classList: ["save-editor-sidebar"], property: "overflow-y", value: "hidden" },
+        ],
+        layoutConstraints: {
+          "overflow-x": "hidden",
+          "overflow-y": "hidden",
+          "client-size": "196x15",
+          "scroll-size": "868x15",
+        },
+      },
+      staticMetadata: {
+        classOrigins: {
+          "save-folder-path": {
+            file: "D:/Projects/YumeShelf/src/styles/save-editor.css",
+            line: 289,
+            column: 1,
+          },
+          "save-editor-sidebar": {
+            file: "D:/Projects/YumeShelf/src/styles/save-editor.css",
+            line: 161,
+            column: 1,
+          },
+        },
+      },
+    };
+
+    const formatted = adapter["formatElementMetadata"](mockElement, mockInfo);
+    expect(formatted).toContain("Root: D:/Projects/YumeShelf\n");
+    expect(formatted).toContain("Component: SaveFolderBar (React)");
+    expect(formatted).toContain("File: src/renderer/SaveFolderBar.tsx:74:7");
+    expect(formatted).toContain("Element: div.save-folder-path [src/styles/save-editor.css:289:1]");
+    expect(formatted).toContain("Size: 196x15 (scroll: 868x15)");
+    expect(formatted).toContain("Layout: overflow: hidden");
+    expect(formatted).toContain(
+      "- aside.save-editor-sidebar [src/styles/save-editor.css:161:1]: display: flex; overflow: hidden"
+    );
+    expect(formatted.match(/aside\.save-editor-sidebar/g)).toHaveLength(1);
+  });
+
+  it("compacts Alt+Shift+C copyAllLayers with single Root header and deduplicated parent chains", () => {
+    const copyToClipboard = vi.fn().mockResolvedValue(undefined);
+    const adapter = new InspectorAdapter();
+    adapter.activate({
+      getConfig: () => ({}),
+      getProjectRoot: () => "D:/Projects/Demo",
+      isUIVisible: () => true,
+      drawHighlight: vi.fn(),
+      drawParentHighlight: vi.fn(),
+      clearParentHighlights: vi.fn(),
+      drawTooltip: vi.fn(),
+      clear: vi.fn(),
+      setFreezeMode: vi.fn(),
+      copyToClipboard,
+    } as any);
+
+    const parentEl = {
+      tagName: "SECTION",
+      classList: ["panel"],
+      className: "panel",
+      parentElement: null,
+      children: [],
+      childNodes: [],
+      offsetWidth: 400,
+      offsetHeight: 300,
+      cloneNode: () => parentEl,
+      querySelectorAll: () => [],
+      getAttribute: () => null,
+      _mockComputedStyle: { display: "flex", flexDirection: "column" },
+    } as any;
+    const leafEl = {
+      tagName: "BUTTON",
+      classList: ["btn"],
+      className: "btn",
+      parentElement: parentEl,
+      children: [],
+      childNodes: [],
+      offsetWidth: 80,
+      offsetHeight: 32,
+      cloneNode: () => leafEl,
+      querySelectorAll: () => [],
+      getAttribute: () => null,
+      _mockComputedStyle: { display: "inline-flex", flexDirection: "row" },
+    } as any;
+    parentEl.children = [leafEl];
+
+    const sharedParents = [
+      { tagName: "main", classList: ["shell"], property: "display", value: "grid" },
+    ];
+    vi.spyOn(adapter["resolver"], "resolve").mockImplementation((el: any) =>
+      el === leafEl
+        ? {
+            componentName: "ActionBtn",
+            tagName: "button",
+            framework: "React",
+            fileName: "D:/Projects/Demo/src/ActionBtn.tsx",
+            lineNumber: 12,
+            columnNumber: 5,
+            classList: ["btn"],
+            visualContext: { parentEffects: sharedParents, layoutConstraints: {} },
+            staticMetadata: undefined,
+          }
+        : {
+            componentName: "PanelCard",
+            tagName: "section",
+            framework: "React",
+            fileName: "D:/Projects/Demo/src/PanelCard.tsx",
+            lineNumber: 8,
+            columnNumber: 3,
+            classList: ["panel"],
+            visualContext: { parentEffects: sharedParents, layoutConstraints: {} },
+            staticMetadata: undefined,
+          }
+    );
+    adapter["layerStack"] = [leafEl, parentEl];
+    adapter["activeLayerIndex"] = 0;
+    adapter["currentElement"] = leafEl;
+    adapter["currentSourceInfo"] = adapter["resolver"].resolve(leafEl);
+
+    adapter["copyAllLayers"]();
+    expect(copyToClipboard).toHaveBeenCalledTimes(1);
+    const out = copyToClipboard.mock.calls[0][0] as string;
+    expect(out.startsWith("Root: D:/Projects/Demo\nLayers (2, leaf->root):")).toBe(true);
+    expect(out).toContain("## Layer 1/2: ActionBtn (button)");
+    expect(out).toContain("## Layer 2/2: PanelCard (section)");
+    expect(out).toContain("File: src/PanelCard.tsx:8:3");
+    // Shared parent chain only emitted once across layers
+    expect(out.match(/- main\.shell: display: grid/g)).toHaveLength(1);
+    expect(out).toContain("HTML (Layer 1):");
   });
 });
 

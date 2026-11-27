@@ -140,6 +140,8 @@ export class OverlayEngine implements OverlayController {
   } | null = null;
   private isSaveFilterPresetOpen = false;
   private savePresetError: string | null = null;
+  private filterSaveError: string | null = null;
+  private configSaveSeq = 0;
   private parentHighlightElements: Element[] = [];
   
   private uiVisible = true;
@@ -887,6 +889,11 @@ export class OverlayEngine implements OverlayController {
     }
   }
 
+  private isAmbiguousSaveError(err: unknown): boolean {
+    if (!(err instanceof Error)) return false;
+    return /timed out|timeout|abort/i.test(err.name) || /timed out|timeout|abort/i.test(err.message);
+  }
+
   private getEffectiveFilterPresets(): {
     presets: Record<string, MetadataFilterMap>;
     sources: Record<string, "builtin" | "global" | "local">;
@@ -921,6 +928,8 @@ export class OverlayEngine implements OverlayController {
     presetName: string,
     target: "local" | "global" = this.filterSaveTarget
   ): Promise<void> {
+    const seq = ++this.configSaveSeq;
+    this.filterSaveError = null;
     const { presets } = this.getEffectiveFilterPresets();
     const chosenFilters = presets[presetName];
     if (chosenFilters) {
@@ -948,7 +957,9 @@ export class OverlayEngine implements OverlayController {
       if (!data?.success || !data?.config) {
         throw new Error(data?.error || `Failed to activate filter preset (${saveTarget})`);
       }
-      this.config = data.config;
+      if (seq === this.configSaveSeq) {
+        this.config = data.config;
+      }
       if (data.list?.presets) {
         this.filterPresetsCatalog = {
           presets: data.list.presets,
@@ -963,7 +974,7 @@ export class OverlayEngine implements OverlayController {
         this.renderFilterPanel();
       }
     } catch (err) {
-      if (target === "local") {
+      if (target === "local" && !this.isAmbiguousSaveError(err)) {
         try {
           await tryUse("global");
           if (this.isFilterPanelVisible) {
@@ -973,10 +984,16 @@ export class OverlayEngine implements OverlayController {
           return;
         } catch (fallbackErr) {
           console.error("[HoverSource] Failed to activate filter preset in local and global", fallbackErr);
-          return;
+        }
+      } else {
+        console.error("[HoverSource] Failed to activate filter preset", err);
+      }
+      if (seq === this.configSaveSeq) {
+        this.filterSaveError = "Changes not saved";
+        if (this.isFilterPanelVisible) {
+          this.renderFilterPanel();
         }
       }
-      console.error("[HoverSource] Failed to activate filter preset", err);
     }
   }
 
@@ -991,6 +1008,8 @@ export class OverlayEngine implements OverlayController {
       return false;
     }
 
+    const seq = ++this.configSaveSeq;
+    this.filterSaveError = null;
     const snapshot = this.getCurrentMetadataFiltersSnapshot();
     const saveAndActivate = async (targetScope: "local" | "global") => {
       const saveRes = await companionRequestJson("/filter-presets", {
@@ -1013,7 +1032,9 @@ export class OverlayEngine implements OverlayController {
       if (!useRes?.success || !useRes?.config) {
         throw new Error(useRes?.error || `Saved preset, failed to activate (${targetScope})`);
       }
-      this.config = useRes.config;
+      if (seq === this.configSaveSeq) {
+        this.config = useRes.config;
+      }
       if (useRes.list?.presets) {
         this.filterPresetsCatalog = {
           presets: useRes.list.presets,
@@ -1025,7 +1046,7 @@ export class OverlayEngine implements OverlayController {
     try {
       await saveAndActivate(scope);
     } catch (err) {
-      if (scope === "local") {
+      if (scope === "local" && !this.isAmbiguousSaveError(err)) {
         try {
           await saveAndActivate("global");
           console.warn("[HoverSource] Local preset save failed; saved to global config instead.");
@@ -1050,6 +1071,18 @@ export class OverlayEngine implements OverlayController {
     return true;
   }
 
+  private getSafeFilterPanelActiveElement(): Element | null {
+    try {
+      return this.shadowRoot?.activeElement ?? document.activeElement ?? null;
+    } catch {
+      try {
+        return document.activeElement ?? null;
+      } catch {
+        return null;
+      }
+    }
+  }
+
   private renderFilterPanel(
     restoreFocusId?:
       | "hoversource-prev-btn"
@@ -1060,6 +1093,22 @@ export class OverlayEngine implements OverlayController {
     restoreFocusSelector?: string
   ) {
     if (!this.filterPanel) return;
+
+    let resolvedFocusSelector = restoreFocusSelector || (restoreFocusId ? `#${restoreFocusId}` : null);
+    if (!resolvedFocusSelector && this.filterPanel.childElementCount > 0) {
+      const activeEl = this.getSafeFilterPanelActiveElement();
+      if (activeEl instanceof HTMLElement && this.filterPanel.contains(activeEl)) {
+        if (activeEl.id) {
+          resolvedFocusSelector = `#${activeEl.id}`;
+        } else if (
+          activeEl instanceof HTMLInputElement &&
+          activeEl.dataset.type &&
+          activeEl.dataset.field
+        ) {
+          resolvedFocusSelector = `input[data-type="${activeEl.dataset.type}"][data-field="${activeEl.dataset.field}"]`;
+        }
+      }
+    }
 
     const metadataTypes = [
       { id: "component", name: "Component Metadata" },
@@ -1312,6 +1361,14 @@ export class OverlayEngine implements OverlayController {
       [this.filterSaveTarget === "global" ? "Global" : "Local"]
     );
 
+    const saveErrorEl = this.filterSaveError
+      ? el(
+          "div",
+          { class: "hs-save-preset-error", id: "hoversource-save-error" },
+          [this.filterSaveError]
+        )
+      : null;
+
     const footerEl = el(
       "div",
       {
@@ -1325,7 +1382,7 @@ export class OverlayEngine implements OverlayController {
     );
 
     this.filterPanel.replaceChildren(
-      ...[headerEl, presetBarEl, savePresetFormEl, tableContainerEl, footerEl].filter(
+      ...[headerEl, presetBarEl, savePresetFormEl, tableContainerEl, saveErrorEl, footerEl].filter(
         (n): n is HTMLElement => n !== null
       )
     );
@@ -1478,10 +1535,8 @@ export class OverlayEngine implements OverlayController {
     });
 
     this.makePanelDraggable();
-    if (restoreFocusSelector) {
-      (this.filterPanel.querySelector(restoreFocusSelector) as HTMLElement | null)?.focus();
-    } else if (restoreFocusId) {
-      (this.filterPanel.querySelector(`#${restoreFocusId}`) as HTMLElement | null)?.focus();
+    if (resolvedFocusSelector) {
+      (this.filterPanel.querySelector(resolvedFocusSelector) as HTMLElement | null)?.focus();
     }
   }
 
@@ -1897,6 +1952,8 @@ export class OverlayEngine implements OverlayController {
     newConfig: any,
     target: "local" | "global" = this.filterSaveTarget
   ): Promise<void> {
+    const seq = ++this.configSaveSeq;
+    this.filterSaveError = null;
     this.applyLocalConfigDelta(newConfig);
 
     const trySave = async (saveTarget: "local" | "global") => {
@@ -1913,24 +1970,31 @@ export class OverlayEngine implements OverlayController {
       if (!data?.success || !data?.config) {
         throw new Error(data?.error || `Failed to save ${saveTarget} config`);
       }
-      this.config = data.config;
+      if (seq === this.configSaveSeq) {
+        this.config = data.config;
+      }
     };
 
     try {
       await trySave(target);
     } catch (e) {
-      if (target === "local" && newConfig?.metadataFilter) {
+      if (target === "local" && newConfig?.metadataFilter && !this.isAmbiguousSaveError(e)) {
         try {
           await trySave("global");
-          this.applyLocalConfigDelta(newConfig);
           console.warn("[HoverSource] Local config save failed; persisted metadataFilter to global config instead.");
           return;
         } catch (fallbackErr) {
           console.error("[HoverSource] Failed to save config to local and global", fallbackErr);
-          return;
+        }
+      } else {
+        console.error("[HoverSource] Failed to save config", e);
+      }
+      if (seq === this.configSaveSeq) {
+        this.filterSaveError = "Changes not saved";
+        if (this.isFilterPanelVisible) {
+          this.renderFilterPanel();
         }
       }
-      console.error("[HoverSource] Failed to save config", e);
     }
   }
 

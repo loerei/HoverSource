@@ -869,7 +869,11 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
 
     await vi.advanceTimersByTimeAsync(10);
     expect(postBodies.some((b) => b.target === "local")).toBe(true);
-    expect(postBodies.some((b) => b.target === "global")).toBe(true);
+    expect(
+      postBodies.some(
+        (b) => b.target === "global" && b.config?.metadataFilter?.filters?.component?.framework === false
+      )
+    ).toBe(true);
 
     // Toggle scope button from Local to Global
     const scopeBtn = shadow.querySelector("#hoversource-scope-btn") as HTMLButtonElement;
@@ -964,5 +968,150 @@ describe("OverlayEngine Shadow DOM isolation & Trusted Types compliance", () => 
     expect(calls[0].body).toEqual({ name: "source-locate", target: "local" });
     expect(activeEngine!.getConfig().metadataFilter.preset).toBe("source-locate");
     expect(activeEngine!.getConfig().metadataFilter.filters.component.dimensions).toBe(false);
+  });
+
+  it("does not fall back to global on timeout, surfaces save error, and guards overlapping responses", async () => {
+    vi.useFakeTimers();
+    const postTargets: Array<{ target: string; framework?: boolean }> = [];
+    let resolveFirst!: (val: Response) => void;
+    let resolveSecond!: (val: Response) => void;
+    let postCall = 0;
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        const parsedUrl = String(url);
+        if (parsedUrl.endsWith("/config") && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          postTargets.push({
+            target: body.target,
+            framework: body.config?.metadataFilter?.filters?.component?.framework,
+          });
+          postCall += 1;
+          if (postCall === 1) {
+            return Promise.reject(new Error("Companion request timed out"));
+          }
+          if (postCall === 2) {
+            return new Promise<Response>((res) => {
+              resolveFirst = res;
+            });
+          }
+          return new Promise<Response>((res) => {
+            resolveSecond = res;
+          });
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              config: {
+                metadataFilter: {
+                  preset: "full",
+                  filters: { component: { componentName: true, framework: true } },
+                },
+              },
+            }),
+            { status: 200 }
+          )
+        );
+      })
+    );
+
+    activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 1000 });
+    expect(activeEngine).not.toBeNull();
+    const shadow = document.getElementById("hoversource-host")!.shadowRoot!;
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", altKey: true, ctrlKey: true }));
+    await vi.advanceTimersByTimeAsync(10);
+
+    const frameworkCb = shadow.querySelector(
+      '.hoversource-config-panel input[data-field="framework"]'
+    ) as HTMLInputElement;
+    frameworkCb.focus();
+    frameworkCb.checked = false;
+    frameworkCb.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(10);
+
+    // Timeout on local MUST NOT trigger fallback write to global
+    expect(postTargets).toEqual([{ target: "local", framework: false }]);
+    expect(shadow.querySelector("#hoversource-save-error")?.textContent).toBe("Changes not saved");
+
+    // Trigger two overlapping saves where the older response arrives AFTER the newer response
+    const firstSave = activeEngine!.saveConfig({
+      metadataFilter: { preset: "custom", filters: { component: { framework: true } } },
+    });
+    const secondSave = activeEngine!.saveConfig({
+      metadataFilter: { preset: "custom", filters: { component: { framework: false } } },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    resolveSecond(
+      new Response(
+        JSON.stringify({
+          success: true,
+          config: { metadataFilter: { preset: "custom", filters: { component: { framework: false } } } },
+        }),
+        { status: 200 }
+      )
+    );
+    await secondSave;
+
+    resolveFirst(
+      new Response(
+        JSON.stringify({
+          success: true,
+          config: { metadataFilter: { preset: "custom", filters: { component: { framework: true } } } },
+        }),
+        { status: 200 }
+      )
+    );
+    await firstSave;
+
+    expect(activeEngine!.getConfig().metadataFilter.filters.component.framework).toBe(false);
+  });
+
+  it("preserves filter panel keyboard focus across live SSE handleConfigUpdate", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            config: {
+              metadataFilter: {
+                preset: "full",
+                filters: { component: { componentName: true, framework: true } },
+              },
+            },
+          }),
+          { status: 200 }
+        )
+      )
+    );
+
+    activeEngine = await OverlayEngine.launch({ configTimeoutMs: 500, domReadyTimeoutMs: 1000 });
+    expect(activeEngine).not.toBeNull();
+    const shadow = document.getElementById("hoversource-host")!.shadowRoot!;
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d", altKey: true, ctrlKey: true }));
+    await vi.advanceTimersByTimeAsync(10);
+
+    const frameworkCb = shadow.querySelector(
+      '.hoversource-config-panel input[data-field="framework"]'
+    ) as HTMLInputElement;
+    frameworkCb.focus();
+    expect(shadow.activeElement).toBe(frameworkCb);
+
+    (activeEngine as any).handleConfigUpdate({
+      metadataFilter: {
+        preset: "full",
+        filters: { component: { componentName: true, framework: true } },
+      },
+    });
+
+    const newFrameworkCb = shadow.querySelector(
+      '.hoversource-config-panel input[data-field="framework"]'
+    ) as HTMLInputElement;
+    expect(shadow.activeElement).toBe(newFrameworkCb);
   });
 });

@@ -1423,17 +1423,30 @@
     saveBtns.forEach(btn => {
       btn.onclick = async () => {
         const uiConfig = getConfigFromUI();
+        const baseline = buildBaselineForCompare(loadedConfig || {});
+        const mfChanged =
+          JSON.stringify(uiConfig.metadataFilter) !== JSON.stringify(baseline.metadataFilter);
+        const mfScope = mfTargetSelect.value === 'global' ? 'global' : 'local';
         const activeName = presetSelect.value;
         const hasNamedPreset = Boolean(
-          activeName && Object.prototype.hasOwnProperty.call(presetsState.presets || {}, activeName)
+          activeName && Object.hasOwn(presetsState.presets || {}, activeName)
         );
 
         try {
           if (hasNamedPreset) {
+            const presetPayload = extractPresetFields(uiConfig);
+            if (!mfChanged) {
+              const storedPreset = presetsState.presets?.[activeName];
+              if (storedPreset && Object.hasOwn(storedPreset, 'metadataFilter')) {
+                presetPayload.metadataFilter = storedPreset.metadataFilter;
+              } else {
+                delete presetPayload.metadataFilter;
+              }
+            }
             const presetRes = await fetch(`${API_BASE}/presets`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ name: activeName, config: extractPresetFields(uiConfig) })
+              body: JSON.stringify({ name: activeName, config: presetPayload })
             });
             if (!presetRes.ok) {
               const errData = await presetRes.json().catch(() => ({}));
@@ -1441,7 +1454,6 @@
               return;
             }
 
-            const baseline = buildBaselineForCompare(loadedConfig);
             const machineChanged =
               JSON.stringify(extractMachineFields(uiConfig)) !==
               JSON.stringify(extractMachineFields(baseline));
@@ -1463,19 +1475,40 @@
             return;
           }
 
-          const res = await fetch(`${API_BASE}/config`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ config: uiConfig, target: 'global' })
-          });
+          const globalPayload = { ...uiConfig };
+          delete globalPayload.metadataFilter;
+          const baseWithoutMf = { ...baseline };
+          delete baseWithoutMf.metadataFilter;
+          const nonMfChanged = JSON.stringify(globalPayload) !== JSON.stringify(baseWithoutMf);
 
-          if (res.ok) {
-            showToast('Configuration saved successfully!');
-            await refreshDashboardState();
-          } else {
-            const errData = await res.json().catch(() => ({}));
-            showToast(errData.error || 'Failed to save configuration', true);
+          if (nonMfChanged || !mfChanged) {
+            const res = await fetch(`${API_BASE}/config`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ config: globalPayload, target: 'global' })
+            });
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              showToast(errData.error || 'Failed to save configuration', true);
+              return;
+            }
           }
+
+          if (mfChanged) {
+            const mfRes = await fetch(`${API_BASE}/config`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ config: { metadataFilter: uiConfig.metadataFilter }, target: mfScope })
+            });
+            if (!mfRes.ok) {
+              const errData = await mfRes.json().catch(() => ({}));
+              showToast(errData.error || 'Failed to save metadata filters', true);
+              return;
+            }
+          }
+
+          showToast('Configuration saved successfully!');
+          await refreshDashboardState();
         } catch (e) {
           console.error('Error saving config', e);
           showToast('Error saving configuration', true);

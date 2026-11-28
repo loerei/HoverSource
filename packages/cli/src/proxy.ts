@@ -48,6 +48,27 @@ export function stripCspHeaders(headers: http.IncomingHttpHeaders): void {
   delete headers["content-security-policy-report-only"];
 }
 
+export function formatProxyError(err: unknown): string {
+  if (err && typeof err === "object") {
+    const aggregate = (err as { errors?: unknown }).errors;
+    if (Array.isArray(aggregate) && aggregate.length > 0) {
+      const parts = aggregate.map((sub) => formatProxyError(sub)).filter(Boolean);
+      if (parts.length > 0) {
+        return parts.join("; ");
+      }
+    }
+    const msg = (err as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.length > 0) {
+      return msg;
+    }
+    const code = (err as { code?: unknown }).code;
+    if (typeof code === "string" && code.length > 0) {
+      return code;
+    }
+  }
+  return String(err);
+}
+
 export function sanitizeUpstreamResponseHeaders(
   headers: http.IncomingHttpHeaders,
   targetUrl: string,
@@ -90,6 +111,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
         port: companionPort,
         path: rewrittenPath,
         method: req.method,
+        agent: false,
         headers: {
           ...req.headers,
           host: `127.0.0.1:${companionPort}`,
@@ -144,7 +166,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
 
       companionReq.on("error", (err) => {
         if (res.writableEnded || res.destroyed) return;
-        console.error(`[HoverSource Proxy] Failed to proxy request to companion server:`, err.message);
+        console.error(`[HoverSource Proxy] Failed to proxy request to companion server:`, formatProxyError(err));
         if (!res.headersSent) {
           res.writeHead(502, { "Content-Type": "text/plain" });
           res.end(`HoverSource proxy: companion server upstream error.`);
@@ -183,6 +205,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
       port: target.port || (isTargetHttps ? 443 : 80),
       path: req.url,
       method: req.method,
+      agent: false,
       headers: {
         ...headers,
         host: target.host,
@@ -237,11 +260,20 @@ export function startProxy(options: ProxyOptions): Promise<void> {
       });
     });
 
+    res.on("close", () => {
+      if (!res.writableEnded) {
+        proxyReq.destroy();
+      }
+    });
+
     proxyReq.on("error", (err) => {
-      console.error(`[HoverSource Proxy] Error forwarding request to ${targetUrl}:`, err.message);
+      if (res.writableEnded || res.destroyed) return;
+      console.error(`[HoverSource Proxy] Error forwarding request to ${targetUrl}:`, formatProxyError(err));
       if (!res.headersSent) {
         res.writeHead(502, { "Content-Type": "text/plain" });
         res.end(`HoverSource proxy: upstream error -- is your dev server running at ${targetUrl}?`);
+      } else {
+        res.end();
       }
     });
 
@@ -270,6 +302,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
       port: target.port || (isTargetHttps ? 443 : 80),
       path: req.url,
       method: req.method,
+      agent: false,
       headers: {
         ...req.headers,
         host: target.host,
@@ -311,7 +344,7 @@ export function startProxy(options: ProxyOptions): Promise<void> {
     });
 
     proxyReq.on("error", (err) => {
-      console.error(`[HoverSource Proxy] WebSocket proxy error forwarding upgrade to ${targetUrl}:`, err.message);
+      console.error(`[HoverSource Proxy] WebSocket proxy error forwarding upgrade to ${targetUrl}:`, formatProxyError(err));
       socket.end();
     });
 

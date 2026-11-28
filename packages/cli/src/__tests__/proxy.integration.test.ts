@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import http from "node:http";
 import zlib from "node:zlib";
-import { startProxy } from "../proxy.js";
+import { formatProxyError, startProxy } from "../proxy.js";
 
 describe("Proxy Server Integration", () => {
   let targetServer: http.Server;
@@ -332,5 +332,25 @@ describe("Proxy Server Integration", () => {
     expect(await secondChunkPromise).toBe(frame2);
 
     req.destroy();
+  });
+
+  it("formats AggregateError and code-only proxy errors without empty messages", () => {
+    const econn1 = Object.assign(new Error("connect ECONNREFUSED ::1:5173"), { code: "ECONNREFUSED" });
+    const econn2 = Object.assign(new Error("connect ECONNREFUSED 127.0.0.1:5173"), { code: "ECONNREFUSED" });
+    const agg = new AggregateError([econn1, econn2], "");
+
+    expect(formatProxyError(agg)).toBe("connect ECONNREFUSED ::1:5173; connect ECONNREFUSED 127.0.0.1:5173");
+    expect(formatProxyError({ code: "ECONNRESET", message: "" })).toBe("ECONNRESET");
+    expect(formatProxyError(new Error("read ECONNRESET"))).toBe("read ECONNRESET");
+  });
+
+  it("handles aborted client requests cleanly without breaking subsequent proxied requests", async () => {
+    const abortedReq = http.get(`http://127.0.0.1:${proxyPort}/html`);
+    abortedReq.on("error", () => {});
+    abortedReq.destroy();
+
+    const res = await fetch(`http://127.0.0.1:${proxyPort}/html`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Target HTML");
   });
 });
